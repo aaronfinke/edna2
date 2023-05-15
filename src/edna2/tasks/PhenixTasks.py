@@ -24,9 +24,124 @@ __license__ = "MIT"
 __date__ = "26/07/2019"
 
 import pathlib
+import gzip
+import os
+
+from typing import Tuple
 
 from edna2.tasks.AbstractTask import AbstractTask
+from edna2.utils import UtilsLogging
 
+logger = UtilsLogging.getLogger()
+
+class PhenixXTriageTask(AbstractTask):
+    """
+    This task runs phenix.xtriage
+    """
+
+    def run(self, inData):
+        if os.environ.get('PHENIX', None) is None:
+            commandLine = 'source /mxn/groups/sw/mxsw/env_setup/phenix_env.sh \n'
+        else:
+            commandLine = ''
+            logger.info(f"PHENIX version is {os.environ.get('PHENIX_VERSION', None)}")
+
+        input_file, was_unzipped = self.gunzipInputFile(input_file=pathlib.Path(inData['input_file']))
+        commandLine += 'phenix.xtriage '
+        commandLine += str(input_file)
+        commandLine += ' obs=I,SIGI,merged '
+        logPath = self.getWorkingDirectory() / 'PhenixXtriage.log'
+        self.runCommandLine(commandLine, logPath=logPath)
+        if was_unzipped:
+            input_file.unlink(missing_ok=True)
+
+        outData = self.parseXtriageLogFile(logPath)
+
+        return outData
+    
+    def gunzipInputFile(self, input_file: pathlib.Path) -> Tuple[pathlib.Path, bool]:
+        """unzips input file and whether it was unzipped"""
+        if ".gz" in input_file.suffixes:
+            fIn = gzip.open(input_file, "rb")
+            fileContent = fIn.read()
+            fIn.close()
+            strMtzFileName = input_file.stem 
+            self.strPathToLocalMtz = pathlib.Path(self.getWorkingDirectory() / strMtzFileName)
+            fOut = open(self.strPathToLocalMtz, "wb")
+            fOut.write(fileContent)
+            fOut.close()
+            return (self.strPathToLocalMtz, True)
+        else:
+            return (input_file, False)
+
+
+    def parseXtriageLogFile(self, pathToLogFile: pathlib.Path):
+        outData = {
+            "logPath" : str(pathToLogFile)
+        }
+        outData["hasTwinning"] = False
+        outData["hasPseudotranslation"] = False
+        outData["TwinLawsStatistics"] = []
+
+        if pathToLogFile.is_file():
+            with open(pathToLogFile,'r') as f:
+                strLog = f.readlines()
+            iIndex = 0
+            listLines = [x.strip("\n") for x in strLog]
+            bContinue = True
+            while bContinue:
+                
+                if listLines[iIndex].startswith("Statistics depending on twin laws"):
+                    #------------------------------------------------------
+                    #| Operator | type | R obs. | Britton alpha | H alpha |
+                    #------------------------------------------------------
+                    #| k,h,-l   |  PM  | 0.025  | 0.458         | 0.478   |
+                    #| -h,k,-l  |  PM  | 0.017  | 0.459         | 0.487   |
+                    #------------------------------------------------------
+                    iIndex +=4
+                    while not listLines[iIndex].startswith("---------"):
+                        listLine = listLines[iIndex].split("|")
+                        xsDataTwinLawsStatistics = {}
+                        xsDataTwinLawsStatistics["operator"] = listLine[1].replace(" ", "")
+                        xsDataTwinLawsStatistics["twinType"] = listLine[2].replace(" ", "")
+                        xsDataTwinLawsStatistics["rObs"] = float(listLine[3])
+                        xsDataTwinLawsStatistics["brittonAlpha"] = float(listLine[4])
+                        xsDataTwinLawsStatistics["hAlpha"] = float(listLine[5])
+                        xsDataTwinLawsStatistics["mlAlpha"] = float(listLine[6])
+                        outData["TwinLawsStatistics"].append(xsDataTwinLawsStatistics)
+
+                        iIndex += 1
+                                  
+                elif listLines[iIndex].startswith("Patterson analyses"):
+                    # - Largest peak height   : 6.089
+                    iIndex += 1
+                    pattersonLargestPeakHeight = float(listLines[iIndex].split(":")[1])
+                    outData["pattersonLargestPeakHeight"] = pattersonLargestPeakHeight
+                    # (corresponding p value : 6.921e-01)
+                    iIndex += 1
+                    pattersonPValue = float(listLines[iIndex].split(":")[1].split(")")[0])
+                    outData["pattersonPValue"] = pattersonPValue
+                    
+                elif "indicating pseudo translational symmetry" in listLines[iIndex]:
+                    #    The analyses of the Patterson function reveals a significant off-origin
+                    #    peak that is 66.43 % of the origin peak, indicating pseudo translational symmetry.
+                    #    The chance of finding a peak of this or larger height by random in a 
+                    #    structure without pseudo translational symmetry is equal to the 6.0553e-06.
+                    #    The detected translational NCS is most likely also responsible for the elevated intensity ratio.
+                    #    See the relevant section of the logfile for more details.
+                    outData["hasPseudotranslation"] = True
+                elif "As there are twin laws possible given the crystal symmetry, twinning could" in listLines[iIndex]:
+                    #    The results of the L-test indicate that the intensity statistics
+                    #    are significantly different than is expected from good to reasonable,
+                    #    untwinned data.
+                    #    As there are twin laws possible given the crystal symmetry, twinning could
+                    #    be the reason for the departure of the intensity statistics from normality. 
+                    outData["hasTwinning"] = True                   
+                iIndex += 1                
+                if iIndex == len(listLines):
+                    bContinue = False
+        return outData
+        
 
 class DistlSignalStrengthTask(AbstractTask):
     """

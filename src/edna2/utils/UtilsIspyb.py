@@ -23,14 +23,14 @@ __authors__ = ["O. Svensson"]
 __license__ = "MIT"
 __date__ = "05/09/2019"
 
-import datetime
 import os
 import json
 import time
 import requests
+from datetime import datetime
+from pathlib import Path
 
 from suds.client import Client
-from suds.sax.date import DateTime
 from suds.transport.https import HttpAuthenticated
 
 from edna2.utils import UtilsImage
@@ -94,17 +94,12 @@ def getCollectionWebService():
         )
         collectionWSClient = None
     else:
-        collectionWSClient = Client(collectionWdsl, transport=transport, cache=None)
+        collectionWSClient = Client(collectionWdsl, transport=transport, cache=None, location=collectionWdsl)
     return collectionWSClient
 
 
 def getToolsForCollectionWebService():
     return os.path.join(getWdslRoot(), "ispybWS", "ToolsForCollectionWebService?wsdl")
-
-
-def getToolsForAutoprocessingWebService():
-    return os.path.join(getWdslRoot(), "ispybWS", "ToolsForAutoprocessingWebService?wsdl")
-
 
 def getAutoprocessingWebService():
     logger = UtilsLogging.getLogger()
@@ -114,10 +109,391 @@ def getAutoprocessingWebService():
         logger.error(
             "No transport defined, ISPyB web service client cannot be instantiated."
         )
-        autoprocessingWSClient = None
+        collectionWSClient = None
     else:
-        autoprocessingWSClient = Client(collectionWdsl, transport=transport, cache=None)
-    return autoprocessingWSClient
+        collectionWSClient = Client(collectionWdsl, transport=transport, cache=None, location=collectionWdsl)
+    return collectionWSClient
+
+
+def getToolsForAutoprocessingWebService():
+    return os.path.join(getWdslRoot(), "ispybWS", "ToolsForAutoprocessingWebService?wsdl")
+
+def storeOrUpdateAutoProcProgram(
+        autoProcProgramId=None,  
+        processingCommandLine=None,
+        processingPrograms=None,
+        processingStatus=None,
+        processingStartTime=None,
+        processingEndTime=None,
+        processingEnvironment=None,
+        client=None):
+    """
+    Store Autoproc status: RUNNING,SUCCESS,FAILED,TIMEOUT
+    """
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+        autoProcProgramId = client.service.storeOrUpdateAutoProcProgram(   
+            arg0= autoProcProgramId,
+            processingCommandLine = processingCommandLine,
+            processingPrograms=processingPrograms,
+            processingStatus=processingStatus,
+            processingMessage=None,
+            processingStartTime=processingStartTime,
+            processingEndTime=processingEndTime,
+            processingEnvironment=processingEnvironment,
+            recordTimeStamp=datetime.now()
+        )
+    except Exception as e:
+        logger.error(
+            "ISPyB error for storeOrUpdateAutoProcProgram: {0} trials left".format(
+                e
+            )
+        )
+    logger.debug(f"autoProcProgramId: {autoProcProgramId}")
+    return autoProcProgramId
+
+def storeOrUpdateAutoProcIntegration(
+        autoProcIntegrationId=None,
+        autoProcProgramId=None,
+        startImageNumber=None,
+        endImageNumber=None,
+        refinedDetectorDistance= None,
+        refinedXbeam=None,
+        refinedYbeam=None,
+        rotationAxisX=None,
+        rotationAxisY=None,
+        rotationAxisZ=None,
+        beamVectorX=None,
+        beamVectorY=None,
+        beamVectorZ=None,
+        cellA=None,
+        cellB=None,
+        cellC=None,
+        cellAlpha=None,
+        cellBeta=None,
+        cellGamma=None,
+        anomalous=None,
+        dataCollectionId=None,
+        client=None):
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+        autoProcIntegrationId = client.service.storeOrUpdateAutoProcIntegration(
+        arg0=autoProcIntegrationId,
+        autoProcProgramId=autoProcProgramId,
+        startImageNumber=startImageNumber,
+        endImageNumber=endImageNumber,
+        refinedDetectorDistance= refinedDetectorDistance,
+        refinedXbeam=refinedXbeam,
+        refinedYbeam=refinedYbeam,
+        rotationAxisX=rotationAxisX,
+        rotationAxisY=rotationAxisY,
+        rotationAxisZ=rotationAxisZ,
+        beamVectorX=beamVectorX,
+        beamVectorY=beamVectorY,
+        beamVectorZ=beamVectorZ,
+        cellA=cellA,
+        cellB=cellB,
+        cellC=cellC,
+        cellAlpha=cellAlpha,
+        cellBeta=cellBeta,
+        cellGamma=cellGamma,
+        recordTimeStamp=datetime.now(),
+        anomalous=anomalous,
+        dataCollectionId=dataCollectionId
+        )
+    except Exception as e:
+        logger.error(
+            "ISPyB error for storeOrUpdateAutoProcProgram: {0} trials left".format(
+                e
+            )
+    )
+    logger.debug(f"autoProcIntegrationId: {autoProcIntegrationId}")
+    return autoProcIntegrationId
+
+    
+def storeOrUpdateAutoProcProgramAttachment(
+        file=None,
+        autoProcProgramAttachmentId=None,
+        autoProcProgramId=None,
+        client=None
+        ):
+    if not isinstance(file,Path):
+        file=Path(file)
+    if not file.is_file():
+        logger.error(f"File {file} does not exist, skipping storeOrUpdateAutoProcProgramAttachment")
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+
+        strFileType = "Result" if file.suffix == ".mtz" or file.suffix == ".gz" else "Log"
+        strFileName = file.name
+        strFilePath = str(file.parent)
+        timeStamp = datetime.now()
+        autoProcProgramAttachmentId = client.service.storeOrUpdateAutoProcProgramAttachment(
+            arg0=autoProcProgramAttachmentId, 
+            fileType=strFileType, 
+            fileName=strFileName, 
+            filePath=strFilePath, 
+            recordTimeStamp=timeStamp, 
+            autoProcProgramId=autoProcProgramId
+            )    
+    except Exception as e:
+        logger.error(
+            "ISPyB error for autoProcProgramAttachmentId: {0}".format(
+                e
+            )
+    )
+    logger.debug(f"autoProcProgramAttachmentId: {autoProcProgramAttachmentId}")
+    return autoProcProgramAttachmentId
+
+def storeOrUpdateAutoProc(
+        client=None,
+        autoProcId=None,
+        autoProcProgramId=None,
+        spaceGroup=None,
+        refinedCellA=None,
+        refinedCellB=None,
+        refinedCellC=None,
+        refinedCellAlpha=None,
+        refinedCellBeta=None,
+        refinedCellGamma=None,
+    ):
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+        autoProcId = client.service.storeOrUpdateAutoProc(
+        arg0=autoProcId,
+        autoProcProgramId=autoProcProgramId,
+        spaceGroup=spaceGroup,
+        refinedCellA=refinedCellA,
+        refinedCellB=refinedCellB,
+        refinedCellC=refinedCellC,
+        refinedCellAlpha=refinedCellAlpha,
+        refinedCellBeta=refinedCellBeta,
+        refinedCellGamma=refinedCellGamma,
+        recordTimeStamp=datetime.now()
+        )
+    except Exception as e:
+        logger.error(
+            "ISPyB error for storeOrUpdateAutoProc: {0}".format(
+                e
+            )
+        )
+
+    logger.debug(f"autoProcId: {autoProcId}")
+    return autoProcId
+
+def storeOrUpdateAutoProcScalingHasInt(
+    autoProcScalingHasIntId=None,
+    autoProcIntegrationId=None,
+    autoProcScalingId=None,
+    client=None,
+    ):
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+        autoProcScalingHasIntId = client.service.storeOrUpdateAutoProcScalingHasInt(
+        arg0=autoProcScalingHasIntId,
+        autoProcIntegrationId=autoProcIntegrationId,
+        autoProcScalingId=autoProcScalingId,
+        recordTimeStamp=datetime.now().isoformat(timespec='seconds')
+        )
+    except Exception as e:
+        logger.error(
+            "ISPyB error for autoProcScalingHasIntId: {0}".format(
+                e
+            )
+        )
+    logger.debug(f"autoProcScalingHasIntId: {autoProcScalingHasIntId}")
+    return autoProcScalingHasIntId
+
+def storeOrUpdateAutoProcScaling(
+    client=None,
+    autoProcScalingId=None,
+    autoProcId=None,
+    resolutionEllipsoidAxis11=None,
+    resolutionEllipsoidAxis12=None,
+    resolutionEllipsoidAxis13=None,
+    resolutionEllipsoidAxis21=None,
+    resolutionEllipsoidAxis22=None,
+    resolutionEllipsoidAxis23=None,
+    resolutionEllipsoidAxis31=None,
+    resolutionEllipsoidAxis32=None,
+    resolutionEllipsoidAxis33=None,
+    resolutionEllipsoidValue1=None,
+    resolutionEllipsoidValue2=None,
+    resolutionEllipsoidValue3=None,
+    ):
+
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+        autoProcScalingId = client.service.storeOrUpdateAutoProcScaling(
+                arg0=autoProcScalingId,
+                autoProcId=autoProcId,
+                recordTimeStamp=datetime.now().isoformat(timespec='seconds'),
+                resolutionEllipsoidAxis11=resolutionEllipsoidAxis11,
+                resolutionEllipsoidAxis12=resolutionEllipsoidAxis12,
+                resolutionEllipsoidAxis13=resolutionEllipsoidAxis13,
+                resolutionEllipsoidAxis21=resolutionEllipsoidAxis21,
+                resolutionEllipsoidAxis22=resolutionEllipsoidAxis22,
+                resolutionEllipsoidAxis23=resolutionEllipsoidAxis23,
+                resolutionEllipsoidAxis31=resolutionEllipsoidAxis31,
+                resolutionEllipsoidAxis32=resolutionEllipsoidAxis32,
+                resolutionEllipsoidAxis33=resolutionEllipsoidAxis33,
+                resolutionEllipsoidValue1=resolutionEllipsoidValue1,
+                resolutionEllipsoidValue2=resolutionEllipsoidValue2,
+                resolutionEllipsoidValue3=resolutionEllipsoidValue3,
+                )
+    except Exception as e:
+        logger.error(
+            "ISPyB error for autoProcScalingId: {0}".format(
+                e
+            )
+        )
+    logger.debug(f"autoProcScalingId: {autoProcScalingId}")
+    return autoProcScalingId
+
+def storeOrUpdateAutoProcScalingStatistics(
+        client=None,
+        autoProcScalingStatisticsId=None,
+        scalingStatisticsType=None,
+        comments=None,
+        resolutionLimitLow=None,
+        resolutionLimitHigh=None,
+        rmerge=None,
+        rmeasWithinIplusIminus=None,
+        rmeasAllIplusIminus=None,
+        rpimWithinIplusIminus=None,
+        rpimAllIplusIminus=None,
+        fractionalPartialBias=None,
+        nTotalObservations=None,
+        nTotalUniqueObservations=None,
+        meanIoverSigI=None,
+        completeness=None,
+        multiplicity=None,
+        anomalousCompleteness=None,
+        anomalousMultiplicity=None,
+        anomalous=None,
+        autoProcScalingId=None,
+        ccHalf=None,
+        ccAno=None,
+        sigAno=None,
+        isa=None,
+        completenessSpherical=None,
+        anomalousCompletenessSpherical=None,
+        completenessEllipsoidal=None,
+        anomalousCompletenessEllipsoidal=None,
+):
+    
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+        autoProcScalingStatisticsId = client.service.storeOrUpdateAutoProcScalingStatistics(
+                arg0=autoProcScalingStatisticsId,
+                scalingStatisticsType=scalingStatisticsType,
+                comments=comments,
+                resolutionLimitLow=resolutionLimitLow,
+                resolutionLimitHigh=resolutionLimitHigh,
+                rmerge=rmerge,
+                rmeasWithinIplusIminus=rmeasWithinIplusIminus,
+                rmeasAllIplusIminus=rmeasAllIplusIminus,
+                rpimWithinIplusIminus=rpimWithinIplusIminus,
+                rpimAllIplusIminus=rpimAllIplusIminus,
+                fractionalPartialBias=fractionalPartialBias,
+                nTotalObservations=nTotalObservations,
+                nTotalUniqueObservations=nTotalUniqueObservations,
+                meanIoverSigI=meanIoverSigI,
+                completeness=completeness,
+                multiplicity=multiplicity,
+                anomalousCompleteness=anomalousCompleteness,
+                anomalousMultiplicity=anomalousMultiplicity,
+                recordTimeStamp=datetime.now().isoformat(timespec='seconds'),
+                anomalous=anomalous,
+                autoProcScalingId=autoProcScalingId,
+                ccHalf=ccHalf,
+                ccAno=ccAno,
+                sigAno=sigAno,
+                isa=isa,
+                completenessSpherical=completenessSpherical,
+                anomalousCompletenessSpherical=anomalousCompletenessSpherical,
+                completenessEllipsoidal=completenessEllipsoidal,
+                anomalousCompletenessEllipsoidal=anomalousCompletenessEllipsoidal,
+                )
+    except Exception as e:
+        logger.error(
+            "ISPyB error for autoProcScalingStatisticsId: {0}".format(
+                e
+            )
+        )
+    logger.debug(f"autoProcScalingStatisticsId: {autoProcScalingStatisticsId}")
+    return autoProcScalingStatisticsId
+
+def storeOrUpdateAutoProcStatus(
+        client=None,
+        autoProcStatusId=None,
+        autoProcIntegrationId=None,
+        step=None,
+        status=None,
+        comments=None,
+        bltimeStamp=None):
+    
+    try:
+        if client is None:
+            client = getAutoprocessingWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+        autoProcStatusId = client.service.storeOrUpdateAutoProcStatus(
+                arg0=autoProcStatusId, 
+                autoProcIntegrationId=autoProcIntegrationId, 
+                step=step, 
+                status=status, 
+                comments=comments, 
+                bltimeStamp=bltimeStamp, 
+                )
+    except Exception as e:
+        logger.error(
+            "ISPyB error for autoProcStatusId: {0}".format(
+                e
+            )
+        )
+    logger.debug(f"autoProcStatusId: {autoProcStatusId}")
+    return autoProcStatusId
+
+
+
 
 def findDataCollection(dataCollectionId, client=None):
     e = None
@@ -208,108 +584,3 @@ def setImageQualityIndicatorsPlot(dataCollectionId, plotFile, csvFile):
         dataCollectionId, plotFile, csvFile
     )
     return returnDataCollectionId
-
-
-def storeOrUpdateAutoProcProgram(
-    programs,
-    commandline,
-    status,
-    message=None,
-    start_time=None,
-    end_time=None,
-    environment=None,
-    record_time_stamp=None,
-    autoProcProgramId=None,
-):
-    if start_time is None:
-        start_time = datetime.datetime.now()
-    if end_time is None:
-        end_time = datetime.datetime.now()
-    if record_time_stamp is None:
-        record_time_stamp = datetime.datetime.now()
-    client = getAutoprocessingWebService()
-    autoProcProgramId = client.service.storeOrUpdateAutoProcProgram(
-        arg0=autoProcProgramId,
-        processingCommandLine=commandline,
-        processingPrograms=programs,
-        processingStatus=status,
-        processingMessage=message,
-        processingStartTime=DateTime(start_time),
-        processingEndTime=DateTime(end_time),
-        processingEnvironment=environment,
-        recordTimeStamp=record_time_stamp
-    )
-    return autoProcProgramId
-
-def storeOrUpdateAutoProcProgramAttachment(
-    auto_proc_program_id,
-    file_type,
-    file_path,
-    record_time_stamp=None,
-    auto_proc_program_attachment_id=None,
-):
-    if record_time_stamp is None:
-        record_time_stamp = DateTime(datetime.datetime.now())
-    client = getAutoprocessingWebService()
-    auto_proc_program_attachment_id = client.service.storeOrUpdateAutoProcProgramAttachment(
-        arg0=auto_proc_program_attachment_id,
-        fileType=file_type,
-        fileName=os.path.basename(file_path),
-        filePath=os.path.dirname(file_path),
-        recordTimeStamp=record_time_stamp,
-        autoProcProgramId=auto_proc_program_id
-    )
-    return auto_proc_program_attachment_id
-
-def storeOrUpdateAutoProcIntegration(
-    auto_proc_program_id,
-    dataCollection_id,
-    start_image_number=None,
-    end_image_number=None,
-    auto_proc_integration_id=None,
-    refined_detector_distance=None,
-    refined_x_beam=None,
-    refined_y_beam=None,
-    rotation_axis_x=None,
-    rotation_axis_y=None,
-    rotation_axis_z=None,
-    beam_vector_x=None,
-    beam_vector_y=None,
-    beam_vector_z=None,
-    cell_a=None,
-    cell_b=None,
-    cell_c=None,
-    cell_alpha=None,
-    cell_beta=None,
-    cell_gamma=None,
-    record_time_stamp=None,
-    anomalous=None,
-):
-    if record_time_stamp is None:
-        record_time_stamp = DateTime(datetime.datetime.now())
-    client = getAutoprocessingWebService()
-    auto_proc_integration_id = client.service.storeOrUpdateAutoProcIntegration(
-        arg0=auto_proc_integration_id,
-        autoProcProgramId=auto_proc_program_id,
-        startImageNumber=start_image_number,
-        endImageNumber=end_image_number,
-        refinedDetectorDistance=refined_detector_distance,
-        refinedXbeam=refined_x_beam,
-        refinedYbeam=refined_y_beam,
-        rotationAxisX=rotation_axis_x,
-        rotationAxisY=rotation_axis_y,
-        rotationAxisZ=rotation_axis_z,
-        beamVectorX=beam_vector_x,
-        beamVectorY=beam_vector_y,
-        beamVectorZ=beam_vector_z,
-        cellA=cell_a,
-        cellB=cell_b,
-        cellC=cell_c,
-        cellAlpha=cell_alpha,
-        cellBeta=cell_beta,
-        cellGamma=cell_gamma,
-        recordTimeStamp=record_time_stamp,
-        anomalous=anomalous,
-        dataCollectionId=dataCollection_id
-    )
-    return auto_proc_integration_id

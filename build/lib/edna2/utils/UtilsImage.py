@@ -31,7 +31,7 @@ import os
 import re
 import fabio
 import pathlib
-from edna2.utils import UtilsConfig
+
 
 def __compileAndMatchRegexpTemplate(pathToImage):
     listResult = []
@@ -120,10 +120,6 @@ def getH5FilePath(filePath, batchSize=100, hasOverlap=False, isFastMesh=False):
     ):
         h5ImageNumber = int((imageNumber - 1) / 100) + 1
         h5FileNumber = 1
-    elif UtilsConfig.isMAXIV():
-        h5FileNumber = prefix.split('_')[-1]
-        prefix = '_'.join(prefix.split('_')[:-1])
-        h5ImageNumber = int((imageNumber - 1) / batchSize) * batchSize + 1
     else:
         h5ImageNumber = 1
         h5FileNumber = int((imageNumber - 1) / batchSize) * batchSize + 1
@@ -135,7 +131,6 @@ def getH5FilePath(filePath, batchSize=100, hasOverlap=False, isFastMesh=False):
         prefix=prefix, h5FileNumber=h5FileNumber, h5ImageNumber=h5ImageNumber
     )
     h5DataFilePath = filePath.parent / h5DataFileName
-        
     return h5MasterFilePath, h5DataFilePath, h5FileNumber
 
 
