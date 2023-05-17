@@ -20,7 +20,7 @@
 
 __authors__ = ["A. Finke"]
 __license__ = "MIT"
-__date__ = "25/04/2023"
+__date__ = "20/01/2023"
 
 import os
 import shutil
@@ -45,17 +45,17 @@ from edna2.utils import UtilsPath
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
-from edna2.utils import UtilsXML
 
 
 logger = UtilsLogging.getLogger()
 
 from edna2.tasks.XDSTasks import XDSTask
 from edna2.tasks.CCP4Tasks import AimlessTask
+# from edna2.tasks.XSCALETasks import XSCALETask
 from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults
 from edna2.tasks.WaitFileTask import WaitFileTask
 
-class AutoPROCTask(AbstractTask):
+class FastdpTask(AbstractTask):
 
     def setFailure(self):
         self._dictInOut["isFailure"] = True
@@ -74,11 +74,11 @@ class AutoPROCTask(AbstractTask):
     def run(self, inData):
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
-        self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
-        self.processingPrograms="edna2autoPROC"
+        self.processingPrograms="fast_dp"
         self.processingCommandLine = ""
+        self.lowRes = 50
 
-        self.setLogFileName(f'autoPROC_{self.startDateTimeFormatted}.log')
+        self.setLogFileName('fastDp.log')
         self.dataCollectionId = inData.get("dataCollectionId")
         self.tmpdir = None
         directory = None
@@ -87,45 +87,46 @@ class AutoPROCTask(AbstractTask):
         self.imageNoEnd = None
         pathToStartImage = None
         pathToEndImage = None
+        userName = os.environ["USER"]
+        beamline = "unknown"
+        proposal = "unknown"
 
-        self.doAnom = inData.get("doAnom",False)
+        doAnom = inData.get("doAnomandNoAnom",False)
 
-        logger.debug("Working directory is {0}".format(self.getWorkingDirectory()))
+        spaceGroup = inData.get("spaceGroup",0)
+        unitCell = inData.get("unitCell",None)
 
-        self.spaceGroup = inData.get("spaceGroup",0)
-        self.unitCell = inData.get("unitCell",None)
-        self.lowResLimit = inData.get("lowResolutionLimit",None)
-        self.highResLimit = inData.get("highResolutionLimit",None)
+        logger.debug(f"Working directory is {self.getWorkingDirectory()}")
 
-        if self.spaceGroup != 0:
+        if spaceGroup != 0:
             try:
-                spaceGroupInfo = sgtbx.space_group_info(self.spaceGroup).symbol_and_number()
-                self.spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
-                self.spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-                logger.info("Supplied space group is {}, number {}".format(self.spaceGroupString, self.spaceGroupNumber))
+                spaceGroupInfo = sgtbx.space_group_info(spaceGroup).symbol_and_number()
+                spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
+                spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
+                logger.info("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
             except:
                 logger.debug("Could not parse space group")
-                self.spaceGroupNumber = 0
+                spaceGroupNumber = 0
         else:
             logger.info("No space group supplied")
 
         # need both SG and unit cell
-        if self.spaceGroup != 0 and self.unitCell is not None:
+        if spaceGroup != 0 and unitCell is not None:
             try:
-                unitCellList = [float(x) for x in self.unitCell.split(',')]
+                unitCellList = [float(x) for x in unitCell.split(',')]
                 #if there are zeroes parsed in, need to deal with it
                 if 0.0 in unitCellList:
                     raise Exception
-                self.unitCell = {"cell_a": unitCellList[0],
+                unitCell = {"cell_a": unitCellList[0],
                             "cell_b": unitCellList[1],
                             "cell_c": unitCellList[2],
                             "cell_alpha": unitCellList[3],
                             "cell_beta": unitCellList[4],
                             "cell_gamma": unitCellList[5]}
-                logger.info("Supplied unit cell is {cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**self.unitCell))
+                logger.info("Supplied unit cell is {cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**unitCell))
             except:
                 logger.debug("could not parse unit cell")
-                self.unitCell = None
+                unitCell = None
         else:
             logger.info("No unit cell supplied")
 
@@ -240,7 +241,7 @@ class AutoPROCTask(AbstractTask):
                 dataCollectionId=self.dataCollectionId,
                 processingCommandLine = self.processingCommandLine,
                 processingPrograms = self.processingPrograms,
-                isAnom = self.doAnom,
+                isAnom = doAnom,
                 timeStart = self.timeStart)
         
         # Determine pyarch prefix
@@ -261,67 +262,45 @@ class AutoPROCTask(AbstractTask):
             return
 
         #set up command line
-        autoPROCSetup = UtilsConfig.get(self,"autoPROCSetup", None)
-        autoPROCExecutable = UtilsConfig.get(self,"autoPROCExecutable", "process")
-        maxNoProcessors = UtilsConfig.get(self, "maxNoProcessors", None)
+        fastdpSetup = UtilsConfig.get(self,"fastdpSetup", None)
+        fastdpExecutable = UtilsConfig.get(self,"fastdpExecutable", "fast_dp")
+        maxNumJobs = UtilsConfig.get(self, "maxNumJobs", None)
+        numJobs = UtilsConfig.get(self, "numJobs", None)
+        numCores = UtilsConfig.get(self, "numCores", None)
         pathToNeggiaPlugin = UtilsConfig.get(self, "pathToNeggiaPlugin", None)
-        autoPROCmacro = UtilsConfig.get(self, "macro", None)
+        highResolutionLimit = inData.get("highResolutionLimit", None)
+        atom = inData.get("atom", None)
+        if atom is None and doAnom:
+            atom = "S"
+        beamX = inData.get("beamX",None)
+        beamY = inData.get("beamY",None)
 
-        if autoPROCSetup is None:
+        if fastdpSetup is None:
             commandLine = ""
         else:
-            commandLine = ". " + autoPROCSetup + '\n'
-        commandLine += " {0}".format(autoPROCExecutable)
+            commandLine = ". " + fastdpSetup + '\n'
+        commandLine += " {0}".format(fastdpExecutable)
         #add flags, if present
-        commandLine += " -B -xml -nthreads {0}".format(maxNoProcessors)
-        
-        commandLine += " -h5 {0}".format(masterFilePath)
-        commandLine += " autoPROC_XdsKeyword_LIB={0}".format(pathToNeggiaPlugin) if pathToNeggiaPlugin else ""
-        commandLine += " -ANO" if self.doAnom else ""
+        commandLine += " -J {0}".format(maxNumJobs) if maxNumJobs else ""
+        commandLine += " -j {0}".format(numJobs) if numJobs else ""
+        commandLine += " -k {0}".format(numCores) if numCores else ""
+        commandLine += " -R {0}".format(self.lowRes) if self.lowRes else ""
+        commandLine += " -r {0}".format(highResolutionLimit) if highResolutionLimit else ""
+        commandLine += " -s {0}".format(spaceGroupNumber) if spaceGroupNumber else ""
+        commandLine += " -c \"{cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}\"".format(**unitCell) if unitCell else ""
+        commandLine += " -a {0}".format(atom) if atom else ""
+        commandLine += " -b {0},{1}".format(beamX, beamY) if beamX and beamY else ""
+        commandLine += " -l {0}".format(pathToNeggiaPlugin) if isH5 and pathToNeggiaPlugin else ""
+        commandLine += " {0}".format(masterFilePath)
 
-        if autoPROCmacro is not None:
-            for macro in autoPROCmacro.split():
-                commandLine += " -M {0}".format(macro)
-
-        if self.spaceGroup != 0 and self.unitCell is not None:
-            commandLine += " symm=\"{0}\"".format(self.spaceGroup)
-            commandLine += " cell=\"{cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}\"".format(**self.unitCell)
-
-        if self.lowResLimit is not None or self.highResLimit is not None:
-            low = self.lowResLimit if self.lowResLimit else 1000.0
-            high = self.highResLimit if self.highResLimit else 0.1
-            commandLine += " -R {0} {1}".format(low,high)
-
-        config = UtilsConfig.getConfig()
-        config.optionxform = str
-        aP_config = config["AutoPROCTask"]
-        logger.debug(f"{aP_config}")
-        for k,v in aP_config.items():
-            if k.startswith("autoPROC_"):
-                logger.debug(f"autoPROC option: {k}={v}")
-                commandLine += " {0}={1}".format(k,v)
-
-        logger.info("autoPROC command is {}".format(commandLine))
-        
+        logger.info("fastdp command is {}".format(commandLine))
         try:
             self.runCommandLine(commandLine, listCommand=[])
         except RuntimeError:
             self.setFailure()
             return
+        
         self.endDateTime = datetime.now().isoformat(timespec='seconds')
-
-        ispybXML = self.getWorkingDirectory() / "autoPROC.xml"
-        if ispybXML.is_file():
-            self.outData["ispybXML"] = str(ispybXML)
-        ispybXML_staraniso = self.getWorkingDirectory() / "autoPROC_staraniso.xml"
-        if ispybXML_staraniso.is_file():
-            self.outData["ispybXML_staraniso"] = str(ispybXML_staraniso)
-        
-        autoProcContainer = UtilsXML.dictfromXML(ispybXML)
-        
-
-
-        return
         
         self.fastDpResultFiles = {
             "correctLp": self.getWorkingDirectory() / "CORRECT.LP",
@@ -379,8 +358,9 @@ class AutoPROCTask(AbstractTask):
             shutil.copy(pathToFastDpMtz, self.pyarchDirectory / pyarchFastDpMtz)
         
         # add fast_dp.log to results/pyarch directory
-        shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.resultsDirectory / "fast_dp.log")
-        shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.pyarchDirectory / "fast_dp.log")
+        pyarchFastDpLog = self.pyarchPrefix + "_fast_dp.log"
+        shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.resultsDirectory / pyarchFastDpLog)
+        shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.pyarchDirectory / pyarchFastDpLog)
 
         autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
 
@@ -502,6 +482,7 @@ class AutoPROCTask(AbstractTask):
         return autoProcScalingContainer
 
 
+
     def eiger_template_to_master(self, fmt):
         if UtilsConfig.isMAXIV():
             fmt_string = fmt.replace("%06d", "master")
@@ -517,5 +498,10 @@ class AutoPROCTask(AbstractTask):
         else:
             fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
         return fmt_string.format(num)
+
+
+
+
+
 
 

@@ -60,7 +60,7 @@ def addFileHandler(logger):
         maxBytes = int(UtilsConfig.get("Logging", "log_file_maxbytes", 1e7))
         backupCount = int(UtilsConfig.get("Logging", "log_file_backupCount", 0))
         fileHandler = logging.handlers.RotatingFileHandler(
-            logPath, maxBytes=maxBytes, backupCount=backupCount
+            logPath, maxBytes=maxBytes, backupCount=backupCount, encoding='utf-8'
         )
         logFileFormat = UtilsConfig.get("Logging", "log_file_format")
         if logFileFormat is None:

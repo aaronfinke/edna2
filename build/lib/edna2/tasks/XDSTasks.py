@@ -33,6 +33,10 @@ import os
 import math
 import shutil
 import numpy as np
+from pathlib import Path
+import sys
+import re
+import h5py
 
 from edna2.tasks.AbstractTask import AbstractTask
 
@@ -55,11 +59,19 @@ class XDSTask(AbstractTask):
     """
 
     def run(self, inData):
-        commandLine = "xds_par"
+        xdsSetup = UtilsConfig.get(self, 'xdsSetup')
+        if xdsSetup is None:
+            commandLine = ""
+        else:
+            commandLine = ". " + xdsSetup + '\n'
+
+        commandLine = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
         self.runCommandLine(commandLine, listCommand=[])
+        #check for errors
+        errorList = self.checkLogForWarningAndErrors()
         # Work in progress!
         outData = self.parseXDSOutput(self.getWorkingDirectory())
         return outData
@@ -70,11 +82,11 @@ class XDSTask(AbstractTask):
         first_image_path = first_sub_wedge["image"][0]["path"]
         prefix = UtilsImage.getPrefix(first_image_path)
         suffix = UtilsImage.getSuffix(first_image_path)
-        if suffix == "h5":
+        if suffix == "h5" and UtilsConfig.isMAXIV():
             lowest_xds_image_number = 1
             highest_xds_image_number = 1
             h5MasterFilePath, h5DataFilePath, h5FileNumber = UtilsImage.getH5FilePath(
-                first_image_path, hasOverlap=True, isFastMesh=False
+                first_image_path, hasOverlap=False, isFastMesh=False
             )
             h5MasterFile = os.path.basename((str(h5MasterFilePath)))
             h5DataFile = os.path.basename((str(h5DataFilePath)))
@@ -83,11 +95,60 @@ class XDSTask(AbstractTask):
                 [str(h5DataFilePath), h5DataFile],
             ]
             if working_directory is not None:
-                os.symlink(str(h5MasterFilePath), h5MasterFile)
-                os.symlink(str(h5DataFilePath), h5DataFile)
+                Path(working_directory / h5MasterFile).symlink_to(h5MasterFilePath)
+                find_prefix = re.search(r"(\S+)_data_\d{6}.h5",str(h5DataFile))
+                prefix = find_prefix.groups()[0]
+                for datafile in h5DataFilePath.parent.glob(prefix + "_data_*"):
+                    Path(working_directory / datafile.name).symlink_to(datafile)
             template = h5MasterFile.replace("master", "??????")
             lowest_xds_image_number = None
             highest_xds_image_number = None
+            spot_range_min = None
+            spot_range_max = None
+            list_of_list = []
+            list_spot_range = []
+            # for subwedge in in_data["subWedge"]:
+            #     image_list = subwedge["image"]
+            #     for image_dict in image_list:
+            #         image_path = image_dict["path"]
+            #         lowest_xds_image_number = UtilsImage.getImageNumber(image_path)
+
+            #grab last image number from master file
+            with h5py.File(h5MasterFile,'r') as master_file:
+                data_file = list(master_file['/entry/data'].keys())[0]
+                lowest_xds_image_number = int(master_file['/entry/data'][data_file].attrs['image_nr_low'])
+                last_data = list(master_file['/entry/data'].keys())[-1]
+                highest_xds_image_number = int(master_file['/entry/data'][last_data].attrs['image_nr_high'])
+            list_spot_range.append([lowest_xds_image_number,highest_xds_image_number])
+
+        elif suffix == "h5":
+            lowest_xds_image_number = 1
+            highest_xds_image_number = 1
+            h5MasterFilePath, h5DataFilePath, h5FileNumber = UtilsImage.getH5FilePath(
+                first_image_path, hasOverlap=False, isFastMesh=False
+            )
+            h5MasterFile = os.path.basename((str(h5MasterFilePath)))
+            h5DataFile = os.path.basename((str(h5DataFilePath)))
+            list_image_link = [
+                [str(h5MasterFilePath), h5MasterFile],
+                [str(h5DataFilePath), h5DataFile],
+            ]
+            if working_directory is not None:
+                Path(working_directory / h5MasterFile).symlink_to(h5MasterFilePath)
+                find_prefix = re.search(r"(\S+)_data_\d{6}.h5",str(h5DataFile))
+                prefix = find_prefix.groups()[0]
+                for datafile in h5DataFilePath.parent.glob(prefix + "_data_*"):
+                    Path(working_directory / datafile.name).symlink_to(datafile)
+
+            
+            template = h5MasterFile.replace("master", "??????")
+            lowest_xds_image_number = None
+            highest_xds_image_number = None
+            spot_range_min = None
+            spot_range_max = None
+            list_spot_range = []
+            list_of_list = []
+
             for subwedge in in_data["subWedge"]:
                 image_list = subwedge["image"]
                 for image_dict in image_list:
@@ -97,6 +158,12 @@ class XDSTask(AbstractTask):
                         lowest_xds_image_number = image_number
                     if highest_xds_image_number is None or highest_xds_image_number < image_number:
                         highest_xds_image_number = image_number
+                    if spot_range_min is None or spot_range_min > lowest_xds_image_number:
+                        spot_range_min = lowest_xds_image_number
+                    if spot_range_max is None or spot_range_max < highest_xds_image_number:
+                        spot_range_max = highest_xds_image_number
+                list_spot_range.append([spot_range_min, spot_range_max])
+
         else:
             template = "%s_xdslink_?????.%s" % (prefix, suffix)
             xds_lowest_image_number_global = 1
@@ -196,11 +263,26 @@ class XDSTask(AbstractTask):
         distance = round(detector["distance"], 3)
         wavelength = round(beam["wavelength"], 3)
         oscRange = goniostat["oscillationWidth"]
-        startAngle = goniostat["rotationAxisStart"] - int(
+        startAngle = round(goniostat["rotationAxisStart"] - int(
             goniostat["rotationAxisStart"]
-        )
+        ),4)
         listXDS_INP = [
-            "OVERLOAD=10048500",
+            "DELPHI= {0}".format(
+                UtilsConfig.get("XDSTask", "DELPHI")
+            ),
+            "NUMBER_OF_IMAGES_IN_CACHE= {0}".format(
+                UtilsConfig.get("XDSTask", "NUMBER_OF_IMAGES_IN_CACHE")
+            ),
+            "MAXIMUM_NUMBER_OF_JOBS= {0}".format(
+                UtilsConfig.get("XDSTask", "MAXIMUM_NUMBER_OF_JOBS")
+            ),
+            "MAXIMUM_NUMBER_OF_PROCESSORS= {0}".format(
+                UtilsConfig.get("XDSTask", "MAXIMUM_NUMBER_OF_PROCESSORS")
+            ),
+            "INCLUDE_RESOLUTION_RANGE= 50.0 0.0",
+            "OVERLOAD={0}".format(
+                UtilsConfig.get("XDSTask", "OVERLOAD")
+            ),
             "DIRECTION_OF_DETECTOR_X-AXIS={0}".format(
                 UtilsConfig.get("XDSTask", "DIRECTION_OF_DETECTOR_X-AXIS")
             ),
@@ -220,29 +302,77 @@ class XDSTask(AbstractTask):
             "DETECTOR={0}  MINIMUM_VALID_PIXEL_VALUE={1}  OVERLOAD={2}".format(
                 dictXDSDetector["name"],
                 dictXDSDetector["minimumValidPixelValue"],
-                dictXDSDetector["overload"],
+                UtilsConfig.get("XDSTask", "OVERLOAD"),
             ),
             "SENSOR_THICKNESS={0}".format(dictXDSDetector["sensorThickness"]),
             "TRUSTED_REGION={0} {1}".format(
                 dictXDSDetector["trustedRegion"][0], dictXDSDetector["trustedRegion"][1]
             ),
+            "FRACTION_OF_POLARIZATION= {0}".format(
+                UtilsConfig.get("XDSTask", "FRACTION_OF_POLARIZATION")
+            ),
+            "POLARIZATION_PLANE_NORMAL= {0}".format(
+                UtilsConfig.get("XDSTask", "POLARIZATION_PLANE_NORMAL")
+            ),
+            "VALUE_RANGE_FOR_TRUSTED_DETECTOR_PIXELS= {0}".format(
+                UtilsConfig.get("XDSTask", "VALUE_RANGE_FOR_TRUSTED_DETECTOR_PIXELS")
+            ),
+            "STRONG_PIXEL= {0}".format(
+                UtilsConfig.get("XDSTask", "STRONG_PIXEL")
+            ),
+            "MINIMUM_NUMBER_OF_PIXELS_IN_A_SPOT= {0}".format(
+                UtilsConfig.get("XDSTask", "MINIMUM_NUMBER_OF_PIXELS_IN_A_SPOT")
+            ),
+            "SEPMIN= {0}".format(
+                UtilsConfig.get("XDSTask", "SEPMIN")
+            ),
+            "CLUSTER_RADIUS= {0}".format(
+                UtilsConfig.get("XDSTask", "CLUSTER_RADIUS")
+            ),
+            "NUMBER_OF_PROFILE_GRID_POINTS_ALONG_ALPHA/BETA= {0}".format(
+                UtilsConfig.get("XDSTask", "NUMBER_OF_PROFILE_GRID_POINTS_ALONG_ALPHA_BETA")
+            ),
+            "NUMBER_OF_PROFILE_GRID_POINTS_ALONG_GAMMA= {0}".format(
+                UtilsConfig.get("XDSTask", "NUMBER_OF_PROFILE_GRID_POINTS_ALONG_GAMMA")
+            ),
+            "REFINE(IDXREF)= {0}".format(
+                UtilsConfig.get("XDSTask", "REFINE_IDXREF")
+            ),
+            "REFINE(INTEGRATE)= {0}".format(
+                UtilsConfig.get("XDSTask", "REFINE_INTEGRATE")
+            ),
+            "REFINE(CORRECT)= {0}".format(
+                UtilsConfig.get("XDSTask", "REFINE_CORRECT")
+            ),
+            ""
+
         ]
-        # for trustedRegion in dictXDSDetector["untrustedRectangle"]:
-        #     listXDS_INP.append('UNTRUSTED_RECTANGLE={0} {1} {2} {3}'.format(
-        #         trustedRegion[0], trustedRegion[1],
-        #         trustedRegion[2],trustedRegion[3]
-        #     ))
+        for trustedRegion in dictXDSDetector["untrustedRectangle"]:
+            listXDS_INP.append('UNTRUSTED_RECTANGLE={0} {1} {2} {3}'.format(
+                trustedRegion[0], trustedRegion[1],
+                trustedRegion[2],trustedRegion[3]
+            ))
         listXDS_INP += [
             "DETECTOR_DISTANCE={0}".format(distance),
             "X-RAY_WAVELENGTH={0}".format(wavelength),
             "OSCILLATION_RANGE={0}".format(oscRange),
             "STARTING_ANGLE={0}".format(startAngle),
-            "INDEX_QUALITY= 0.25",
+#            "INDEX_QUALITY= 0.3",
         ]
-        if "spaceGroupNumber" in inData:
+        if inData.get("idxref",None) is not None:
+            if inData.get("idxref",None).get("spaceGroupNumber",None) is not None:
+                spaceGroupNumber = inData.get("idxref").get("spaceGroupNumber")
+                unitCell = inData.get("idxref").get("unitCell")
+                unitCellConstants = "{cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**unitCell)
+                listXDS_INP += [
+                    "SPACE_GROUP_NUMBER={0}".format(spaceGroupNumber),
+                    "UNIT_CELL_CONSTANTS={0}".format(unitCellConstants),
+                ]
+
+        elif inData.get("spaceGroupNumber",None) is not None:
             spaceGroupNumber = inData["spaceGroupNumber"]
-            cell = inData["cell"]
-            unitCellConstants = "{a} {b} {c} {alpha} {beta} {gamma}".format(**cell)
+            unitCell = inData["unitCell"]
+            unitCellConstants = "{cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**unitCell)
             listXDS_INP += [
                 "SPACE_GROUP_NUMBER={0}".format(spaceGroupNumber),
                 "UNIT_CELL_CONSTANTS={0}".format(unitCellConstants),
@@ -252,6 +382,7 @@ class XDSTask(AbstractTask):
             and UtilsConfig.get("XDSTask", "LIB") is not None
         ):
             listXDS_INP += ["LIB= {0}".format(UtilsConfig.get("XDSTask", "LIB"))]
+            
         return listXDS_INP
 
     @staticmethod
@@ -413,42 +544,202 @@ class XDSTask(AbstractTask):
             ]
         elif detectorType == "eiger16m":
             untrustedRectangle = [
-                [0, 4149, 512, 549],
-                [0, 4149, 1062, 1099],
-                [0, 4149, 1612, 1649],
-                [0, 4149, 2162, 2199],
-                [0, 4149, 2712, 2749],
-                [0, 4149, 3262, 3299],
-                [0, 4149, 3812, 3849],
-                [513, 514, 0, 4362],
-                [1028, 1039, 0, 4362],
-                [1553, 1554, 0, 4362],
-                [2068, 2079, 0, 4362],
-                [2593, 2594, 0, 4362],
-                [3108, 3119, 0, 4362],
-                [3633, 3634, 0, 4362],
+                [0, 4150, 513, 553],
+                [0, 4150, 1064, 1104],
+                [0, 4150, 1615, 1655],
+                [0, 4150, 2166, 2206],
+                [0, 4150, 2717, 2757],
+                [0, 4150, 3268, 3308],
+                [0, 4150, 3819, 3859],
+                [1029, 1042, 0, 4371],
+                [2069, 2082, 0, 4371],
+                [3109, 3122, 0, 4371],
             ]
-            sensorThickness = 0.75
+            sensorThickness = UtilsDetector.getSensorThickness(detectorType)
+
         else:
             raise RuntimeError("Unknown detector: {0}".format(detectorType))
         dictXDSDetector = {
-            "name": "PILATUS",
+            "name": "EIGER",
             "nx": nx,
             "ny": ny,
             "orgX": orgX,
             "orgY": orgY,
             "pixel": pixel,
             "untrustedRectangle": untrustedRectangle,
-            "trustedRegion": [0.0, 1.41],
+            "trustedRegion": [0.0, 1.2],
             "trustedpixel": [7000, 30000],
             "minimumValidPixelValue": 0,
-            "overload": 1048500,
             "sensorThickness": sensorThickness,
         }
         return dictXDSDetector
+    
+    @staticmethod
+    def parseCorrectLp(inData):
+        outData = {}
+        correctLPPath = Path(inData["correctLp"])
+        try:
+            with open(correctLPPath,'r') as fp:
+                lines =  [l.strip('\n') for l in fp.readlines()]
+        except IOError:
+            logger.error("Could not open the specified XDS output file for reading: {0}".format(inData["correctLp"]))
+            return None
+        try:
+            limits = ([i for i,s in enumerate(lines) if 'REFINEMENT OF DIFFRACTION PARAMETERS USING ALL IMAGES' in s][0],
+            [i for i,s in enumerate(lines) if 'MEAN INTENSITY AS FUNCTION OF SPINDLE POSITION WITHIN DATA IMAGE' in s][0])
+        except IndexError:
+            logger.error("Could not extract the data from the specified XDS output file: {0}".format(inData["correctLp"]))
 
+        isaLine = [lines.index(x) for x in lines if '     a        b          ISa' in x][0]
+        a,b,Isa = [float(x) for x in lines[isaLine+1].split()]
+
+
+        refinedDiffractionParams = XDSTask._extractRefinedDiffractionParams(lines[limits[0]:limits[1]])
+        completeness_entry_begin = [i for i,s in enumerate(lines) if 'LIMIT     OBSERVED  UNIQUE  POSSIBLE     OF DATA   observed  expected' in s][-1]
+        completeness_entry_end = [i for i,s in enumerate(lines[completeness_entry_begin:]) if 'total' in s][0]
+        completenessEntries = XDSTask._extractCompletenessEntries(lines[completeness_entry_begin+1:completeness_entry_begin+completeness_entry_end+1])
+
+        # now for the last bit: check if we were given a path to the
+        # gxparm file and if it exists get the space group and unit
+        # cell constants from it
+        gxparm_data = {}
+        if Path(inData["gxParmXds"]).is_file():
+            gxparm_data = XDSIndexing.parseXparm(Path(inData["gxParmXds"]))
+        outData['ISa'] = Isa
+        outData['wilsonA'] = a
+        outData['wilsonB'] = b
+        outData['refinedDiffractionParams'] = refinedDiffractionParams
+        outData['completenessEntries'] = completenessEntries
+        outData['gxparmData'] = gxparm_data
+
+        return outData
+
+    
+    @staticmethod
+    def _extractRefinedDiffractionParams(lines):
+        """
+        Get the refined diffraction parameters from CORRECT.LP.
+        Returns None if it can't find all values.
+        """
+        outData = {}
+        try:
+            crystal_mosaicity =  list(filter(lambda element: 'CRYSTAL MOSAICITY (DEGREES)' in element, lines))[0].split()[-1]
+            direct_beam_coordinates = list(filter(lambda element: 'DIRECT BEAM COORDINATES (REC. ANGSTROEM)' in element, lines))[0].split()[-3:]
+            direct_beam_detector_coordinates = list(filter(lambda element: 'DETECTOR COORDINATES (PIXELS) OF DIRECT BEAM' in element, lines))[0].split()[-2:]
+            detector_origin = list(filter(lambda element: 'DETECTOR ORIGIN (PIXELS) AT' in element, lines))[0].split()[-2:]
+            crystal_to_detector_distance = list(filter(lambda element: 'CRYSTAL TO DETECTOR DISTANCE (mm)' in element, lines))[0].split()[-1]
+            coordinates_of_unit_cell_a_axis = list(filter(lambda element: 'COORDINATES OF UNIT CELL A-AXIS' in element, lines))[0].split()[-3:]
+            coordinates_of_unit_cell_b_axis = list(filter(lambda element: 'COORDINATES OF UNIT CELL B-AXIS' in element, lines))[0].split()[-3:]
+            coordinates_of_unit_cell_c_axis = list(filter(lambda element: 'COORDINATES OF UNIT CELL C-AXIS' in element, lines))[0].split()[-3:]
+        except IndexError as idx:
+            logger.error("Could not extract all refinement parameters from CORRECT.LP")
+
+        outData['crystal_mosaicity'] = float(crystal_mosaicity)
+        outData['direct_beam_coordinates'] = [float(x) for x in direct_beam_coordinates]
+        outData['direct_beam_detector_coordinates'] = [float(x) for x in direct_beam_detector_coordinates]
+        outData['detector_origin'] = [float(x) for x in detector_origin]
+        outData['crystal_to_detector_distance'] = float(crystal_to_detector_distance)
+        outData['coordinates_of_unit_cell_a_axis'] =  [float(x) for x in coordinates_of_unit_cell_a_axis]
+        outData['coordinates_of_unit_cell_b_axis'] =  [float(x) for x in coordinates_of_unit_cell_b_axis]
+        outData['coordinates_of_unit_cell_c_axis'] =  [float(x) for x in coordinates_of_unit_cell_c_axis]
+        unit_cell_constants = list(filter(lambda element: 'UNIT_CELL_CONSTANTS=' in element, lines))[0].split()[-6:]
+        outData['cell_a'], outData['cell_b'], outData['cell_c'],\
+            outData['cell_alpha'], outData['cell_beta'], outData['cell_gamma'] = [float(x) for x in unit_cell_constants]
+
+        return outData
+
+    @staticmethod
+    def _extractCompletenessEntries(lines):
+        """
+        Since the latest XDS version there's no guarantee the fields
+        will be separated by whitespace. What's fixed is the size of
+        each field. So we'll now use fixed offsets to extract the
+        fields.
+
+        The Fortran code uses this format statement:
+        1130  FORMAT(F9.2,I12,I8,I10,F11.1,'%',F10.1,'%',F9.1,'%',I9,F8.2,      &
+                F8.1,'%',F8.1,A1,I6,A1,F8.3,I8)
+        """
+        logger.debug(f'extracting completeness entries...')
+        outData = {"completeness_entries": []}
+        offsets = {
+        'res': (0,9),
+        'observed': (9, 21),
+        'unique': (21, 29),
+        'possible': (29, 39),
+        'complete': (39, 50),
+        'rfactor': (51, 61),
+        'isig': (81, 89),
+        'rmeas': (89, 98),
+        'half_dataset_correlation': (99, 107),
+        'include_res_based_on_cc': (107,109),
+        }
+
+        for line in lines:
+            #deal with blank lines and total completeness
+            if line.strip() == '':
+                continue
+            if 'total' in line:
+                res_dict = {}
+                for (name, (start, end)) in offsets.items():
+                    if name == 'include_res_based_on_cc':
+                        continue
+                    value = float(line[start:end]) if not 'total' in line[start:end] else 'total'
+                    res_dict[name] = value
+                res_dict.pop('res', None)
+                outData['total_completeness'] = res_dict
+            else:
+                res_dict = {}
+                for (name, (start, end)) in offsets.items():
+                    if name == 'include_res_based_on_cc':
+                        res_dict[name] = True if '*' in line[start:end] else False
+                    else:
+                        value = float(line[start:end])
+                        res_dict[name] = value
+                outData['completeness_entries'].append(res_dict)
+        return outData
+
+    def checkLogForWarningAndErrors(self):
+        """Checks the plugin/XDS log file for warning and error messages"""
+        errorList = []
+        strLog = self.getLog()
+        listLog = strLog.split("\n")
+        for strLogLine in listLog:
+            # Check for Errors
+            if "!!! ERROR " in strLogLine:
+                errorList.append(strLogLine)
+                logger.error(strLogLine)
+        return errorList
+                    
+
+        
 
 class XDSIndexing(XDSTask):
+    def run(self, inData):
+        xdsSetup = UtilsConfig.get('XDSTask', 'xdsSetup')
+        if xdsSetup is None:
+            commandLine = ""
+        else:
+            commandLine = ". " + xdsSetup + '\n'
+
+        commandLine = "/mxn/groups/sw/mxsw/XDS/xds_par"
+        listXDS_INP = self.generateXDS_INP(inData)
+        self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
+        self.setLogFileName("xds.log")
+        self.runCommandLine(commandLine, listCommand=[])
+        #check for errors
+        errorList = self.checkLogForWarningAndErrors()
+        insufficientIndexing = False
+        if errorList:
+            # ignore this error
+            insufficientIndexing = True if 'INSUFFICIENT PERCENTAGE (< 50%) OF INDEXED REFLECTIONS' in ' '.join(errorList) else False
+            if not insufficientIndexing:
+                self.setFailure()
+        # Work in progress!
+        outData = self.parseXDSOutput(self.getWorkingDirectory())
+        outData['insufficientIndexing'] = insufficientIndexing
+        return outData
+
     def generateXDS_INP(self, inData):
         first_sub_wedge = inData["subWedge"][0]
         # listDozorSpotFile = inData["dozorSpotFile"]
@@ -469,7 +760,7 @@ class XDSIndexing(XDSTask):
         list_spot_range = dict_image_links["spotRange"]
         for spot_range_min, spot_range_max in list_spot_range:
             list_xds_inp.append(
-                "SPOT_RANGE= {0} {1}".format(spot_range_min, spot_range_max)
+                "SPOT_RANGE= {0} {1}".format(spot_range_min, spot_range_max/2)
             )
         list_xds_inp.append(
             "DATA_RANGE= {0} {1}".format(
@@ -488,11 +779,30 @@ class XDSIndexing(XDSTask):
         idxref_path = workingDirectory / "IDXREF.LP"
         xparm_path = workingDirectory / "XPARM.XDS"
         spot_path = workingDirectory / "SPOT.XDS"
+        gainCbf_path = workingDirectory / "GAIN.cbf"
+        blankCbf_path = workingDirectory / "BLANK.cbf"
+        xCorrectionsCbf_path = workingDirectory / "X-CORRECTIONS.cbf"
+        yCorrectionsCbf_path = workingDirectory / "Y-CORRECTIONS.cbf"
+        bkginitCbf_path = workingDirectory / "BKGINIT.cbf"
+
+        with open(workingDirectory / "XDS.INP", "r") as fp:
+            for line in fp:
+                if "DATA_RANGE=" in line:
+                    first_image, last_image = [int(x) for x in line.split() if not "DATA_RANGE" in x]
         out_data = {
+            "workingDirectory": workingDirectory,
+            "xdsInp": str(workingDirectory / "XDS.INP"),
             "idxref": XDSIndexing.readIdxrefLp(idxref_path),
-            "xparm": XDSIndexing.parseXparm(xparm_path),
-            "xparmXdsPath": xparm_path,
-            "spotXdsPath": spot_path
+            "xparm": XDSIndexing.parseXparm(Path(xparm_path)),
+            "xparmXds": xparm_path,
+            "spotXds": spot_path,
+            "gainCbf" : gainCbf_path,
+            "blankCbf" : blankCbf_path,
+            "xCorrectionsCbf" : xCorrectionsCbf_path,
+            "yCorrectionsCbf" : yCorrectionsCbf_path,
+            "bkginitCbf" : bkginitCbf_path,
+            "start_image" : first_image,
+            "end_image" : last_image,
         }
         return out_data
 
@@ -524,12 +834,14 @@ class XDSIndexing(XDSTask):
                     "latticeCharacter": latticeCharacter,
                     "spaceGroupNumber": spaceGroupNumber,
                     "qualityOfFit": qualityOfFit,
-                    "a": float(listLine[4]),
-                    "b": float(listLine[5]),
-                    "c": float(listLine[6]),
-                    "alpha": float(listLine[7]),
-                    "beta": float(listLine[8]),
-                    "gamma": float(listLine[9]),
+                    "unitCell": {
+                        "cell_a": float(listLine[4]),
+                        "cell_b": float(listLine[5]),
+                        "cell_c": float(listLine[6]),
+                        "cell_alpha": float(listLine[7]),
+                        "cell_beta": float(listLine[8]),
+                        "cell_gamma": float(listLine[9]),
+                        }
                 }
             )
 
@@ -639,7 +951,7 @@ class XDSIndexing(XDSTask):
         Inspired from parse_xparm written by Pierre Legrand:
         https://github.com/legrandp/xdsme/blob/67001a75f3c363bfe19b8bd7cae999f4fb9ad49d/XOconv/XOconv.py#L372
         """
-        if pathToXparmXds.exists():
+        if pathToXparmXds.is_file():
             with open(str(pathToXparmXds)) as f:
                 xparm = f.readlines()
             xparamDict = {
@@ -684,6 +996,7 @@ class XDSGenerateBackground(XDSTask):
     def parseXDSOutput(workingDirectory):
         if (workingDirectory / "BKGINIT.cbf").exists():
             outData = {
+
                 "gainCbf": str(workingDirectory / "GAIN.cbf"),
                 "blankCbf": str(workingDirectory / "BLANK.cbf"),
                 "bkginitCbf": str(workingDirectory / "BKGINIT.cbf"),
@@ -696,6 +1009,27 @@ class XDSGenerateBackground(XDSTask):
 
 
 class XDSIntegration(XDSTask):
+
+    def run(self, inData):
+        xdsSetup = UtilsConfig.get('XDSTask', 'xdsSetup')
+        if xdsSetup is None:
+            commandLine = ""
+        else:
+            commandLine = ". " + xdsSetup + '\n'
+
+        commandLine = "/mxn/groups/sw/mxsw/XDS/xds_par"
+        listXDS_INP = self.generateXDS_INP(inData)
+        self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
+        self.setLogFileName("xds.log")
+        self.runCommandLine(commandLine, listCommand=[])
+        #check for errors
+        errorList = self.checkLogForWarningAndErrors()
+        # xds succeeds if XDS_ASCII.HKL is generated
+        if not (self.getWorkingDirectory() / "XDS_ASCII.HKL").exists():
+            self.setFailure()
+        outData = self.parseXDSOutput(self.getWorkingDirectory())
+        return outData
+
     def generateXDS_INP(self, inData):
         # Copy XPARM.XDS, GAIN.CBF file
         shutil.copy(inData["xparmXds"], self.getWorkingDirectory())
@@ -722,10 +1056,21 @@ class XDSIntegration(XDSTask):
         outData = {}
         if (workingDirectory / "XDS_ASCII.HKL").exists():
             outData = {
+                "workingDirectory": str(workingDirectory),
+                "xdsInp": str(workingDirectory / "XDS.INP"),
                 "xdsAsciiHkl": str(workingDirectory / "XDS_ASCII.HKL"),
+                "integrateHkl": str(workingDirectory / "INTEGRATE.HKL"),
+                "integrateLp": str(workingDirectory / "INTEGRATE.LP"),
                 "correctLp": str(workingDirectory / "CORRECT.LP"),
                 "bkgpixCbf": str(workingDirectory / "BKGPIX.cbf"),
+                "gxParmXds":str(workingDirectory / "GXPARM.XDS"),
             }
+            correctLpData = XDSTask.parseCorrectLp(outData)
+            outData["ISa"] = correctLpData["ISa"]
+            outData["refinedDiffractionParams"] = correctLpData["refinedDiffractionParams"]
+            outData["completenessEntries"] = correctLpData["completenessEntries"]["completeness_entries"]
+            outData["total_completeness"] = correctLpData["completenessEntries"]["total_completeness"]
+            outData["gxparmData"] = correctLpData["gxparmData"]
         return outData
 
 
@@ -762,8 +1107,117 @@ class XDSIndexAndIntegration(XDSTask):
         outData = {}
         if (workingDirectory / "XDS_ASCII.HKL").exists():
             outData = {
+                "workingDirectory": str(workingDirectory),
                 "xdsAsciiHkl": str(workingDirectory / "XDS_ASCII.HKL"),
                 "correctLp": str(workingDirectory / "CORRECT.LP"),
                 "bkgpixCbf": str(workingDirectory / "BKGPIX.cbf"),
             }
+        return outData
+
+class XDSRerunCorrect(XDSTask):   
+    def run(self, inData):
+        xdsSetup = UtilsConfig.get('XDSTask', 'xdsSetup')
+        if xdsSetup is None:
+            commandLine = ""
+        else:
+            commandLine = ". " + xdsSetup + '\n'
+
+        commandLine = "/mxn/groups/sw/mxsw/XDS/xds_par"
+        # Copy XPARM.XDS, GAIN.CBF file
+        # recycle GXPARM.XDS to XPARM.XDS
+        try:
+            shutil.copy(inData["gxParmXds"], Path(self.getWorkingDirectory() / 'XPARM.XDS'))
+            shutil.copy(inData["xdsInp"],self.getWorkingDirectory())
+            shutil.copy(inData["gainCbf"], self.getWorkingDirectory())
+            shutil.copy(inData["xCorrectionsCbf"], self.getWorkingDirectory())
+            shutil.copy(inData["yCorrectionsCbf"], self.getWorkingDirectory())
+            shutil.copy(inData["blankCbf"], self.getWorkingDirectory())
+            shutil.copy(inData["bkginitCbf"], self.getWorkingDirectory())
+            shutil.copy(inData["integrateHkl"], self.getWorkingDirectory())
+        except:
+            logger.error("Error copying files to rerun CORRECT.")
+            self.setFailure()
+            return
+
+        listXDS_INP = self.generateXDS_INP(inData)
+        self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
+        self.setLogFileName("xds.log")
+        self.runCommandLine(commandLine, listCommand=[])
+        #check for errors
+        errorList = self.checkLogForWarningAndErrors()
+        # xds succeeds if XDS_ASCII.HKL is generated
+        if not (self.getWorkingDirectory() / "XDS_ASCII.HKL").exists():
+            self.setFailure()
+        outData = self.parseXDSOutput(self.getWorkingDirectory())
+        return outData
+
+     
+    def generateXDS_INP(self, inData):
+        
+        anom = 'FALSE' if inData["isAnom"] else 'TRUE'
+
+        dict_image_links = XDSTask.generateImageLinks(inData, self.getWorkingDirectory())
+
+        with open(inData["xdsInp"],'r') as f:
+            listXDS_INP = [x.strip('\n') for x in f.readlines()]
+
+        # take the beam divergence and reflection range from INTEGRATE.LP
+        # and put them in as starting parameters
+        with open(inData["integrateLp"],'r') as f:
+            for line in f:
+                if "BEAM_DIVERGENCE=" in line:
+                    beam_div = line[1:-1]
+                    refl_range = next(f)[1:-1]
+        listXDS_INP.append(beam_div)
+        listXDS_INP.append(refl_range)
+
+        # find the JOB= line and fix it
+        jobLine = [listXDS_INP.index(x) for x in listXDS_INP if 'JOB=' in x][0]
+        listXDS_INP[jobLine] = 'JOB=CORRECT'
+
+        # now grab the UNIT_CELL and SPACE_GROUP_NUMBER lines if they exist
+        cellLine = [listXDS_INP.index(x) for x in listXDS_INP if 'UNIT_CELL=' in x]
+        sgLine = [listXDS_INP.index(x) for x in listXDS_INP if 'SPACE_GROUP_NUMBER=' in x]
+        resRange = [listXDS_INP.index(x) for x in listXDS_INP if 'INCLUDE_RESOLUTION_RANGE=' in x]
+
+        if resRange != []:
+            listXDS_INP[resRange[0]] = f"INCLUDE_RESOLUTION_RANGE= 50.0 {inData['resCutoff']}"
+
+        if cellLine != []:             
+            listXDS_INP[cellLine[0]] = f'UNIT_CELL_CONSTANTS= {inData["cell_from_pointless"]["length_a"]:.2f} {inData["cell_from_pointless"]["length_b"]:.2f} {inData["cell_from_pointless"]["length_c"]:.2f}' \
+                                       f'{inData["cell_from_pointless"]["angle_alpha"]:.2f} {inData["cell_from_pointless"]["angle_beta"]:.2f} {inData["cell_from_pointless"]["angle_gamma"]:.2f}'
+        else:
+            listXDS_INP.append(f'UNIT_CELL_CONSTANTS= {inData["cell_from_pointless"]["length_a"]:.2f} {inData["cell_from_pointless"]["length_b"]:.2f} {inData["cell_from_pointless"]["length_c"]:.2f} ' \
+                               f'{inData["cell_from_pointless"]["angle_alpha"]:.2f} {inData["cell_from_pointless"]["angle_beta"]:.2f} {inData["cell_from_pointless"]["angle_gamma"]:.2f}')
+
+        if sgLine != []:
+            listXDS_INP[sgLine[0]] = f"SPACE_GROUP_NUMBER= {inData['sg_nr_from_pointless']}"
+        else:
+            listXDS_INP.append(f"SPACE_GROUP_NUMBER= {inData['sg_nr_from_pointless']}")
+        
+        listXDS_INP.append(f"FRIEDEL'S_LAW= {anom}")
+
+        return listXDS_INP
+
+    @staticmethod
+    def parseXDSOutput(workingDirectory):
+        outData = {}
+        if (workingDirectory / "XDS_ASCII.HKL").exists():
+            outData = {
+                "workingDirectory": str(workingDirectory),
+                "xdsInp": str(workingDirectory / "XDS.INP"),
+                "xdsAsciiHkl": str(workingDirectory / "XDS_ASCII.HKL"),
+                "integrateHkl": str(workingDirectory / "INTEGRATE.HKL"),
+                "integrateLp": str(workingDirectory / "INTEGRATE.LP"),
+                "correctLp": str(workingDirectory / "CORRECT.LP"),
+                "bkgpixCbf": str(workingDirectory / "BKGPIX.cbf"),
+                "gxParmXds":str(workingDirectory / "GXPARM.XDS"),
+            }
+            correctLpData = XDSTask.parseCorrectLp(outData)
+            outData["ISa"] = correctLpData["ISa"]
+            outData["refinedDiffractionParams"] = correctLpData["refinedDiffractionParams"]
+            outData["completenessEntries"] = correctLpData["completenessEntries"]["completeness_entries"]
+            outData["total_completeness"] = correctLpData["completenessEntries"]["total_completeness"]
+            outData["gxparmData"] = correctLpData["gxparmData"]
+
         return outData

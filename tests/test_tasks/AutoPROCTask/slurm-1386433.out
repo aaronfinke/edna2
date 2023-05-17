@@ -1,0 +1,17 @@
+2023-05-03 15:44:02,528 DEBUG    Working directory is /gpfs/offline1/staff/biomax/aarfin/edna2_maxiv/testdata/rundir/20230503_154402/AutoPROCTask_4h49_ag6
+2023-05-03 15:44:02,529 INFO     No space group supplied
+2023-05-03 15:44:02,529 INFO     No unit cell supplied
+2023-05-03 15:44:02,905 DEBUG    ispybDataCollection: {'actualCenteringPosition':  sampx=0.000033 sampy=0.002398 phi=0.000150 kappa=0.001288 kappa_phi=0.001217 zoom=35040.500000 focus=-0.271980 phiz=0.221479 phiy=0.245778, 'axisEnd': 540.0, 'axisRange': 0.1, 'axisStart': 360.0, 'beamShape': ellipse, 'beamSizeAtSampleX': 0.1, 'beamSizeAtSampleY': 0.1, 'dataCollectionId': 74239, 'dataCollectionNumber': 2, 'detector2theta': 0.0, 'detectorDistance': 398.549, 'endTime': datetime.datetime(2022, 10, 5, 14, 30, 50, tzinfo=<suds.sax.date.FixedOffsetTimezone object at 0x7fb7e6dd9700>), 'exposureTime': 0.011, 'fileTemplate': test-t3_2_%06d.h5, 'flux': 71200000.0, 'imageDirectory': /data/visitors/biomax/20170251/20221005/raw/test/test-t3/, 'imagePrefix': test-t3, 'imageSuffix': h5, 'kappaStart': 0.00128778, 'numberOfImages': 1800, 'numberOfPasses': 1, 'omegaStart': 360.0, 'overlap': 0.0, 'phiStart': 0.00121674, 'printableForReport': 1, 'resolution': 3.756, 'rotationAxis': Omega, 'runStatus': Data collection successful, 'slitGapHorizontal': 0.1, 'slitGapVertical': 0.1, 'startImageNumber': 1, 'startTime': datetime.datetime(2022, 10, 5, 14, 28, 19, tzinfo=<suds.sax.date.FixedOffsetTimezone object at 0x7fb7e6df02e0>), 'synchrotronMode': Variable TopUp/Decay, 'transmission': 0.0, 'undulatorGap1': 37.0, 'wavelength': 1.37318, 'xbeam': 2103.11, 'ybeam': 2117.91, 'dataCollectionGroupId': 74900, 'detectorId': 3}
+2023-05-03 15:44:02,906 INFO     Waiting for start image: /data/visitors/biomax/20170251/20221005/raw/test/test-t3/test-t3_2_data_000001.h5
+2023-05-03 15:44:02,940 INFO     Waiting for end image: /data/visitors/biomax/20170251/20221005/raw/test/test-t3/test-t3_2_data_000018.h5
+2023-05-03 15:44:03,347 DEBUG    autoProcProgramId: 285220
+2023-05-03 15:44:03,547 DEBUG    autoProcIntegrationId: 284950
+2023-05-03 15:44:03,547 DEBUG    Couldn't create entry for AutoProc in ISPyB. Stopping here.
+2023-05-03 15:44:03,589 DEBUG    <Section: AutoPROCTask>
+2023-05-03 15:44:03,589 INFO     autoPROC command is . /mxn/groups/sw/mxsw/env_setup/autoproc_env.sh
+ /mxn/groups/sw/mxsw/autoPROC/autoPROC/bin/linux64/process -B -xml -nthreads 32 -h5 /data/visitors/biomax/20170251/20221005/raw/test/test-t3/test-t3_2_master.h5 autoPROC_XdsKeyword_LIB=/mxn/groups/sw/mxsw/xds_related/dectris-neggia.so -M ReportingInlined
+.
+----------------------------------------------------------------------
+Ran 1 test in 1651.639s
+
+OK

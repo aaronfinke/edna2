@@ -38,7 +38,7 @@ def getConfigDir():
         configDir = pathlib.Path(os.environ["EDNA2_CONFIG"])
     else:
         pathFile = pathlib.Path(__file__)
-        pathProjectBase = pathFile.parents[3]
+        pathProjectBase = pathFile.parents[2]
         configDir = pathProjectBase / "config"
     return configDir
 
@@ -63,6 +63,7 @@ def setSite(site):
 
 def getConfig(site=None):
     config = configparser.ConfigParser()
+    # config.optionxform = str
     if site is None:
         site = getSite()
     configFile = site + ".ini"
@@ -96,12 +97,24 @@ def isEMBL():
     """
     return getSite().lower().startswith("embl")
 
+def isMAXIV():
+    """
+    Returns true if MAXIV config
+    """
+    return getSite().lower().startswith("maxiv")
+
 
 def isESRF():
     """
     Returns true if ESRF config
     """
     return getSite().lower().startswith("esrf")
+
+def isALBA():
+    """
+    Returns true if ALBA config
+    """
+    return getSite().lower().startswith("alba")
 
 
 def get(task, parameterName, defaultValue=None):
