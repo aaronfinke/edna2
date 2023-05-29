@@ -123,6 +123,7 @@ def storeOrUpdateAutoProcProgram(
         processingCommandLine=None,
         processingPrograms=None,
         processingStatus=None,
+        processingMessage=None,
         processingStartTime=None,
         processingEndTime=None,
         processingEnvironment=None,
@@ -142,7 +143,7 @@ def storeOrUpdateAutoProcProgram(
             processingCommandLine = processingCommandLine,
             processingPrograms=processingPrograms,
             processingStatus=processingStatus,
-            processingMessage=None,
+            processingMessage=processingMessage,
             processingStartTime=processingStartTime,
             processingEndTime=processingEndTime,
             processingEnvironment=processingEnvironment,
@@ -410,6 +411,7 @@ def storeOrUpdateAutoProcScalingStatistics(
         anomalousCompletenessSpherical=None,
         completenessEllipsoidal=None,
         anomalousCompletenessEllipsoidal=None,
+        recordTimeStamp=datetime.now().isoformat(timespec='seconds'),
 ):
     
     try:
@@ -438,7 +440,7 @@ def storeOrUpdateAutoProcScalingStatistics(
                 multiplicity=multiplicity,
                 anomalousCompleteness=anomalousCompleteness,
                 anomalousMultiplicity=anomalousMultiplicity,
-                recordTimeStamp=datetime.now().isoformat(timespec='seconds'),
+                recordTimeStamp=recordTimeStamp,
                 anomalous=anomalous,
                 autoProcScalingId=autoProcScalingId,
                 ccHalf=ccHalf,

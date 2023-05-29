@@ -31,6 +31,7 @@ import os
 import time
 import pathlib
 import tempfile
+import shutil
 
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
@@ -232,3 +233,13 @@ def stripDataDirectoryPrefix(data_directory):
     else:
         new_data_directory = data_directory
     return pathlib.Path(new_data_directory)
+
+def systemCopyFile(fp_in, fp_out):
+    """Uses shutil.copy2 to copy files."""
+    try:
+        logger.debug(f"Copying {fp_in} to {fp_out}...")
+        fout = shutil.copy2(fp_in,fp_out)
+    except Exception as e:
+        logger.error(f"Copying {fp_in} to {fp_out} failed: {e}.")
+        fout = None
+    return fout

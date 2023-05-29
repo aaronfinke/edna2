@@ -11,3 +11,6 @@ src/edna2/lib/autocryst/ext/build
 .cache
 .pytest_cache
 src/edna2.egg-info
+src/testdata
+slurm*.out
+dist/*.egg

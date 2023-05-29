@@ -52,7 +52,7 @@ logger = UtilsLogging.getLogger()
 
 from edna2.tasks.XDSTasks import XDSTask
 from edna2.tasks.CCP4Tasks import AimlessTask
-from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults
+from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, UploadGPhLResultsToISPyB
 from edna2.tasks.WaitFileTask import WaitFileTask
 
 class AutoPROCTask(AbstractTask):
@@ -68,17 +68,18 @@ class AutoPROCTask(AbstractTask):
                 processingPrograms=self.processingPrograms, 
                 isAnom=False, 
                 timeStart=self.startDateTime, 
-                timeEnd=datetime.now().isoformat(timespec='seconds')
+                timeEnd=datetime.now().isoformat(timespec="seconds")
             )
     
     def run(self, inData):
         self.timeStart = time.perf_counter()
-        self.startDateTime =  datetime.now().isoformat(timespec='seconds')
+        self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
         self.processingPrograms="edna2autoPROC"
+        self.processingProgramStaraniso = "autoPROC_staraniso"
         self.processingCommandLine = ""
 
-        self.setLogFileName(f'autoPROC_{self.startDateTimeFormatted}.log')
+        self.setLogFileName(f"autoPROC_{self.startDateTimeFormatted}.log")
         self.dataCollectionId = inData.get("dataCollectionId")
         self.tmpdir = None
         directory = None
@@ -112,7 +113,7 @@ class AutoPROCTask(AbstractTask):
         # need both SG and unit cell
         if self.spaceGroup != 0 and self.unitCell is not None:
             try:
-                unitCellList = [float(x) for x in self.unitCell.split(',')]
+                unitCellList = [float(x) for x in self.unitCell.split(",")]
                 #if there are zeroes parsed in, need to deal with it
                 if 0.0 in unitCellList:
                     raise Exception
@@ -173,19 +174,20 @@ class AutoPROCTask(AbstractTask):
         self.resultsDirectory.mkdir(exist_ok=True, parents=True, mode=0o755)
 
         #make pyarch directory 
+        """ 
         reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
         pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
         self.pyarchDirectory = Path(pyarchDirectory)
         try:
             self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
+            logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
         except OSError as e:
             logger.error(f"Error when creating pyarch_dir: {e}")
             self.tmpdir = tempfile.TemporaryDirectory() 
             self.pyarchDirectory = Path(self.tmpdir.name)
-
-        for file in self.resultsDirectory.iterdir():
-            pyarchFile = UtilsPath.createPyarchFilePath(file)
-            shutil.copy(file,pyarchFile)
+        """
+        self.tmpdir = tempfile.TemporaryDirectory() 
+        self.pyarchDirectory = Path(self.tmpdir.name)
         
         isH5 = False
         if any(beamline in pathToStartImage for beamline in ["id23eh1", "id29"]):
@@ -232,7 +234,7 @@ class AutoPROCTask(AbstractTask):
         if waitFileLast.outData["timedOut"]:
             logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
 
-        self.timeStart = datetime.now().isoformat(timespec='seconds')
+        self.timeStart = datetime.now().isoformat(timespec="seconds")
 
         if inData.get("dataCollectionId") is not None:
             #set ISPyB to running
@@ -240,6 +242,12 @@ class AutoPROCTask(AbstractTask):
                 dataCollectionId=self.dataCollectionId,
                 processingCommandLine = self.processingCommandLine,
                 processingPrograms = self.processingPrograms,
+                isAnom = self.doAnom,
+                timeStart = self.timeStart)
+            self.integrationIdStaraniso, self.programIdStaraniso = ISPyBStoreAutoProcResults.setIspybToRunning(
+                dataCollectionId=self.dataCollectionId,
+                processingCommandLine = self.processingCommandLine,
+                processingPrograms = self.processingProgramStaraniso,
                 isAnom = self.doAnom,
                 timeStart = self.timeStart)
         
@@ -261,6 +269,12 @@ class AutoPROCTask(AbstractTask):
             return
 
         #set up command line
+        self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROCExec_0"
+        inc_x = 1
+        while self.autoPROCExecDir.is_dir():
+            self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROC_exec_{0}".format(inc_x)
+            inc_x += 1
+
         autoPROCSetup = UtilsConfig.get(self,"autoPROCSetup", None)
         autoPROCExecutable = UtilsConfig.get(self,"autoPROCExecutable", "process")
         maxNoProcessors = UtilsConfig.get(self, "maxNoProcessors", None)
@@ -270,10 +284,12 @@ class AutoPROCTask(AbstractTask):
         if autoPROCSetup is None:
             commandLine = ""
         else:
-            commandLine = ". " + autoPROCSetup + '\n'
+            commandLine = ". " + autoPROCSetup + "\n"
         commandLine += " {0}".format(autoPROCExecutable)
         #add flags, if present
-        commandLine += " -B -xml -nthreads {0}".format(maxNoProcessors)
+        commandLine += " -B"
+        commandLine += " -d {0}".format(str(self.autoPROCExecDir))
+        commandLine += " -nthreads {0}".format(maxNoProcessors)
         
         commandLine += " -h5 {0}".format(masterFilePath)
         commandLine += " autoPROC_XdsKeyword_LIB={0}".format(pathToNeggiaPlugin) if pathToNeggiaPlugin else ""
@@ -308,198 +324,188 @@ class AutoPROCTask(AbstractTask):
         except RuntimeError:
             self.setFailure()
             return
-        self.endDateTime = datetime.now().isoformat(timespec='seconds')
+        self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
-        ispybXML = self.getWorkingDirectory() / "autoPROC.xml"
-        if ispybXML.is_file():
-            self.outData["ispybXML"] = str(ispybXML)
-        ispybXML_staraniso = self.getWorkingDirectory() / "autoPROC_staraniso.xml"
-        if ispybXML_staraniso.is_file():
-            self.outData["ispybXML_staraniso"] = str(ispybXML_staraniso)
+        ispybXml = self.autoPROCExecDir / "autoPROC.xml"
+        if ispybXml.is_file():
+            self.outData["ispybXml"] = str(ispybXml)
+            autoProcContainer = self.autoPROCXMLtoISPyBdict(ispybXml, data_collection_id=self.dataCollectionId, 
+                                                            program_id=self.programId, 
+                                                            integration_id=self.integrationId)
+
+        ispybXmlStaraniso = self.autoPROCExecDir / "autoPROC_staraniso.xml"
+        if ispybXmlStaraniso.is_file():
+            self.outData["ispybXml_staraniso"] = str(ispybXmlStaraniso)
+            autoProcContainerStaraniso = self.autoPROCXMLtoISPyBdict(ispybXmlStaraniso, data_collection_id=self.dataCollectionId, 
+                                                                     program_id=self.programIdStaraniso, 
+                                                                     integration_id=self.integrationIdStaraniso)
+
+        #get CIF Files and gzip them
+        autoPROCStaranisoAllCif = self.autoPROCExecDir / "Data_1_autoPROC_STARANISO_all.cif"
+        autoPROCStaranisoAllCifGz = self.resultsDirectory / f"{self.pyarchPrefix}_autoPROC_STARANISO_all.cif.gz"
+        autoPROCTruncateAllCif = self.autoPROCExecDir / "Data_2_autoPROC_TRUNCATE_all.cif"
+        autoPROCTruncateAllCifGz = self.resultsDirectory / f"{self.pyarchPrefix}_autoPROC_TRUNCATE_all.cif.gz"
+        autoPROCXdsAsciiHkl = self.autoPROCExecDir / "XDS_ASCII.HKL"
+        autoPROCXdsAsciiHklGz = self.resultsDirectory / f"{self.pyarchPrefix}_XDS_ASCII.HKL.gz"
+
+        try:
+            logger.debug(f"gzip'ing {autoPROCStaranisoAllCif}")
+            with open(autoPROCStaranisoAllCif,"rb") as fp_in:
+                with gzip.open(autoPROCStaranisoAllCifGz, "wb") as fp_out:
+                    shutil.copyfileobj(fp_in, fp_out)
+        except:
+            logger.error(f"gzip'ing {autoPROCStaranisoAllCif} failed.")
+        try:
+            logger.debug(f"gzip'ing {autoPROCTruncateAllCif}")
+            with open(autoPROCTruncateAllCif,"rb") as fp_in:
+                with gzip.open(autoPROCTruncateAllCifGz, "wb") as fp_out:
+                    shutil.copyfileobj(fp_in, fp_out)
+        except:
+            logger.error(f"gzip'ing {autoPROCTruncateAllCif} failed.")
+        try:
+            logger.debug(f"gzip'ing {autoPROCXdsAsciiHkl}")
+            with open(autoPROCXdsAsciiHkl,"rb") as fp_in:
+                with gzip.open(autoPROCXdsAsciiHklGz, "wb") as fp_out:
+                    shutil.copyfileobj(fp_in, fp_out)
+        except:
+            logger.error(f"gzip'ing {autoPROCXdsAsciiHkl} failed.")
         
-        autoProcContainer = UtilsXML.dictfromXML(ispybXML)
         
 
+        #copy files to results directory
+        autoPROCLogFile = self.getLogPath()
+        autoPROCReportPdf = self.autoPROCExecDir / "report.pdf"
+        autoPROCStaranisoReportPdf = self.autoPROCExecDir / "report_staraniso.pdf"
+        autoPROCStaranisoAllDataUniqueMtz = self.autoPROCExecDir / "staraniso_alldata-unique.mtz"
+        autoPROCStaranisoAllDataUniqueStats = self.autoPROCExecDir / "staraniso_alldata-unique.stats"
+        autoPROCStaranisoAllDataUniqueTable1 = self.autoPROCExecDir / "staraniso_alldata-unique.table1"
+        autoPROCSummaryInlinedHtml = self.autoPROCExecDir / "summary_inlined.html"
+        autoPROCSummaryTarGz = self.autoPROCExecDir / "summary.tar.gz"
+        autoPROCTruncateUniqueMtz = self.autoPROCExecDir / "truncate-unique.mtz"
+        autoPROCTruncateUniqueStats = self.autoPROCExecDir / "truncate-unique.stats"
+        autoPROCTruncateUniqueTable1 = self.autoPROCExecDir / "truncate-unique.table1"
 
-        return
-        
-        self.fastDpResultFiles = {
-            "correctLp": self.getWorkingDirectory() / "CORRECT.LP",
-            "gxParmXds": self.getWorkingDirectory() / "GXPARM.XDS",
-            "xdsAsciiHkl" : self.getWorkingDirectory() / "XDS_ASCII.HKL",
-            "aimlessLog" : self.getWorkingDirectory() / "aimless.log",
-            "fastDpMtz" : self.getWorkingDirectory() / "fast_dp.mtz",
-            "fastDpLog" : self.getLogFileName(),
-            "fastDpJson" : self.getWorkingDirectory() / "fast_dp.json"
-        }
-        fastDpJson = self.getWorkingDirectory() / "fast_dp.json"
-
-        #no fast_dp.json, task fails
-        if not fastDpJson.exists():
-            logger.error("fast_dp.json not found- error log below")
-            errorLog = self.getErrorLog()
-            logger.error(errorLog)
-            self.setFailure()
-            return
-
-        # Add aimless.log if present
-        pathToAimlessLog = self.fastDpResultFiles.get("aimlessLog")
-        if pathToAimlessLog.exists():
-            pyarchAimlessLog = self.pyarchPrefix + "_aimless.log"
-            shutil.copy(pathToAimlessLog, self.resultsDirectory /  pyarchAimlessLog)
-            shutil.copy(pathToAimlessLog, self.pyarchDirectory / pyarchAimlessLog)
-            self.aimlessData = AimlessTask.extractAimlessResults(pathToAimlessLog)
-            logger.debug(f"aimlessData = {self.aimlessData}")
-        #extract ISa...
-        correctLpResults = XDSTask.parseCorrectLp(inData={"correctLp":self.getWorkingDirectory() / "CORRECT.LP",
-                                                          "gxParmXds":self.getWorkingDirectory() / "GXPARM.XDS" })
-        logger.debug(f"correctLpResults: {correctLpResults}")
-        self.ISa = correctLpResults.get("ISa")
-        logger.debug(f"Isa = {self.ISa}")
-
-        with open(fastDpJson,"r") as fp:
-            self.fastDpResults = json.load(fp)
-
-        
-        # Add XDS_ASCII.HKL if present and gzip it
-        pathToXdsAsciiHkl = self.fastDpResultFiles.get("xdsAsciiHkl")
-        if pathToXdsAsciiHkl.exists():
-            pyarchXdsAsciiHkl = self.pyarchPrefix + "_XDS_ASCII.HKL.gz"
-            with open(pathToXdsAsciiHkl, 'rb') as f_in:
-                with gzip.open(os.path.join(self.pyarchDirectory, pyarchXdsAsciiHkl), 'wb') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            if self.resultsDirectory:
-                shutil.copy(self.pyarchDirectory / pyarchXdsAsciiHkl, self.resultsDirectory /  pyarchXdsAsciiHkl)
-        
-        # Add fast_dp.mtz if present and gzip it
-        pathToFastDpMtz = self.fastDpResultFiles.get("fastDpMtz")
-        if pathToFastDpMtz.exists():
-            pyarchFastDpMtz = self.pyarchPrefix + "_fast_dp.mtz"
-            shutil.copy(pathToFastDpMtz, self.resultsDirectory /  pyarchFastDpMtz)
-            shutil.copy(pathToFastDpMtz, self.pyarchDirectory / pyarchFastDpMtz)
-        
-        # add fast_dp.log to results/pyarch directory
-        shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.resultsDirectory / "fast_dp.log")
-        shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.pyarchDirectory / "fast_dp.log")
-
-        autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
-
-        ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcResults, workingDirectorySuffix="uploadFinal")
-        ispybStoreAutoProcResults.execute()
-        if self.tmpdir is not None:
-            self.tmpdir.cleanup()
-
-
-        
-    def generateAutoProcResultsContainer(self, programId, integrationId, isAnom):
-        autoProcResultsContainer = {
-            "dataCollectionId": self.dataCollectionId
-        }
-
-        autoProcProgramContainer = {
-            "autoProcProgramId" : programId,
-            "processingCommandLine" : self.processingCommandLine,
-            "processingPrograms" : self.processingPrograms,
-            "processingStatus" : "SUCCESS",
-            "processingStartTime" : self.startDateTime,
-            "processingEndTime" : self.endDateTime,
-        }
-        autoProcResultsContainer["autoProcProgram"] = autoProcProgramContainer
-
-        autoProcContainer = {
-            "autoProcProgramId" : programId,
-            "spaceGroup" : self.fastDpResults.get("spacegroup"),
-            "refinedCellA" : self.fastDpResults.get("unit_cell")[0],
-            "refinedCellB" : self.fastDpResults.get("unit_cell")[1],
-            "refinedCellC" : self.fastDpResults.get("unit_cell")[2],
-            "refinedCellAlpha" : self.fastDpResults.get("unit_cell")[3],
-            "refinedCellBeta" : self.fastDpResults.get("unit_cell")[4],
-            "refinedCellGamma" : self.fastDpResults.get("unit_cell")[5],
-        }
-        autoProcResultsContainer["autoProc"] = autoProcContainer
+        autoPROCLogFile_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_autoPROC.log"
+        autoPROCReportPdf_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_report.pdf"
+        autoPROCStaranisoReportPdf_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_report_staraniso.pdf"
+        autoPROCStaranisoAllDataUniqueMtz_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_staraniso_alldata-unique.mtz"
+        autoPROCStaranisoAllDataUniqueStats_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_staraniso_alldata-unique.stats"
+        autoPROCStaranisoAllDataUniqueTable1_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_staraniso_alldata-unique.table1"
+        autoPROCSummaryInlinedHtml_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_summary_inlined.html"
+        autoPROCSummaryTarGz_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_summary.tar.gz"
+        autoPROCTruncateUniqueMtz_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_truncate-unique.mtz"
+        autoPROCTruncateUniqueStats_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_truncate-unique.stats"
+        autoPROCTruncateUniqueTable1_resultsDir = self.resultsDirectory / f"{self.pyarchPrefix}_truncate-unique.table1"
 
         autoProcAttachmentContainerList = []
-        for file in self.pyarchDirectory.iterdir():
+        autoProcAttachmentContainerStaranisoList = []
+
+        for files in [(autoPROCLogFile, autoPROCLogFile_resultsDir),
+                      (autoPROCReportPdf, autoPROCReportPdf_resultsDir),
+                      (autoPROCStaranisoReportPdf,autoPROCStaranisoReportPdf_resultsDir),
+                      (autoPROCStaranisoAllDataUniqueMtz,autoPROCStaranisoAllDataUniqueMtz_resultsDir),
+                      (autoPROCStaranisoAllDataUniqueStats,autoPROCStaranisoAllDataUniqueStats_resultsDir),
+                      (autoPROCStaranisoAllDataUniqueTable1, autoPROCStaranisoAllDataUniqueTable1_resultsDir),
+                      (autoPROCSummaryInlinedHtml,autoPROCSummaryInlinedHtml_resultsDir),
+                      (autoPROCSummaryTarGz,autoPROCSummaryTarGz_resultsDir),
+                      (autoPROCTruncateUniqueMtz,autoPROCTruncateUniqueMtz_resultsDir),
+                      (autoPROCTruncateUniqueStats,autoPROCTruncateUniqueStats_resultsDir),
+                      (autoPROCTruncateUniqueTable1,autoPROCTruncateUniqueTable1_resultsDir)]:
+            UtilsPath.systemCopyFile(files[0],files[1])
+            # pyarchFile = UtilsPath.createPyarchFilePath(files[1])
+            pyarchFile = files[1]
             attachmentContainer = {
-                "file" : file,
+                "file" : pyarchFile,
             }
-            autoProcAttachmentContainerList.append(attachmentContainer)
-
-        autoProcResultsContainer["autoProcProgramAttachment"] = autoProcAttachmentContainerList
-
-        autoProcScalingStatisticsContainer = self.fastDpJsonToISPyBScalingStatistics(self.fastDpResults, aimlessResults=self.aimlessData, isAnom=False)
-        autoProcResultsContainer["autoProcScalingStatistics"] = autoProcScalingStatisticsContainer
-
-        if self.fastDpResultFiles["gxParmXds"].exists():
-            xdsRerun = XDSTask.parseCorrectLp(inData=self.fastDpResultFiles)
-
-            autoProcIntegrationContainer = {
-                "autoProcIntegrationId" : integrationId,
-                "autoProcProgramId" : programId,
-                "startImageNumber" : self.imageNoStart,
-                "endImageNumber" : self.imageNoEnd,
-                "refinedDetectorDistance" : xdsRerun.get("refinedDiffractionParams").get("crystal_to_detector_distance"),
-                "refinedXbeam" : xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[0],
-                "refinedYbeam" : xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[1],
-                "rotationAxisX" : xdsRerun.get("gxparmData").get("rot")[0],
-                "rotationAxisY" : xdsRerun.get("gxparmData").get("rot")[1],
-                "rotationAxisZ" : xdsRerun.get("gxparmData").get("rot")[2],
-                "beamVectorX" : xdsRerun.get("gxparmData").get("beam")[0],
-                "beamVectorY" : xdsRerun.get("gxparmData").get("beam")[1],
-                "beamVectorZ" : xdsRerun.get("gxparmData").get("beam")[2],
-                "cellA" : xdsRerun.get("refinedDiffractionParams").get("cell_a"),
-                "cellB" : xdsRerun.get("refinedDiffractionParams").get("cell_b"),
-                "cellC" : xdsRerun.get("refinedDiffractionParams").get("cell_c"),
-                "cellAlpha" : xdsRerun.get("refinedDiffractionParams").get("cell_alpha"),
-                "cellBeta" : xdsRerun.get("refinedDiffractionParams").get("cell_beta"),
-                "cellGamma" : xdsRerun.get("refinedDiffractionParams").get("cell_gamma"),
-                "anomalous" : isAnom,
-                "dataCollectionId" : self.dataCollectionId,
+            if "staraniso" in str(files[1]):
+                autoProcAttachmentContainerStaranisoList.append(attachmentContainer)
+            elif "truncate-unique" in str(files[1]):
+                autoProcAttachmentContainerList.append(attachmentContainer)
+            else:
+                autoProcAttachmentContainerStaranisoList.append(attachmentContainer)
+                autoProcAttachmentContainerList.append(attachmentContainer)
+        
+        for file in [autoPROCStaranisoAllCifGz, autoPROCTruncateAllCifGz, autoPROCXdsAsciiHklGz]:
+            # pyarchFile = UtilsPath.createPyarchFilePath(files[1])
+            pyarchFile = file
+            attachmentContainer = {
+                "file" : pyarchFile,
             }
-            autoProcResultsContainer["autoProcIntegration"] = autoProcIntegrationContainer
+            if "STARANISO" in str(file):
+                autoProcAttachmentContainerStaranisoList.append(attachmentContainer)
+            elif "TRUNCATE" in str(file):
+                autoProcAttachmentContainerList.append(attachmentContainer)
+            else:
+                autoProcAttachmentContainerStaranisoList.append(attachmentContainer)
+                autoProcAttachmentContainerList.append(attachmentContainer)
 
+        
+        autoProcContainer["autoProcProgramAttachment"] = autoProcAttachmentContainerList
+        autoProcContainerStaraniso["autoProcProgramAttachment"] = autoProcAttachmentContainerStaranisoList
+        
+        #save as json
+        autoProcContainerJson = self.resultsDirectory / "autoPROC.json"
+        autoProcContainerStaranisoJson = self.resultsDirectory / "autoPROC_staraniso.json"
 
-        return autoProcResultsContainer
+        with open(autoProcContainerJson,'w') as fp:
+            json.dump(autoProcContainer,fp, indent=2, default=lambda o:str(o))
+        
+        with open(autoProcContainerStaranisoJson,'w') as fp:
+            json.dump(autoProcContainerStaraniso,fp, indent=2, default=lambda o:str(o))
 
+        ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcContainer, workingDirectorySuffix="uploadFinal")
+        ispybStoreAutoProcResults.execute()
+        ispybStoreAutoProcResultsStaraniso = ISPyBStoreAutoProcResults(inData=autoProcContainerStaraniso, workingDirectorySuffix="uploadFinal_staraniso")
+        ispybStoreAutoProcResultsStaraniso.execute()
 
-    def fastDpJsonToISPyBScalingStatistics(self, fastDpResults, aimlessResults=None, isAnom=False):
-        autoProcScalingContainer = []
-        for shell,result in fastDpResults["scaling_statistics"].items():
-            resultsShell = {}
-            resultsShell["scalingStatisticsType"] = shell
-            resultsShell["resolutionLimitLow"] = result.get("res_lim_low" ,None)
-            resultsShell["resolutionLimitHigh"] = result.get("res_lim_high" ,None)
-            resultsShell["rmerge"] = result.get("r_merge",None) * 100
-            resultsShell["rmeasAllIplusIminus"] = result.get("r_meas_all_iplusi_minus",None) * 100
-            resultsShell["nTotalObservations"] = result.get("n_tot_obs" ,None)
-            resultsShell["nTotalUniqueObservations"] = result.get("n_tot_unique_obs" ,None)
-            resultsShell["meanIoverSigI"] = result.get("mean_i_sig_i" ,None)
-            resultsShell["completeness"] = result.get("completeness" ,None)
-            resultsShell["multiplicity"] = result.get("multiplicity" ,None)
-            resultsShell["anomalousCompleteness"] = result.get("anom_completeness" ,None)
-            resultsShell["anomalousMultiplicity"] = result.get("anom_multiplicity" ,None)
-            resultsShell["anomalous"] = isAnom
-            resultsShell["ccHalf"] = result.get("cc_half",None)
-            resultsShell["ccAno"] = result.get("cc_anom",None) * 100
-            if self.ISa and shell == "overall":
-                resultsShell["isa"] = self.ISa
+        if self.tmpdir is not None:
+            self.tmpdir.cleanup()
+        return 
 
-            autoProcScalingContainer.append(resultsShell)
-        if aimlessResults is not None:
-            for shell,result in aimlessResults.items():
-                f = next(item for item in autoProcScalingContainer if item["scalingStatisticsType"] == shell)
-                f["rpimWithinIplusIminus"] = result.get("rpimWithinIplusIminus") * 100  if result.get("rpimWithinIplusIminus") else None
-                f["rpimAllIplusIminus"] = result.get("rpimAllIplusIminus") * 100 if result.get("rpimAllIplusIminus") else None
-                f["sigAno"] = result.get("sigAno") 
-        # sorting these so EXI will put sigAno/ISa in the right position...
-        try:        
-            autoProcScalingContainer = [next(item for item in autoProcScalingContainer if item['scalingStatisticsType'] == 'overall'),
-                                        next(item for item in autoProcScalingContainer if item['scalingStatisticsType'] == 'innerShell'),
-                                        next(item for item in autoProcScalingContainer if item['scalingStatisticsType'] == 'outerShell')]
-        except:
-            logger.error("autoProcScalingContainer could not be sorted")
-            pass
-        return autoProcScalingContainer
+    @staticmethod
+    def autoPROCXMLtoISPyBdict(xml_path, data_collection_id=None, program_id=None, integration_id=None, trunc_len=256):
+        dict_data = UtilsXML.dictfromXML(xml_path)
+        autoProcXMLContainer = dict_data["AutoProcContainer"]
+        autoProcContainer = {
+            "dataCollectionId": data_collection_id
+        }
+        autoProcContainer["autoProcProgram"] = {}
+        for k,v in autoProcXMLContainer["AutoProcProgramContainer"]["AutoProcProgram"].items():
+                if isinstance(v,str) and len(v) > trunc_len:
+                    autoProcContainer["autoProcProgram"][k] = v[:trunc_len-1]
+                    logger.warning(f"string {k} truncated for loading to ISPyB to {trunc_len} characters: \"{v}\"")
+                else:
+                    autoProcContainer["autoProcProgram"][k] = v
+        autoProcContainer["autoProcProgram"]["autoProcProgramId"] = program_id
+        autoProcContainer["autoProc"] = autoProcXMLContainer["AutoProc"]
+        #fix some entries in autoProc
+        autoProcContainer["autoProc"]["refinedCellA"] = autoProcContainer["autoProc"].pop("refinedCell_a")
+        autoProcContainer["autoProc"]["refinedCellB"] = autoProcContainer["autoProc"].pop("refinedCell_b")
+        autoProcContainer["autoProc"]["refinedCellC"] = autoProcContainer["autoProc"].pop("refinedCell_c")
+        autoProcContainer["autoProc"]["refinedCellAlpha"] = autoProcContainer["autoProc"].pop("refinedCell_alpha")
+        autoProcContainer["autoProc"]["refinedCellBeta"] = autoProcContainer["autoProc"].pop("refinedCell_beta")
+        autoProcContainer["autoProc"]["refinedCellGamma"] = autoProcContainer["autoProc"].pop("refinedCell_gamma")
+
+        autoProcContainer["autoProc"]["autoProcProgramId"] = program_id
+        autoProcContainer["autoProcScaling"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcScaling"]
+        autoProcContainer["autoProcScalingStatistics"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcScalingStatistics"]
+        # fix some entries in autoProcScalingStatistics
+        for shell in autoProcContainer["autoProcScalingStatistics"]:
+            shell["ccAno"] = shell.pop("ccAnomalous")
+            shell["sigAno"] = shell.pop("DanoOverSigDano")
+
+        autoProcContainer["AutoProcScalingIntegration"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcIntegrationContainer"]["AutoProcIntegration"]
+        autoProcContainer["AutoProcScalingIntegration"]["autoProcProgramId"] = program_id
+        autoProcContainer["AutoProcScalingIntegration"]["autoProcIntegrationId"] = integration_id
+        #fix some entries in AutoProcScalingIntegration
+        autoProcContainer["AutoProcScalingIntegration"]["cellA"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_a")
+        autoProcContainer["AutoProcScalingIntegration"]["cellB"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_b")
+        autoProcContainer["AutoProcScalingIntegration"]["cellC"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_c")
+        autoProcContainer["AutoProcScalingIntegration"]["cellAlpha"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_alpha")
+        autoProcContainer["AutoProcScalingIntegration"]["cellBeta"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_beta")
+        autoProcContainer["AutoProcScalingIntegration"]["cellGamma"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_gamma")
+
+        return autoProcContainer
 
 
     def eiger_template_to_master(self, fmt):

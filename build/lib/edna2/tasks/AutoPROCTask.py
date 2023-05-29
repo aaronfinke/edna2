@@ -52,7 +52,7 @@ logger = UtilsLogging.getLogger()
 
 from edna2.tasks.XDSTasks import XDSTask
 from edna2.tasks.CCP4Tasks import AimlessTask
-from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults
+from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, UploadGPhLResultsToISPyB
 from edna2.tasks.WaitFileTask import WaitFileTask
 
 class AutoPROCTask(AbstractTask):
@@ -76,6 +76,7 @@ class AutoPROCTask(AbstractTask):
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
         self.processingPrograms="edna2autoPROC"
+        self.processingProgramStaraniso = "autoPROC_staraniso"
         self.processingCommandLine = ""
 
         self.setLogFileName(f'autoPROC_{self.startDateTimeFormatted}.log')
@@ -242,6 +243,12 @@ class AutoPROCTask(AbstractTask):
                 processingPrograms = self.processingPrograms,
                 isAnom = self.doAnom,
                 timeStart = self.timeStart)
+            self.integrationIdStaraniso, self.programIdStaraniso = ISPyBStoreAutoProcResults.setIspybToRunning(
+                dataCollectionId=self.dataCollectionId,
+                processingCommandLine = self.processingCommandLine,
+                processingPrograms = self.processingProgramStaraniso,
+                isAnom = self.doAnom,
+                timeStart = self.timeStart)
         
         # Determine pyarch prefix
         if UtilsConfig.isALBA():
@@ -317,11 +324,18 @@ class AutoPROCTask(AbstractTask):
         if ispybXML_staraniso.is_file():
             self.outData["ispybXML_staraniso"] = str(ispybXML_staraniso)
         
-        autoProcContainer = UtilsXML.dictfromXML(ispybXML)
-        
+        autoProcResults = UploadGPhLResultsToISPyB()
+        autoProcResults.inData = {
+            "autoPROCXML" : ispybXML
+        }
+        autoProcResults.execute()
 
+        autoProcResults_staraniso = UploadGPhLResultsToISPyB()    
+        autoProcResults_staraniso.inData = {
+            "autoPROCXML" : ispybXML_staraniso
+        }
+        autoProcResults_staraniso.execute()
 
-        return
         
         self.fastDpResultFiles = {
             "correctLp": self.getWorkingDirectory() / "CORRECT.LP",

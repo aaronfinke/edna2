@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH -p fujitsu
 #SBATCH --exclusive
 #SBATCH -t 02:00:00
 
