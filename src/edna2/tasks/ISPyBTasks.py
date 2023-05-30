@@ -740,7 +740,7 @@ class ISPyBStoreAutoProcResults(AbstractTask):
                 "processingStartTime": timeStart,
                 },
             "autoProcIntegration" : {
-                "anomalous":True,
+                "anomalous":isAnom,
             }
         }
         autoProcStoreIspybResults = ISPyBStoreAutoProcResults(inData=inputStoreAutoProcAnom, workingDirectorySuffix="setRunning")

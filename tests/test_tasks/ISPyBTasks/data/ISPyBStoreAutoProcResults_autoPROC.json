@@ -1,0 +1,133 @@
+{
+  "dataCollectionId": 92555,
+  "autoProcProgram": {
+    "processingCommandLine": "",
+    "processingPrograms": "autoPROC_test",
+    "processingStatus": "SUCCESS",
+    "processingStartTime": "2023-05-29T14:18:08",
+    "processingEndTime": "2023-05-29T14:26:54",
+    "autoProcProgramId": 294108
+  },
+  "autoProc": {
+    "spaceGroup": "P 41 21 2",
+    "refinedCellA": 57.990,
+    "refinedCellB": 57.990,
+    "refinedCellC": 150.560,
+    "refinedCellAlpha": 90.000,
+    "refinedCellBeta": 90.000,
+    "refinedCellGamma": 90.000,
+    "autoProcProgramId": 294108
+  },
+  "autoProcScalingStatistics": [
+    {
+      "scalingStatisticsType": "overall",
+      "resolutionLimitLow": 54.115,
+      "resolutionLimitHigh": 1.475,
+      "rmerge": 3.1,
+      "rMeasWithinIPlusIMinus": 3.4,
+      "rMeasAllIPlusIMinus": 3.3,
+      "rPimWithinIPlusIMinus": 1.3,
+      "rPimAllIPlusIMinus": 0.9,
+      "nTotalObservations": 338307,
+      "nTotalUniqueObservations": 32929,
+      "meanIOverSigI": 43.7,
+      "completeness": 74.5,
+      "multiplicity": 10.3,
+      "ccHalf": 1.000,
+      "anomalousCompleteness": 72.1,
+      "anomalousMultiplicity": 5.6,
+      "ccAno": -0.163,
+      "sigAno": 0.676
+    },
+    {
+      "scalingStatisticsType": "innerShell",
+      "resolutionLimitLow": 54.115,
+      "resolutionLimitHigh": 4.004,
+      "rmerge": 2.2,
+      "rMeasWithinIPlusIMinus": 2.3,
+      "rMeasAllIPlusIMinus": 2.3,
+      "rPimWithinIPlusIMinus": 0.8,
+      "rPimAllIPlusIMinus": 0.7,
+      "nTotalObservations": 28290,
+      "nTotalUniqueObservations": 2457,
+      "meanIOverSigI": 87.8,
+      "completeness": 99.7,
+      "multiplicity": 11.5,
+      "ccHalf": 1.000,
+      "anomalousCompleteness": 100.0,
+      "anomalousMultiplicity": 7.0,
+      "ccAno": -0.125,
+      "sigAno": 0.764
+    },
+    {
+      "scalingStatisticsType": "outerShell",
+      "resolutionLimitLow": 1.501,
+      "resolutionLimitHigh": 1.475,
+      "rmerge": 13.6,
+      "rMeasWithinIPlusIMinus": 23.5,
+      "rMeasAllIPlusIMinus": 18.0,
+      "rPimWithinIPlusIMinus": 16.3,
+      "rPimAllIPlusIMinus": 11.7,
+      "nTotalObservations": 265,
+      "nTotalUniqueObservations": 181,
+      "meanIOverSigI": 3.1,
+      "completeness": 8.5,
+      "multiplicity": 1.5,
+      "ccHalf": 0.961,
+      "anomalousCompleteness": 2.9,
+      "anomalousMultiplicity": 1.2,
+      "ccAno": 0.0,
+      "sigAno": 0.509
+    }
+  ],
+  "autoProcIntegration": {
+    "startImageNumber": 1,
+    "endImageNumber": 1800,
+    "refinedDetectorDistance": 286.010376,
+    "refinedXBeam": 157.063,
+    "refinedYBeam": 159.101,
+    "rotationAxisX": 0.001196,
+    "rotationAxisY": 0.999999,
+    "rotationAxisZ": 0.000369,
+    "beamVectorX": 0.001712,
+    "beamVectorY": -0.000450,
+    "beamVectorZ": 1.024322,
+    "autoProcProgramId": 294108,
+    "autoProcIntegrationId": 293848,
+    "cellA": 57.9893,
+    "cellB": 57.9893,
+    "cellC": 150.5624,
+    "cellAlpha": 90.000,
+    "cellBeta": 90.000,
+    "cellGamma": 90.000
+  },
+  "autoProcProgramAttachment": [
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_autoPROC.log"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_report.pdf"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_summary_inlined.html"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_summary.tar.gz"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_truncate-unique.mtz"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_truncate-unique.stats"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_truncate-unique.table1"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_autoPROC_TRUNCATE_all.cif.gz"
+    },
+    {
+      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_XDS_ASCII.HKL.gz"
+    }
+  ]
+}

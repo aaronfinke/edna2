@@ -108,6 +108,7 @@ class FastdpTask(AbstractTask):
                 logger.debug("Could not parse space group")
                 spaceGroupNumber = 0
         else:
+            spaceGroupNumber = 0
             logger.info("No space group supplied")
 
         # need both SG and unit cell
@@ -339,7 +340,10 @@ class FastdpTask(AbstractTask):
         with open(fastDpJson,"r") as fp:
             self.fastDpResults = json.load(fp)
 
-        
+        autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
+        with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:
+            json.dump(autoProcResults, fp, indent=2,default=lambda o:str(o))
+
         # Add XDS_ASCII.HKL if present and gzip it
         pathToXdsAsciiHkl = self.fastDpResultFiles.get("xdsAsciiHkl")
         if pathToXdsAsciiHkl.exists():
@@ -361,8 +365,10 @@ class FastdpTask(AbstractTask):
         pyarchFastDpLog = self.pyarchPrefix + "_fast_dp.log"
         shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.resultsDirectory / pyarchFastDpLog)
         shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.pyarchDirectory / pyarchFastDpLog)
-
+        
         autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
+        with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:
+            json.dump(autoProcResults, fp, indent=2,default=lambda o:str(o))
 
         ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcResults, workingDirectorySuffix="uploadFinal")
         ispybStoreAutoProcResults.execute()

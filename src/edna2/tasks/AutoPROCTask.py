@@ -75,8 +75,8 @@ class AutoPROCTask(AbstractTask):
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
-        self.processingPrograms="edna2autoPROC"
-        self.processingProgramStaraniso = "autoPROC_staraniso"
+        self.processingPrograms="autoproc2"
+        self.processingProgramStaraniso = "autoproc_staraniso2"
         self.processingCommandLine = ""
 
         self.setLogFileName(f"autoPROC_{self.startDateTimeFormatted}.log")
@@ -476,6 +476,17 @@ class AutoPROCTask(AbstractTask):
                     logger.warning(f"string {k} truncated for loading to ISPyB to {trunc_len} characters: \"{v}\"")
                 else:
                     autoProcContainer["autoProcProgram"][k] = v
+        #fix some entries in autoProcProgram
+        autoProcContainer["autoProcProgram"]["processingStatus"] = "SUCCESS"
+
+        timeStart = autoProcContainer["autoProcProgram"]["processingStartTime"]
+        timeEnd = autoProcContainer["autoProcProgram"]["processingEndTime"]
+        timeStart_structtime = time.strptime(timeStart, "%a %b %d %H:%M:%S %Z %Y")
+        timeEnd_structtime = time.strptime(timeEnd, "%a %b %d %H:%M:%S %Z %Y")
+        autoProcContainer["autoProcProgram"]["processingStartTime"] = time.strftime('%Y-%m-%dT%H:%M:%SZ',timeStart_structtime)
+        autoProcContainer["autoProcProgram"]["processingEndTime"] = time.strftime('%Y-%m-%dT%H:%M:%SZ',timeEnd_structtime)
+
+
         autoProcContainer["autoProcProgram"]["autoProcProgramId"] = program_id
         autoProcContainer["autoProc"] = autoProcXMLContainer["AutoProc"]
         #fix some entries in autoProc
@@ -504,7 +515,7 @@ class AutoPROCTask(AbstractTask):
         autoProcContainer["AutoProcScalingIntegration"]["cellAlpha"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_alpha")
         autoProcContainer["AutoProcScalingIntegration"]["cellBeta"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_beta")
         autoProcContainer["AutoProcScalingIntegration"]["cellGamma"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_gamma")
-
+        autoProcContainer["autoProcIntegration"] = autoProcContainer.pop("AutoProcScalingIntegration")
         return autoProcContainer
 
 
