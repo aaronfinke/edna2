@@ -23,7 +23,7 @@ __authors__ = ['O. Svensson']
 __license__ = 'MIT'
 __date__ = '21/04/2019'
 
-import datetime
+from datetime import datetime
 import pprint
 import time
 
