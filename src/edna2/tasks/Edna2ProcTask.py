@@ -35,6 +35,7 @@ import h5py
 import socket
 import time
 from datetime import datetime
+import json
 STRF_TEMPLATE = "%a %b %d %H:%M:%S %Y"
 
 # for the os.chmod
@@ -796,6 +797,9 @@ class Edna2ProcTask(AbstractTask):
                 programId=self.programIdAnom, integrationId=self.integrationIdAnom, isAnom=True)
         self.autoProcResultsContainerNoAnom = self.generateAutoProcScalingResultsContainer(
                 programId=self.programIdNoAnom, integrationId=self.integrationIdNoAnom, isAnom=False)
+
+        with open(self.resultsDirectory / "ednaPROC.json","w") as fp:
+            json.dump(self.autoProcResultsContainerNoAnom,fp, indent=2, default=lambda o:str(o))
 
         #now send it to ISPyB
         logger.info("Sending anom data to ISPyB...")

@@ -483,9 +483,10 @@ class AutoPROCTask(AbstractTask):
         timeEnd = autoProcContainer["autoProcProgram"]["processingEndTime"]
         timeStart_structtime = time.strptime(timeStart, "%a %b %d %H:%M:%S %Z %Y")
         timeEnd_structtime = time.strptime(timeEnd, "%a %b %d %H:%M:%S %Z %Y")
-        autoProcContainer["autoProcProgram"]["processingStartTime"] = time.strftime('%Y-%m-%dT%H:%M:%SZ',timeStart_structtime)
-        autoProcContainer["autoProcProgram"]["processingEndTime"] = time.strftime('%Y-%m-%dT%H:%M:%SZ',timeEnd_structtime)
+        autoProcContainer["autoProcProgram"]["processingStartTime"] = time.strftime('%Y-%m-%dT%H:%M:%S',timeStart_structtime)
+        autoProcContainer["autoProcProgram"]["processingEndTime"] = time.strftime('%Y-%m-%dT%H:%M:%S',timeEnd_structtime)
 
+        autoProcContainer.pop("autoProcScaling")
 
         autoProcContainer["autoProcProgram"]["autoProcProgramId"] = program_id
         autoProcContainer["autoProc"] = autoProcXMLContainer["AutoProc"]
@@ -505,18 +506,37 @@ class AutoPROCTask(AbstractTask):
             shell["ccAno"] = shell.pop("ccAnomalous")
             shell["sigAno"] = shell.pop("DanoOverSigDano")
 
-        autoProcContainer["AutoProcScalingIntegration"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcIntegrationContainer"]["AutoProcIntegration"]
-        autoProcContainer["AutoProcScalingIntegration"]["autoProcProgramId"] = program_id
-        autoProcContainer["AutoProcScalingIntegration"]["autoProcIntegrationId"] = integration_id
-        #fix some entries in AutoProcScalingIntegration
-        autoProcContainer["AutoProcScalingIntegration"]["cellA"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_a")
-        autoProcContainer["AutoProcScalingIntegration"]["cellB"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_b")
-        autoProcContainer["AutoProcScalingIntegration"]["cellC"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_c")
-        autoProcContainer["AutoProcScalingIntegration"]["cellAlpha"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_alpha")
-        autoProcContainer["AutoProcScalingIntegration"]["cellBeta"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_beta")
-        autoProcContainer["AutoProcScalingIntegration"]["cellGamma"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_gamma")
+
         autoProcContainer["autoProcIntegration"] = autoProcContainer.pop("AutoProcScalingIntegration")
+        autoProcContainer["autoProcIntegration"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcIntegrationContainer"]["AutoProcIntegration"]
+        autoProcContainer["autoProcIntegration"]["autoProcProgramId"] = program_id
+        autoProcContainer["autoProcIntegration"]["autoProcIntegrationId"] = integration_id
+        #fix some entries in AutoProcScalingIntegration
+        autoProcContainer["autoProcIntegration"]["cellA"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_a")
+        autoProcContainer["autoProcIntegration"]["cellB"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_b")
+        autoProcContainer["autoProcIntegration"]["cellC"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_c")
+        autoProcContainer["autoProcIntegration"]["cellAlpha"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_alpha")
+        autoProcContainer["autoProcIntegration"]["cellBeta"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_beta")
+        autoProcContainer["autoProcIntegration"]["cellGamma"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_gamma")
+
+        for k,v in autoProcContainer["autoProc"].items():
+            autoProcContainer["autoProc"][k] = AutoPROCTask.convertStrToIntFloat(v)
+
+        for k,v in autoProcContainer["autoProcIntegration"].items():
+            autoProcContainer["autoProcIntegration"][k] = AutoPROCTask.convertStrToIntFloat(v)
         return autoProcContainer
+    
+    @staticmethod
+    def convertStrToIntFloat(v):
+        if isinstance(v,str):
+                try:
+                    v = int(v)
+                except:
+                    try:
+                        v = float(v)
+                    except:
+                        pass
+        return v
 
 
     def eiger_template_to_master(self, fmt):
