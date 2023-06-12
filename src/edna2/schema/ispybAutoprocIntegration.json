@@ -1,53 +1,163 @@
-// TODO: turn into JSON schema
-//  'AutoProcIntegration_autoProcIntegrationId': 2362040,
-//  'AutoProcIntegration_dataCollectionId': 2345417,
-//  'BLSample_name': 'x8',
-//  'DataCollection_dataCollectionNumber': 4,
-//  'DataCollection_imagePrefix': 'GCSH-x8',
-//  'PhasingStep_phasing_phasingStepType': None,
-//  'Protein_acronym': 'GCSH',
-//  'Protein_proteinId': 378115,
-//  'SpaceGroup_spaceGroupShortName': None,
-//  'anomalous': None,
-//  'anomalousCompleteness': None,
-//  'anomalousMultiplicity': None,
-//  'ccAno': None,
-//  'ccHalf': None,
-//  'completeness': None,
-//  'fractionalPartialBias': None,
-//  'isa': None,
-//  'meanIOverSigI': None,
-//  'multiplicity': None,
-//  'nTotalObservations': None,
-//  'nTotalUniqueObservations': None,
-//  'phasingStepType': None,
-//  'rMeasAllIPlusIMinus': None,
-//  'rMeasWithinIPlusIMinus': None,
-//  'rMerge': None,
-//  'rPimAllIPlusIMinus': None,
-//  'rPimWithinIPlusIMinus': None,
-//  'resolutionLimitHigh': None,
-//  'resolutionLimitLow': None,
-//  'scalingStatisticsType': None,
-//  'sigAno': None,
-//  'spaceGroupIds': None,
-//  'spaceGroupShortName': None,
-//  'v_datacollection_processingEndTime': 'Jul 11, 2018 1:08:00 PM',
-//  'v_datacollection_processingPrograms': 'EDNA_proc',
-//  'v_datacollection_processingStartTime': 'Jul 11, 2018 1:06:43 PM',
-//  'v_datacollection_processingStatus': 'FAILED',
-//  'v_datacollection_summary_phasing_anomalous': False,
-//  'v_datacollection_summary_phasing_autoProcIntegrationId': 2362040,
-//  'v_datacollection_summary_phasing_autoProcProgramId': 2235556,
-//  'v_datacollection_summary_phasing_autoProcScalingId': None,
-//  'v_datacollection_summary_phasing_autoproc_autoprocId': None,
-//  'v_datacollection_summary_phasing_autoproc_space_group': None,
-//  'v_datacollection_summary_phasing_cell_a': None,
-//  'v_datacollection_summary_phasing_cell_alpha': None,
-//  'v_datacollection_summary_phasing_cell_b': None,
-//  'v_datacollection_summary_phasing_cell_beta': None,
-//  'v_datacollection_summary_phasing_cell_c': None,
-//  'v_datacollection_summary_phasing_cell_gamma': None,
-//  'v_datacollection_summary_phasing_dataCollectionId': 2345417,
-//  'v_datacollection_summary_session_proposalId': 8601,
-//  'v_datacollection_summary_session_sessionId': 64160
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "properties":{
+        "dataCollectionId": {"type":"number"},
+
+        "autoProcProgram": {
+            "type" : "object",
+            "properties": {
+                    "autoProcProgramId": {"type": "number"},
+                    "processingCommandLine": {"type": "string"},
+                    "processingPrograms": {"type": "string"},
+                    "processingStatus": {"type": "string"},
+                    "processingStartTime": {"type": "string"},
+                    "processingEndTime": {"type": "string"},
+                    "processingEnvironment": {"type": "string"}  
+            },
+            "additionalProperties": false
+        },
+
+        "autoProc":{
+            "type":"object",
+            "properties": {
+                "autoProcId": {"type": "number"},
+                "autoProcProgramId": {"type": "number"},
+                "spaceGroup": {"type": "string"},
+                "refinedCellA": {"type": "number"},
+                "refinedCellB": {"type": "number"},
+                "refinedCellC": {"type": "number"},
+                "refinedCellAlpha": {"type": "number"},
+                "refinedCellBeta": {"type": "number"},
+                "refinedCellGamma": {"type": "number"}
+            },
+            "additionalProperties": false
+        },
+
+        "autoProcProgramAttachment":{
+            "type":"array",
+            "items": {
+                "type":"object",
+                "properties": {
+                    "file": {"type": "string"},
+                    "autoProcProgramAttachmentId":  {"type": "number"},
+                    "autoProcProgramId":  {"type": "number"}   
+                },
+                "required":["file"]
+            }
+        },
+
+        "autoProcIntegration":{
+            "type":"object",
+            "properties": {
+                "autoProcIntegrationId": {"type": "number"},
+                "autoProcProgramId": {"type": "number"},
+                "startImageNumber": {"type": "number"},
+                "endImageNumber": {"type": "number"},
+                "refinedDetectorDistance": {"type": "number"},
+                "refinedXbeam": {"type": "number"},
+                "refinedYbeam": {"type": "number"},
+                "rotationAxisX": {"type": "number"},
+                "rotationAxisY": {"type": "number"},
+                "rotationAxisZ": {"type": "number"},
+                "beamVectorX": {"type": "number"},
+                "beamVectorY": {"type": "number"},
+                "beamVectorZ": {"type": "number"},
+                "cellA": {"type": "number"},
+                "cellB": {"type": "number"},
+                "cellC": {"type": "number"},
+                "cellAlpha": {"type": "number"},
+                "cellBeta": {"type": "number"},
+                "cellGamma": {"type": "number"},
+                "anomalous": {"type": "boolean"},
+                "dataCollectionId": {"type": "number"}
+            },
+            "additionalProperties": false
+        },
+
+        "autoProcScalingHasInt":{
+            "type":"object",
+            "properties": {
+                "autoProcScalingHasIntId": {"type": "number"},
+                "autoProcIntegrationId": {"type": "number"},
+                "autoProcScalingId": {"type": "number"}
+            },
+            "additionalProperties": false
+        },
+
+        "autoProcScaling":{
+            "type":"object",
+            "properties": {
+                "autoProcScalingId": {"type": "number"},
+                "autoProcId": {"type": "number"},
+                "recordTimeStamp": {"type": "string"},
+                "resolutionEllipsoidAxis11": {"type": "number"},
+                "resolutionEllipsoidAxis12": {"type": "number"},
+                "resolutionEllipsoidAxis13": {"type": "number"},
+                "resolutionEllipsoidAxis21": {"type": "number"},
+                "resolutionEllipsoidAxis22": {"type": "number"},
+                "resolutionEllipsoidAxis23": {"type": "number"},
+                "resolutionEllipsoidAxis31": {"type": "number"},
+                "resolutionEllipsoidAxis32": {"type": "number"},
+                "resolutionEllipsoidAxis33": {"type": "number"},
+                "resolutionEllipsoidValue1": {"type": "number"},
+                "resolutionEllipsoidValue2": {"type": "number"},
+                "resolutionEllipsoidValue3": {"type": "number"}
+            },
+            "additionalProperties": false
+        },
+
+        "autoProcStatus":{
+            "type":"object",
+            "properties": {
+                "autoProcStatusId": {"type": "number"},
+                "autoProcIntegrationId": {"type": "number"},
+                "step": {"type": "string"},
+                "status": {"type": "string"},
+                "comments": {"type": "string"},
+                "bltimeStamp": {"type": "string"}
+            },
+            "additionalProperties": false
+        },
+
+        "autoProcScalingStatistics":{
+            "type":"array",
+            "items":{
+                "type":"object",
+                "properties":{
+                    "autoProcScalingStatisticsId": {"type": "number"},
+                    "scalingStatisticsType": {"type": "string"},
+                    "resolutionLimitLow": {"type": "number"},
+                    "resolutionLimitHigh": {"type": "number"},
+                    "rmerge": {"type": "number"},
+                    "rmeasWithinIplusIminus": {"type": "number"},
+                    "rmeasAllIplusIminus": {"type": "number"},
+                    "rpimWithinIplusIminus": {"type": "number"},
+                    "rpimAllIplusIminus": {"type": "number"},
+                    "fractionalPartialBias": {"type": "number"},
+                    "nTotalObservations": {"type": "number"},
+                    "nTotalUniqueObservations": {"type": "number"},
+                    "meanIoverSigI": {"type": "number"},
+                    "completeness": {"type": "number"},
+                    "multiplicity": {"type": "number"},
+                    "anomalousCompleteness": {"type": "number"},
+                    "anomalousMultiplicity": {"type": "number"},
+                    "anomalous": {"type": "number"},
+                    "autoProcScalingId": {"type": "number"},
+                    "ccHalf": {"type": "number"},
+                    "ccAno": {"type": "number"},
+                    "sigAno": {"type":"number"},
+                    "isa": {"type":["null","number"]},
+                    "completenessSpherical": {"type": "number"},
+                    "anomalousCompletenessSpherical": {"type": "number"},
+                    "completenessEllipsoidal": {"type": "number"},
+                    "anomalousCompletenessEllipsoidal": {"type": "number"}
+                }
+            },
+            "additionalProperties": false
+        }
+
+
+    },
+    "additionalProperties": false
+}

@@ -50,9 +50,7 @@ from edna2.utils import UtilsXML
 
 logger = UtilsLogging.getLogger()
 
-from edna2.tasks.XDSTasks import XDSTask
-from edna2.tasks.CCP4Tasks import AimlessTask
-from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, UploadGPhLResultsToISPyB
+from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, ISPyBStoreAutoProcStatus
 from edna2.tasks.WaitFileTask import WaitFileTask
 
 class AutoPROCTask(AbstractTask):
@@ -70,13 +68,29 @@ class AutoPROCTask(AbstractTask):
                 timeStart=self.startDateTime, 
                 timeEnd=datetime.now().isoformat(timespec="seconds")
             )
+        if self.integrationIdStaraniso is not None and self.programIdStaraniso is not None:
+            ISPyBStoreAutoProcResults.setIspybToFailed(
+                dataCollectionId=self.dataCollectionId,
+                autoProcProgramId=self.programIdStaraniso, 
+                autoProcIntegrationId=self.integrationIdStaraniso, 
+                processingCommandLine=self.processingCommandLine, 
+                processingPrograms=self.processingPrograms, 
+                isAnom=False, 
+                timeStart=self.startDateTime, 
+                timeEnd=datetime.now().isoformat(timespec="seconds")
+            )
+        self.logToIspyb(self.integrationId,
+                    'Indexing', 'Failed', 'AutoPROC ended')
+        self.logToIspyb(self.integrationIdStaraniso,
+                    'Indexing', 'Failed', 'AutoPROC ended')
+
     
     def run(self, inData):
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
         self.processingPrograms="autoproc2"
-        self.processingProgramStaraniso = "autoproc_staraniso2"
+        self.processingProgramsStaraniso = "autoproc_staraniso2"
         self.processingCommandLine = ""
 
         self.setLogFileName(f"autoPROC_{self.startDateTimeFormatted}.log")
@@ -247,7 +261,7 @@ class AutoPROCTask(AbstractTask):
             self.integrationIdStaraniso, self.programIdStaraniso = ISPyBStoreAutoProcResults.setIspybToRunning(
                 dataCollectionId=self.dataCollectionId,
                 processingCommandLine = self.processingCommandLine,
-                processingPrograms = self.processingProgramStaraniso,
+                processingPrograms = self.processingProgramsStaraniso,
                 isAnom = self.doAnom,
                 timeStart = self.timeStart)
         
@@ -278,7 +292,6 @@ class AutoPROCTask(AbstractTask):
         autoPROCSetup = UtilsConfig.get(self,"autoPROCSetup", None)
         autoPROCExecutable = UtilsConfig.get(self,"autoPROCExecutable", "process")
         maxNoProcessors = UtilsConfig.get(self, "maxNoProcessors", None)
-        pathToNeggiaPlugin = UtilsConfig.get(self, "pathToNeggiaPlugin", None)
         autoPROCmacro = UtilsConfig.get(self, "macro", None)
 
         if autoPROCSetup is None:
@@ -292,7 +305,6 @@ class AutoPROCTask(AbstractTask):
         commandLine += " -nthreads {0}".format(maxNoProcessors)
         
         commandLine += " -h5 {0}".format(masterFilePath)
-        commandLine += " autoPROC_XdsKeyword_LIB={0}".format(pathToNeggiaPlugin) if pathToNeggiaPlugin else ""
         commandLine += " -ANO" if self.doAnom else ""
 
         if autoPROCmacro is not None:
@@ -316,6 +328,12 @@ class AutoPROCTask(AbstractTask):
             if k.startswith("autoPROC_"):
                 logger.debug(f"autoPROC option: {k}={v}")
                 commandLine += " {0}={1}".format(k,v)
+        
+        self.logToIspyb(self.integrationId,
+                    'Indexing', 'Launched', 'AutoPROC started')
+        self.logToIspyb(self.integrationIdStaraniso,
+                    'Indexing', 'Launched', 'AutoPROC started')
+
 
         logger.info("autoPROC command is {}".format(commandLine))
         
@@ -324,21 +342,24 @@ class AutoPROCTask(AbstractTask):
         except RuntimeError:
             self.setFailure()
             return
+        
         self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
         ispybXml = self.autoPROCExecDir / "autoPROC.xml"
         if ispybXml.is_file():
             self.outData["ispybXml"] = str(ispybXml)
-            autoProcContainer = self.autoPROCXMLtoISPyBdict(ispybXml, data_collection_id=self.dataCollectionId, 
+            autoProcContainer = self.autoPROCXMLtoISPyBdict(xml_path=ispybXml, data_collection_id=self.dataCollectionId, 
                                                             program_id=self.programId, 
-                                                            integration_id=self.integrationId)
+                                                            integration_id=self.integrationId,
+                                                            processing_programs= self.processingPrograms)
 
         ispybXmlStaraniso = self.autoPROCExecDir / "autoPROC_staraniso.xml"
         if ispybXmlStaraniso.is_file():
             self.outData["ispybXml_staraniso"] = str(ispybXmlStaraniso)
-            autoProcContainerStaraniso = self.autoPROCXMLtoISPyBdict(ispybXmlStaraniso, data_collection_id=self.dataCollectionId, 
+            autoProcContainerStaraniso = self.autoPROCXMLtoISPyBdict(xml_path=ispybXmlStaraniso, data_collection_id=self.dataCollectionId, 
                                                                      program_id=self.programIdStaraniso, 
-                                                                     integration_id=self.integrationIdStaraniso)
+                                                                     integration_id=self.integrationIdStaraniso,
+                                                                     processing_programs=self.processingProgramsStaraniso)
 
         #get CIF Files and gzip them
         autoPROCStaranisoAllCif = self.autoPROCExecDir / "Data_1_autoPROC_STARANISO_all.cif"
@@ -453,6 +474,11 @@ class AutoPROCTask(AbstractTask):
         with open(autoProcContainerStaranisoJson,'w') as fp:
             json.dump(autoProcContainerStaraniso,fp, indent=2, default=lambda o:str(o))
 
+        self.logToIspyb(self.integrationId,
+                    'Indexing', 'Successful', 'AutoPROC finished')
+        self.logToIspyb(self.integrationIdStaraniso,
+                    'Indexing', 'Successful', 'AutoPROC finished')
+
         ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcContainer, workingDirectorySuffix="uploadFinal")
         ispybStoreAutoProcResults.execute()
         ispybStoreAutoProcResultsStaraniso = ISPyBStoreAutoProcResults(inData=autoProcContainerStaraniso, workingDirectorySuffix="uploadFinal_staraniso")
@@ -461,9 +487,9 @@ class AutoPROCTask(AbstractTask):
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
         return 
-
+    
     @staticmethod
-    def autoPROCXMLtoISPyBdict(xml_path, data_collection_id=None, program_id=None, integration_id=None, trunc_len=256):
+    def autoPROCXMLtoISPyBdict(xml_path, data_collection_id=None, program_id=None, integration_id=None, processing_programs=None, trunc_len=256):
         dict_data = UtilsXML.dictfromXML(xml_path)
         autoProcXMLContainer = dict_data["AutoProcContainer"]
         autoProcContainer = {
@@ -478,6 +504,10 @@ class AutoPROCTask(AbstractTask):
                     autoProcContainer["autoProcProgram"][k] = v
         #fix some entries in autoProcProgram
         autoProcContainer["autoProcProgram"]["processingStatus"] = "SUCCESS"
+        autoProcContainer["autoProcProgram"]["processingPrograms"] = processing_programs
+        autoProcContainer["autoProcProgram"].pop("processingEnvironment")
+        autoProcContainer["autoProcProgram"].pop("processingMessage")
+
 
         timeStart = autoProcContainer["autoProcProgram"]["processingStartTime"]
         timeEnd = autoProcContainer["autoProcProgram"]["processingEndTime"]
@@ -485,8 +515,6 @@ class AutoPROCTask(AbstractTask):
         timeEnd_structtime = time.strptime(timeEnd, "%a %b %d %H:%M:%S %Z %Y")
         autoProcContainer["autoProcProgram"]["processingStartTime"] = time.strftime('%Y-%m-%dT%H:%M:%S',timeStart_structtime)
         autoProcContainer["autoProcProgram"]["processingEndTime"] = time.strftime('%Y-%m-%dT%H:%M:%S',timeEnd_structtime)
-
-        autoProcContainer.pop("autoProcScaling")
 
         autoProcContainer["autoProcProgram"]["autoProcProgramId"] = program_id
         autoProcContainer["autoProc"] = autoProcXMLContainer["AutoProc"]
@@ -497,8 +525,9 @@ class AutoPROCTask(AbstractTask):
         autoProcContainer["autoProc"]["refinedCellAlpha"] = autoProcContainer["autoProc"].pop("refinedCell_alpha")
         autoProcContainer["autoProc"]["refinedCellBeta"] = autoProcContainer["autoProc"].pop("refinedCell_beta")
         autoProcContainer["autoProc"]["refinedCellGamma"] = autoProcContainer["autoProc"].pop("refinedCell_gamma")
-
         autoProcContainer["autoProc"]["autoProcProgramId"] = program_id
+        del autoProcContainer["autoProc"]["wavelength"]
+
         autoProcContainer["autoProcScaling"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcScaling"]
         autoProcContainer["autoProcScalingStatistics"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcScalingStatistics"]
         # fix some entries in autoProcScalingStatistics
@@ -506,28 +535,58 @@ class AutoPROCTask(AbstractTask):
             shell["ccAno"] = shell.pop("ccAnomalous")
             shell["sigAno"] = shell.pop("DanoOverSigDano")
 
-
-        autoProcContainer["autoProcIntegration"] = autoProcContainer.pop("AutoProcScalingIntegration")
         autoProcContainer["autoProcIntegration"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcIntegrationContainer"]["AutoProcIntegration"]
         autoProcContainer["autoProcIntegration"]["autoProcProgramId"] = program_id
         autoProcContainer["autoProcIntegration"]["autoProcIntegrationId"] = integration_id
         #fix some entries in AutoProcScalingIntegration
-        autoProcContainer["autoProcIntegration"]["cellA"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_a")
-        autoProcContainer["autoProcIntegration"]["cellB"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_b")
-        autoProcContainer["autoProcIntegration"]["cellC"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_c")
-        autoProcContainer["autoProcIntegration"]["cellAlpha"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_alpha")
-        autoProcContainer["autoProcIntegration"]["cellBeta"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_beta")
-        autoProcContainer["autoProcIntegration"]["cellGamma"] = autoProcContainer["AutoProcScalingIntegration"].pop("cell_gamma")
+        autoProcContainer["autoProcIntegration"]["cellA"] = autoProcContainer["autoProcIntegration"].pop("cell_a")
+        autoProcContainer["autoProcIntegration"]["cellB"] = autoProcContainer["autoProcIntegration"].pop("cell_b")
+        autoProcContainer["autoProcIntegration"]["cellC"] = autoProcContainer["autoProcIntegration"].pop("cell_c")
+        autoProcContainer["autoProcIntegration"]["cellAlpha"] = autoProcContainer["autoProcIntegration"].pop("cell_alpha")
+        autoProcContainer["autoProcIntegration"]["cellBeta"] = autoProcContainer["autoProcIntegration"].pop("cell_beta")
+        autoProcContainer["autoProcIntegration"]["cellGamma"] = autoProcContainer["autoProcIntegration"].pop("cell_gamma")
+        autoProcContainer["autoProcIntegration"]["refinedXbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedXBeam")
+        autoProcContainer["autoProcIntegration"]["refinedYbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedYBeam")
+
+        autoProcScalingHasIntContainer = {
+            "autoProcIntegrationId" : integration_id,
+        }
+        autoProcContainer["autoProcScalingHasInt"] = autoProcScalingHasIntContainer
 
         for k,v in autoProcContainer["autoProc"].items():
-            autoProcContainer["autoProc"][k] = AutoPROCTask.convertStrToIntFloat(v)
+            autoProcContainer["autoProc"][k] = AutoPROCTask.convertStrToIntOrFloat(v)
 
         for k,v in autoProcContainer["autoProcIntegration"].items():
-            autoProcContainer["autoProcIntegration"][k] = AutoPROCTask.convertStrToIntFloat(v)
+            autoProcContainer["autoProcIntegration"][k] = AutoPROCTask.convertStrToIntOrFloat(v)
+
+        for k,v in autoProcContainer["autoProcScaling"].items():
+            autoProcContainer["autoProcScaling"][k] = AutoPROCTask.convertStrToIntOrFloat(v)
+
+        for shell in autoProcContainer["autoProcScalingStatistics"]:
+            for k,v in shell.items():
+                # should they be ints, floats, or strings? I don't know, 
+                # but seems like they shouldn't be strings...
+                shell[k] = AutoPROCTask.convertStrToIntOrFloat(v)
+
+                # rMeas, rPim, and rMerge need to be multiplied by 100
+                if any(x for x in ["rMerge","rMeas","rPim"] if x in k):
+                    shell[k] *= 100
+            shell["rmerge"] = shell.pop("rMerge")
+            shell["rmeasWithinIplusIminus"] = shell.pop("rMeasWithinIPlusIMinus")
+            shell["rmeasAllIplusIminus"] = shell.pop("rMeasAllIPlusIMinus")
+            shell["rpimWithinIplusIminus"] = shell.pop("rPimWithinIPlusIMinus")
+            shell["rpimAllIplusIminus"] = shell.pop("rPimAllIPlusIMinus")
+            shell["meanIoverSigI"] = shell.pop("meanIOverSigI")
+
+
         return autoProcContainer
     
     @staticmethod
-    def convertStrToIntFloat(v):
+    def convertStrToIntOrFloat(v: str):
+        """
+        Tries to convert a string to an int first, then a float.
+        If it doesn't work, returns the string.
+        """
         if isinstance(v,str):
                 try:
                     v = int(v)
@@ -556,3 +615,38 @@ class AutoPROCTask(AbstractTask):
         return fmt_string.format(num)
 
 
+    # def logToIspyb(self, integrationId, step, status, comments=""):
+    #     if integrationId is not None:
+    #         if type(integrationId) is list:
+    #             for item in integrationId:
+    #                 self.logToIspybImpl(item, step, status, comments)
+    #         else:
+    #             self.logToIspybImpl(integrationId, step, status, comments)
+    #             # if status == "Failed":
+    #             #     for strErrorMessage in self.getListOfErrorMessages():
+    #             #         self.logToIspybImpl(integrationId, step, status, strErrorMessage)
+
+    def logToIspyb(self, integrationId, step, status, comments=""):
+        # hack in the event we could not create an integration ID
+        if integrationId is None:
+            logger.error('could not log to ispyb: no integration id')
+            return
+        
+        statusInput = {
+            "dataCollectionId": self.dataCollectionId,
+            "autoProcIntegration" : {
+                "autoProcIntegrationId": integrationId,
+            },
+            "autoProcProgram": {
+            },
+            "autoProcStatus": {
+                "autoProcIntegrationId": integrationId,
+                "step":  step,
+                "status": status,
+                "comments": comments,
+                "bltimeStamp": datetime.now().isoformat(timespec='seconds'),
+            }
+        }
+
+        autoprocStatus = ISPyBStoreAutoProcStatus(inData=statusInput, workingDirectorySuffix="")
+        autoprocStatus.execute()

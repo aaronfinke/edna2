@@ -1,133 +1,166 @@
 {
-  "dataCollectionId": 92555,
+  "dataCollectionId": 92677,
   "autoProcProgram": {
-    "processingCommandLine": "",
-    "processingPrograms": "autoPROC_test",
-    "processingStatus": "SUCCESS",
-    "processingStartTime": "2023-05-29T14:18:08",
-    "processingEndTime": "2023-05-29T14:26:54",
-    "autoProcProgramId": 294108
+      "processingCommandLine": "/mxn/groups/sw/mxsw/autoPROC_20230222/autoPROC/bin/linux64/process -B -d /gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/AutoPROCExec_0 -nthreads 64 -h5 /data/visitors/biomax/20170251/20230405/raw/thau1/t",
+      "processingPrograms": "autoPROC_test",
+      "processingStatus": "SUCCESS",
+      "processingStartTime": "2023-06-01T16:53:28",
+      "processingEndTime": "2023-06-01T17:09:51",
+      "autoProcProgramId": 296614
   },
   "autoProc": {
-    "spaceGroup": "P 41 21 2",
-    "refinedCellA": 57.990,
-    "refinedCellB": 57.990,
-    "refinedCellC": 150.560,
-    "refinedCellAlpha": 90.000,
-    "refinedCellBeta": 90.000,
-    "refinedCellGamma": 90.000,
-    "autoProcProgramId": 294108
+      "spaceGroup": "P 41 21 2",
+      "refinedCellA": 57.944,
+      "refinedCellB": 57.944,
+      "refinedCellC": 150.438,
+      "refinedCellAlpha": 90.0,
+      "refinedCellBeta": 90.0,
+      "refinedCellGamma": 90.0,
+      "autoProcProgramId": 296614
+  },
+  "autoProcScaling": {
+      "recordTimeStamp": "2023-06-01 17:07:56",
+      "resolutionEllipsoidAxis11": 1.00000,
+      "resolutionEllipsoidAxis12": 0.00000,
+      "resolutionEllipsoidAxis13": 0.00000,
+      "resolutionEllipsoidAxis21": 0.00000,
+      "resolutionEllipsoidAxis22": 1.00000,
+      "resolutionEllipsoidAxis23": 0.00000,
+      "resolutionEllipsoidAxis31": 0.00000,
+      "resolutionEllipsoidAxis32": 0.00000,
+      "resolutionEllipsoidAxis33": 1.00000,
+      "resolutionEllipsoidValue1": 1.60900,
+      "resolutionEllipsoidValue2": 1.60900,
+      "resolutionEllipsoidValue3": 1.42900
   },
   "autoProcScalingStatistics": [
-    {
-      "scalingStatisticsType": "overall",
-      "resolutionLimitLow": 54.115,
-      "resolutionLimitHigh": 1.475,
-      "rmerge": 3.1,
-      "rMeasWithinIPlusIMinus": 3.4,
-      "rMeasAllIPlusIMinus": 3.3,
-      "rPimWithinIPlusIMinus": 1.3,
-      "rPimAllIPlusIMinus": 0.9,
-      "nTotalObservations": 338307,
-      "nTotalUniqueObservations": 32929,
-      "meanIOverSigI": 43.7,
-      "completeness": 74.5,
-      "multiplicity": 10.3,
-      "ccHalf": 1.000,
-      "anomalousCompleteness": 72.1,
-      "anomalousMultiplicity": 5.6,
-      "ccAno": -0.163,
-      "sigAno": 0.676
-    },
-    {
-      "scalingStatisticsType": "innerShell",
-      "resolutionLimitLow": 54.115,
-      "resolutionLimitHigh": 4.004,
-      "rmerge": 2.2,
-      "rMeasWithinIPlusIMinus": 2.3,
-      "rMeasAllIPlusIMinus": 2.3,
-      "rPimWithinIPlusIMinus": 0.8,
-      "rPimAllIPlusIMinus": 0.7,
-      "nTotalObservations": 28290,
-      "nTotalUniqueObservations": 2457,
-      "meanIOverSigI": 87.8,
-      "completeness": 99.7,
-      "multiplicity": 11.5,
-      "ccHalf": 1.000,
-      "anomalousCompleteness": 100.0,
-      "anomalousMultiplicity": 7.0,
-      "ccAno": -0.125,
-      "sigAno": 0.764
-    },
-    {
-      "scalingStatisticsType": "outerShell",
-      "resolutionLimitLow": 1.501,
-      "resolutionLimitHigh": 1.475,
-      "rmerge": 13.6,
-      "rMeasWithinIPlusIMinus": 23.5,
-      "rMeasAllIPlusIMinus": 18.0,
-      "rPimWithinIPlusIMinus": 16.3,
-      "rPimAllIPlusIMinus": 11.7,
-      "nTotalObservations": 265,
-      "nTotalUniqueObservations": 181,
-      "meanIOverSigI": 3.1,
-      "completeness": 8.5,
-      "multiplicity": 1.5,
-      "ccHalf": 0.961,
-      "anomalousCompleteness": 2.9,
-      "anomalousMultiplicity": 1.2,
-      "ccAno": 0.0,
-      "sigAno": 0.509
-    }
+      {
+          "scalingStatisticsType": "overall",
+          "resolutionLimitLow": 54.072,
+          "resolutionLimitHigh": 1.475,
+          "nTotalObservations": 337365,
+          "nTotalUniqueObservations": 33258,
+          "completenessSpherical": 75.3,
+          "completenessEllipsoidal": 85.5,
+          "completeness": 85.5,
+          "multiplicity": 10.1,
+          "ccHalf": 0.999,
+          "anomalousCompletenessSpherical": 72.2,
+          "anomalousCompletenessEllipsoidal": 83.4,
+          "anomalousCompleteness": 83.4,
+          "anomalousMultiplicity": 5.6,
+          "ccAno": -0.23,
+          "sigAno": 0.539,
+          "rmerge": 5.3,
+          "rmeasWithinIplusIminus": 5.7,
+          "rmeasAllIplusIminus": 5.5,
+          "rpimWithinIplusIminus": 2.1999999999999997,
+          "rpimAllIplusIminus": 1.6,
+          "meanIoverSigI": 22.6
+      },
+      {
+          "scalingStatisticsType": "innerShell",
+          "resolutionLimitLow": 54.072,
+          "resolutionLimitHigh": 4.583,
+          "nTotalObservations": 19873,
+          "nTotalUniqueObservations": 1663,
+          "completenessSpherical": 99.6,
+          "completenessEllipsoidal": 99.6,
+          "completeness": 99.6,
+          "multiplicity": 12.0,
+          "ccHalf": 0.999,
+          "anomalousCompletenessSpherical": 100.0,
+          "anomalousCompletenessEllipsoidal": 100.0,
+          "anomalousCompleteness": 100.0,
+          "anomalousMultiplicity": 7.3,
+          "ccAno": -0.082,
+          "sigAno": 0.716,
+          "rmerge": 3.5000000000000004,
+          "rmeasWithinIplusIminus": 3.6999999999999997,
+          "rmeasAllIplusIminus": 3.6999999999999997,
+          "rpimWithinIplusIminus": 1.4000000000000001,
+          "rpimAllIplusIminus": 1.0,
+          "meanIoverSigI": 54.2
+      },
+      {
+          "scalingStatisticsType": "outerShell",
+          "resolutionLimitLow": 1.576,
+          "resolutionLimitHigh": 1.475,
+          "nTotalObservations": 4797,
+          "nTotalUniqueObservations": 1663,
+          "completenessSpherical": 21.2,
+          "completenessEllipsoidal": 44.0,
+          "completeness": 44.0,
+          "multiplicity": 2.9,
+          "ccHalf": 0.709,
+          "anomalousCompletenessSpherical": 15.4,
+          "anomalousCompletenessEllipsoidal": 35.4,
+          "anomalousCompleteness": 35.4,
+          "anomalousMultiplicity": 1.8,
+          "ccAno": -0.338,
+          "sigAno": 0.443,
+          "rmerge": 48.9,
+          "rmeasWithinIplusIminus": 62.4,
+          "rmeasAllIplusIminus": 58.199999999999996,
+          "rpimWithinIplusIminus": 40.1,
+          "rpimAllIplusIminus": 30.7,
+          "meanIoverSigI": 1.7
+      }
   ],
   "autoProcIntegration": {
-    "startImageNumber": 1,
-    "endImageNumber": 1800,
-    "refinedDetectorDistance": 286.010376,
-    "refinedXBeam": 157.063,
-    "refinedYBeam": 159.101,
-    "rotationAxisX": 0.001196,
-    "rotationAxisY": 0.999999,
-    "rotationAxisZ": 0.000369,
-    "beamVectorX": 0.001712,
-    "beamVectorY": -0.000450,
-    "beamVectorZ": 1.024322,
-    "autoProcProgramId": 294108,
-    "autoProcIntegrationId": 293848,
-    "cellA": 57.9893,
-    "cellB": 57.9893,
-    "cellC": 150.5624,
-    "cellAlpha": 90.000,
-    "cellBeta": 90.000,
-    "cellGamma": 90.000
+      "startImageNumber": 1,
+      "endImageNumber": 1800,
+      "refinedDetectorDistance": 285.830353,
+      "rotationAxisX": 0.000613,
+      "rotationAxisY": 1.0,
+      "rotationAxisZ": 0.000389,
+      "beamVectorX": 0.001726,
+      "beamVectorY": -0.000507,
+      "beamVectorZ": 1.024322,
+      "autoProcProgramId": 296614,
+      "autoProcIntegrationId": 296361,
+      "cellA": 57.9393,
+      "cellB": 57.9393,
+      "cellC": 150.4253,
+      "cellAlpha": 90.0,
+      "cellBeta": 90.0,
+      "cellGamma": 90.0,
+      "refinedXbeam": 157.063,
+      "refinedYbeam": 159.115
+  },
+  "autoProcScalingHasInt": {
+      "autoProcIntegrationId": 296361
   },
   "autoProcProgramAttachment": [
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_autoPROC.log"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_report.pdf"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_summary_inlined.html"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_summary.tar.gz"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_truncate-unique.mtz"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_truncate-unique.stats"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_truncate-unique.table1"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_autoPROC_TRUNCATE_all.cif.gz"
-    },
-    {
-      "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230529_141800/AutoPROCTask_b8kmp9no/results/ap_thau1-t01_run7_XDS_ASCII.HKL.gz"
-    }
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_autoPROC.log"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_report.pdf"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_report_staraniso.pdf"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_staraniso_alldata-unique.mtz"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_staraniso_alldata-unique.stats"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_staraniso_alldata-unique.table1"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_summary_inlined.html"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_summary.tar.gz"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_autoPROC_STARANISO_all.cif.gz"
+      },
+      {
+          "file": "/gpfs/offline1/staff/biomax/aarfin/edna2/src/testdata/rundir/20230601_165321/AutoPROCTask_o36pvxwo/results/ap_thau1-t11_run5_XDS_ASCII.HKL.gz"
+      }
   ]
 }

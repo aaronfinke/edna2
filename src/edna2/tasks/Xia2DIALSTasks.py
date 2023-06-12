@@ -32,5 +32,38 @@ import time
 import re
 import json
 from datetime import datetime
+
+from edna2.tasks.AbstractTask import AbstractTask
+
+from edna2.utils import UtilsPath
+from edna2.utils import UtilsConfig
+from edna2.utils import UtilsLogging
+from edna2.utils import UtilsIspyb
+from edna2.utils import UtilsXML
+
+
+logger = UtilsLogging.getLogger()
+
+from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, ISPyBStoreAutoProcStatus
+from edna2.tasks.WaitFileTask import WaitFileTask
+
+
 STRF_TEMPLATE = "%a %b %d %H:%M:%S %Y"
+
+class Xia2DialsTask(AbstractTask):
+    def setFailure(self):
+        self._dictInOut["isFailure"] = True
+        if self.integrationId is not None and self.programId is not None:
+            ISPyBStoreAutoProcResults.setIspybToFailed(
+                dataCollectionId=self.dataCollectionId,
+                autoProcProgramId=self.programId, 
+                autoProcIntegrationId=self.integrationId, 
+                processingCommandLine=self.processingCommandLine, 
+                processingPrograms=self.processingPrograms, 
+                isAnom=False, 
+                timeStart=self.startDateTime, 
+                timeEnd=datetime.now().isoformat(timespec="seconds")
+            )
+
+    pass
 

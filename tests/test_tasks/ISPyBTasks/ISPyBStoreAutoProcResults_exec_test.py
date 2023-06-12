@@ -23,15 +23,15 @@ __date__ = "12/05/2023"
 
 import sys
 import unittest
+import inspect
 from datetime import datetime
 import time
 
 from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
+from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults
 
-from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, UploadGPhLResultsToISPyB
-
-class ISPyBStoreAutoProcResults(unittest.TestCase):
+class ISPyBStoreAutoProcResultsTest(unittest.TestCase):
         
     def setUp(self):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
@@ -40,7 +40,6 @@ class ISPyBStoreAutoProcResults(unittest.TestCase):
                      'Cannot run ispyb test with default config')
 
     def test_execute_storeAutoProcResultsAutoPROC(self):
-        from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults
         referenceDataPath = self.dataPath / 'ISPyBStoreAutoProcResults_autoPROC.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
         self.dataCollectionId = inData["dataCollectionId"]

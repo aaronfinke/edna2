@@ -542,10 +542,10 @@ class ISPyBStoreAutoProcResults(AbstractTask):
                 "anomalousCompletenessEllipsoidal": None,
                 }
     
-    # def getInDataSchema(self):
-    #     return {
-    #          "$ref": self.getSchemaUrl("ispybAutoprocIntegration.json")
-    #     }
+    def getInDataSchema(self):
+        return {
+             "$ref": self.getSchemaUrl("ispybAutoprocIntegration.json")
+        }
     
     def getOutDataSchema(self):
         return {
