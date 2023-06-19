@@ -118,6 +118,67 @@ def getAutoprocessingWebService():
 def getToolsForAutoprocessingWebService():
     return os.path.join(getWdslRoot(), "ispybWS", "ToolsForAutoprocessingWebService?wsdl")
 
+def getBLSampleWebService():
+    logger = UtilsLogging.getLogger()
+    collectionWdsl = getToolsForBLSampleWebService()
+    transport = getTransport()
+    if transport is None:
+        logger.error(
+            "No transport defined, ISPyB web service client cannot be instantiated."
+        )
+        collectionWSClient = None
+    else:
+        collectionWSClient = Client(collectionWdsl, transport=transport, cache=None, location=collectionWdsl)
+    return collectionWSClient
+
+def getToolsForBLSampleWebService():
+        return os.path.join(getWdslRoot(), "ispybWS", "ToolsForBLSampleWebService?wsdl")
+
+def getProteinAcronymAndSampleNameFromDataCollectionId(dataCollectionId,client=None):
+    """get the protein acronym and sample name from a given DataCollectionId."""
+    proteinAcronym, sampleName = None, None
+    if client is None:
+        client = getBLSampleWebService()
+    if client is None:
+        logger.error(
+                "No web service client available, cannot contact getBLSampleWebService web service."
+            )
+        return proteinAcronym, sampleName
+    try:
+        sampleId = getSampleIdFromDataCollectionId(dataCollectionId)
+        if sampleId is None:
+            return proteinAcronym, sampleName
+        sampleInfo = client.service.getSampleInformation(sampleId)
+        proteinAcronym = sampleInfo.proteinAcronym
+        sampleName = sampleInfo.sampleName
+    except Exception as e:
+        logger.error(f"Could not retrieve protein acronym/sample name for {dataCollectionId}: {e}")
+
+    return proteinAcronym, sampleName
+        
+
+def getSampleIdFromDataCollectionId(dataCollectionId,client=None):
+    """ get the Sample Id from a given DataCollectionId."""
+    blSampleId = None
+    if client is None:
+        client = getCollectionWebService()
+    if client is None:
+        logger.error(
+                "No web service client available, cannot contact getBLSampleWebService web service."
+            )
+        return blSampleId
+    try:
+        blSampleVO = client.service.getDataCollectionInfo(dataCollectionId).blSampleVO
+        blSampleId = blSampleVO.blSampleId
+    except Exception as e:
+        logger.error(f"Could not retrieve SampleId from datacollectionId {dataCollectionId}: {e}")
+    return blSampleId
+
+    
+
+
+
+
 def storeOrUpdateAutoProcProgram(
         autoProcProgramId=None,  
         processingCommandLine=None,

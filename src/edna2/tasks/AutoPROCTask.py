@@ -68,6 +68,9 @@ class AutoPROCTask(AbstractTask):
                 timeStart=self.startDateTime, 
                 timeEnd=datetime.now().isoformat(timespec="seconds")
             )
+            self.logToIspyb(self.integrationId,
+                'Indexing', 'Failed', 'AutoPROC ended')
+
         if self.integrationIdStaraniso is not None and self.programIdStaraniso is not None:
             ISPyBStoreAutoProcResults.setIspybToFailed(
                 dataCollectionId=self.dataCollectionId,
@@ -79,9 +82,7 @@ class AutoPROCTask(AbstractTask):
                 timeStart=self.startDateTime, 
                 timeEnd=datetime.now().isoformat(timespec="seconds")
             )
-        self.logToIspyb(self.integrationId,
-                    'Indexing', 'Failed', 'AutoPROC ended')
-        self.logToIspyb(self.integrationIdStaraniso,
+            self.logToIspyb(self.integrationIdStaraniso,
                     'Indexing', 'Failed', 'AutoPROC ended')
 
     
@@ -188,21 +189,22 @@ class AutoPROCTask(AbstractTask):
         self.resultsDirectory.mkdir(exist_ok=True, parents=True, mode=0o755)
 
         #make pyarch directory 
-        """ 
-        reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
-        pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
-        self.pyarchDirectory = Path(pyarchDirectory)
-        try:
-            self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
-            logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
-        except OSError as e:
-            logger.error(f"Error when creating pyarch_dir: {e}")
+        if inData.get("test",False):
             self.tmpdir = tempfile.TemporaryDirectory() 
             self.pyarchDirectory = Path(self.tmpdir.name)
-        """
-        self.tmpdir = tempfile.TemporaryDirectory() 
-        self.pyarchDirectory = Path(self.tmpdir.name)
-        
+        else:
+            reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
+            pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
+            self.pyarchDirectory = Path(pyarchDirectory)
+            try:
+                self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
+                logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
+            except OSError as e:
+                logger.error(f"Error when creating pyarch_dir: {e}")
+                self.tmpdir = tempfile.TemporaryDirectory() 
+                self.pyarchDirectory = Path(self.tmpdir.name)
+
+
         isH5 = False
         if any(beamline in pathToStartImage for beamline in ["id23eh1", "id29"]):
             minSizeFirst = 6000000
@@ -286,7 +288,7 @@ class AutoPROCTask(AbstractTask):
         self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROCExec_0"
         inc_x = 1
         while self.autoPROCExecDir.is_dir():
-            self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROC_exec_{0}".format(inc_x)
+            self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROCExec_{0}".format(inc_x)
             inc_x += 1
 
         autoPROCSetup = UtilsConfig.get(self,"autoPROCSetup", None)
@@ -614,17 +616,6 @@ class AutoPROCTask(AbstractTask):
             fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
         return fmt_string.format(num)
 
-
-    # def logToIspyb(self, integrationId, step, status, comments=""):
-    #     if integrationId is not None:
-    #         if type(integrationId) is list:
-    #             for item in integrationId:
-    #                 self.logToIspybImpl(item, step, status, comments)
-    #         else:
-    #             self.logToIspybImpl(integrationId, step, status, comments)
-    #             # if status == "Failed":
-    #             #     for strErrorMessage in self.getListOfErrorMessages():
-    #             #         self.logToIspybImpl(integrationId, step, status, strErrorMessage)
 
     def logToIspyb(self, integrationId, step, status, comments=""):
         # hack in the event we could not create an integration ID
