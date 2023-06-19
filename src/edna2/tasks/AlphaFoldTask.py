@@ -75,8 +75,8 @@ class AlphaFoldTask(AbstractTask):
         --output_dir={output_Dir} \\
         --data_dir=$ALPHAFOLD_DATA_DIR"""
 
-        # self.runCommandLine(commandLine, ignoreErrors=True)
-        self.submitCommandLine(commandLine, jobName=f"{fasta_name}", mem=0, partition="v100", time="01-00:00")
+        self.runCommandLine(commandLine, ignoreErrors=True)
+        # self.submitCommandLine(commandLine, jobName=f"{fasta_name}", mem=0, partition="v100", time="01-00:00")
         # self.monitorCommandLine(job=f"{fasta_name}_slurm.sh", name=f"AlphaFold prediction of {fasta_name}")
 
         # logPath = self.getWorkingDirectory() / 'AlphaFold.log'
