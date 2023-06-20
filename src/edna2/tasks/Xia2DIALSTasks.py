@@ -32,6 +32,8 @@ import time
 import re
 import distutils
 import json
+import socket
+import traceback
 
 from cctbx import sgtbx
 from datetime import datetime
@@ -47,7 +49,7 @@ from edna2.utils import UtilsXML
 
 logger = UtilsLogging.getLogger()
 
-from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, ISPyBStoreAutoProcStatus
+from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, ISPyBStoreAutoProcStatus, createIntegrationId
 from edna2.tasks.WaitFileTask import WaitFileTask
 
 
@@ -56,19 +58,20 @@ STRF_TEMPLATE = "%a %b %d %H:%M:%S %Y"
 class Xia2DialsTask(AbstractTask):
     def setFailure(self):
         self._dictInOut["isFailure"] = True
-        if self.integrationId is not None and self.programId is not None:
-            ISPyBStoreAutoProcResults.setIspybToFailed(
-                dataCollectionId=self.dataCollectionId,
-                autoProcProgramId=self.programId, 
-                autoProcIntegrationId=self.integrationId, 
-                processingCommandLine=self.processingCommandLine, 
-                processingPrograms=self.processingPrograms, 
-                isAnom=False, 
-                timeStart=self.startDateTime, 
-                timeEnd=datetime.now().isoformat(timespec="seconds")
-            )
-            self.logToIspyb(self.integrationId,
-                'Indexing', 'Failed', 'AutoPROC ended')
+        if self.dataCollectionId:
+            if self.integrationId is not None and self.programId is not None:
+                ISPyBStoreAutoProcResults.setIspybToFailed(
+                    dataCollectionId=self.dataCollectionId,
+                    autoProcProgramId=self.programId, 
+                    autoProcIntegrationId=self.integrationId, 
+                    processingCommandLine=self.processingCommandLine, 
+                    processingPrograms=self.processingPrograms, 
+                    isAnom=False, 
+                    timeStart=self.startDateTime, 
+                    timeEnd=datetime.now().isoformat(timespec="seconds")
+                )
+                self.logToIspyb(self.integrationId,
+                    'Indexing', 'Failed', 'AutoPROC ended')
 
     def run(self, inData):
         self.timeStart = time.perf_counter()
@@ -78,7 +81,7 @@ class Xia2DialsTask(AbstractTask):
         self.processingCommandLine = ""
 
         self.setLogFileName(f"xia2DIALS_{self.startDateTimeFormatted}.log")
-        self.dataCollectionId = inData.get("dataCollectionId")
+        self.dataCollectionId = inData.get("dataCollectionId", None)
         self.tmpdir = None
         directory = None
         template = None
@@ -86,9 +89,6 @@ class Xia2DialsTask(AbstractTask):
         pathToEndImage = None
 
         self.doAnom = inData.get("doAnom",False)
-
-        logger.debug("Working directory is {0}".format(self.getWorkingDirectory()))
-
         self.spaceGroup = inData.get("spaceGroup",0)
         self.unitCell = inData.get("unitCell",None)
         self.lowResLimit = inData.get("lowResolutionLimit",None)
@@ -96,6 +96,14 @@ class Xia2DialsTask(AbstractTask):
 
         self.proteinAcronym = "AUTOMATIC"
         self.sampleName = "DEFAULT"
+
+        logger.info("Xia2DIALS processing started")
+        logger.info(f"Running on {socket.gethostname()}")
+        try:
+            logger.info(f"System load avg: {os.getloadavg()}")
+        except OSError:
+            pass
+
 
         if self.spaceGroup != 0:
             try:
@@ -135,7 +143,8 @@ class Xia2DialsTask(AbstractTask):
 
 
         if self.dataCollectionId is not None:
-            identifier = str(self.dataCollectionId)
+            self.integrationId = None
+            self.programId = None
             dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
             if dataCollectionWS3VO is not None:
                 ispybDataCollection = dict(dataCollectionWS3VO)
@@ -153,7 +162,6 @@ class Xia2DialsTask(AbstractTask):
                 pathToStartImage = os.path.join(directory, template % self.imageNoStart)
                 pathToEndImage = os.path.join(directory, template % self.imageNoEnd)
             else:
-                identifier = str(int(time.time()))
                 directory = self.dataInput.dirN.value
                 template = self.dataInput.templateN.value
                 self.imageNoStart = self.dataInput.fromN.value
@@ -166,12 +174,23 @@ class Xia2DialsTask(AbstractTask):
                 pathToStartImage = os.path.join(directory, fileTemplate % self.imageNoStart)
                 pathToEndImage = os.path.join(directory, fileTemplate % self.imageNoEnd)
 
+            # Determine pyarch prefix
+            if UtilsConfig.isALBA():
+                listPrefix = template.split("_")
+                self.pyarchPrefix = "di_{0}_{1}".format("_".join(listPrefix[:-2]),
+                                                        listPrefix[-2])
+            else:
+                listPrefix = template.split("_")
+                self.pyarchPrefix = "di_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
+
             if self.imageNoEnd - self.imageNoStart < 8:
                 #if self.imageNoEnd - self.imageNoStart < -1:
                 logger.error("There are fewer than 8 images, aborting")
                 self.setFailure()
                 return
+            
             logger.info(f"Starting:ending image numbers: {self.imageNoStart}:{self.imageNoEnd}")
+            logger.info(f"dataCollectionId: {self.dataCollectionId}")
 
             proteinAcronym, sampleName = UtilsIspyb.getProteinAcronymAndSampleNameFromDataCollectionId(self.dataCollectionId)
             if proteinAcronym is not None and sampleName is not None:
@@ -249,24 +268,7 @@ class Xia2DialsTask(AbstractTask):
             logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
 
         self.timeStart = datetime.now().isoformat(timespec="seconds")
-
-        # if inData.get("dataCollectionId") is not None:
-        #     #set ISPyB to running
-        #     self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
-        #         dataCollectionId=self.dataCollectionId,
-        #         processingCommandLine = self.processingCommandLine,
-        #         processingPrograms = self.processingPrograms,
-        #         isAnom = self.doAnom,
-        #         timeStart = self.timeStart)
         
-        # Determine pyarch prefix
-        if UtilsConfig.isALBA():
-            listPrefix = template.split("_")
-            self.pyarchPrefix = "di_{0}_{1}".format("_".join(listPrefix[:-2]),
-                                                       listPrefix[-2])
-        else:
-            listPrefix = template.split("_")
-            self.pyarchPrefix = "di_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
 
         if isH5:
             masterFilePath = os.path.join(directory,
@@ -276,123 +278,70 @@ class Xia2DialsTask(AbstractTask):
             self.setFailure()
             return
 
-        self.xia2DIALSExecDir: Path = self.getWorkingDirectory() / "Xia2DialsExec_0"
-        inc_x = 1
-        while self.xia2DIALSExecDir.is_dir():
-            self.xia2DIALSExecDir = self.getWorkingDirectory() / "Xia2DialsExec_{0}".format(inc_x)
-            inc_x += 1
-        self.xia2DIALSExecDir.mkdir(exist_ok=True,parents=True)
+        xia2DIALSExecinData = {
+            "masterFilePath" : masterFilePath,
+            "imageNoStart": self.imageNoStart,
+            "imageNoEnd" : self.imageNoEnd,
+            "proteinAcronym" : self.proteinAcronym,
+            "sampleName" : self.sampleName,
+            "spaceGroupNumber" : self.spaceGroupNumber,
+            "spaceGroupString" : self.spaceGroupString,
+            "unitCell" : self.unitCell,
+            "lowResLimit" : self.lowResLimit,
+            "highResLimit" : self.highResLimit,
+            "doAnom" : self.doAnom
+        }
+        try: 
+            self.integrationId,self.programId = createIntegrationId(
+                                    self, 
+                                    "Creating anomalous integration ID", 
+                                    isAnom=self.doAnom)
+        except Exception as e:
+            logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
+        logger.info(f"integrationID: {self.integrationId}, programId: {self.programId}")
 
+        self.logToIspyb(self.integrationId,
+                            'Indexing', 'Launched', 'Xia2 started')
 
-        xia2DialsSetup = UtilsConfig.get(self,"xia2DialsSetup", None)
-        xia2DialsExecutable = UtilsConfig.get(self,"xia2DialsExecutable", "xia2")
-        maxNoProcessors = UtilsConfig.get(self, "maxNoProcessors", os.cpu_count())
-        xia2DialsFastMode = distutils.util.strtobool(UtilsConfig.get(self,"xia2DialsFastMode"))
-
-        #prepare nproc, njobs for dials.integrate
-        dialsIntegratePhil = self.xia2DIALSExecDir / "dials_integrate.phil"
-        cpusPerJob = int(maxNoProcessors) // 8
-        numJobs = 4
-        with open(dialsIntegratePhil,'w') as fp:
-            fp.write(f"""integration {{
-    block {{
-        size = Auto
-        units = *degrees radians frames
-    }}
-    mp {{
-        nproc={cpusPerJob}
-        njobs={numJobs}
-    }}
-}}""")
-        
-        #set up command line
-        if xia2DialsSetup:
-            commandLine = f". {xia2DialsSetup} \n"
-        else:
-            commandLine = ""
-        commandLine += f" cd {self.xia2DIALSExecDir};"
-        commandLine += f" {xia2DialsExecutable}"
-        #add flags, if present
-        commandLine += " pipeline=dials"
-        # commandLine += f" working_directory={self.xia2DIALSExecDir}"
-        if self.doAnom:
-            commandLine += " atom=X"
-        commandLine += f" image={masterFilePath}:{self.imageNoStart}:{self.imageNoEnd}"
-        if maxNoProcessors:
-            commandLine += f" nproc={int(maxNoProcessors)}"
-
-        commandLine += f" project={self.proteinAcronym} crystal={self.sampleName}"
-
-        if xia2DialsFastMode:
-            commandLine += " dials.fast_mode=True"
-        if self.spaceGroupNumber != 0:
-            commandLine += f" space_group={self.spaceGroupString}"
-            commandLine += " unit_cell={cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}".format(**self.unitCell)
-
-        if self.lowResLimit is not None or self.highResLimit is not None:
-            low = self.lowResLimit if self.lowResLimit else 1000.0
-            high = self.highResLimit if self.highResLimit else 0.1
-            commandLine += f" resolution.d_min={low}"
-            commandLine += f" resolution.d_max={high}"
-        commandLine += f" integrate.mosaic=new dials.integrate.phil_file={dialsIntegratePhil}"
-        
-        # self.logToIspyb(self.integrationId,
-        #             'Indexing', 'Launched', 'Xia2Dials started')
-        
-        logger.info("xia2Dials command is {}".format(commandLine))
-
-        #try this timeout
-        pathToFinished = str(self.xia2DIALSExecDir / "DataFiles/xia2.cif")
-        logger.info("Waiting for end: {0}".format(pathToFinished))
-
-        waitFileFinished = WaitFileTask(inData= {
-            "file":pathToFinished,
-            "expectedSize": 100
-        })
-        waitFileFinished.run()
-        try:
-            self.runCommandLine(commandLine, listCommand=[])
-        except RuntimeError:
+        timeOut = inData.get("timeOut",None)
+        if timeOut is None:
+            timeOut = UtilsConfig.get(self,"timeOut",3600)
+        xia2DIALSExec = Xia2DialsExecTask(inData=xia2DIALSExecinData, workingDirectorySuffix="0")
+        xia2DIALSExec.setTimeout(timeOut)
+        xia2DIALSExec.execute()
+        if xia2DIALSExec.isFailure():
             self.setFailure()
             return
-        
-        self.endDateTime = datetime.now().isoformat(timespec="seconds")
+        self.timeEnd = datetime.now().isoformat(timespec="seconds")
+        self.logToIspyb(self.integrationId,
+            'Indexing', 'Successful', 'Xia2Dials finished')
 
-        return
-
-        for resultFile in Path(self.xia2DIALSExecDir / "DataFiles").glob("*"):
+        xia2DIALSExecDir = xia2DIALSExec.outData["workingDirectory"]
+        logger.debug(f"Working directory is {xia2DIALSExecDir}")
+        for resultFile in Path(str(xia2DIALSExecDir) + "/DataFiles").glob("*"):
             targetFile = self.resultsDirectory / f"{self.pyarchPrefix}_{resultFile.name}"
             UtilsPath.systemCopyFile(resultFile,targetFile)
 
-
         # run xia2.ispyb_json
-        xia2JsonIspybTask = Xia2JsonIspybTask(inData={"xia2DialsExecDir":str(self.xia2DIALSExecDir)}, workingDirectorySuffix="final")
+        xia2JsonIspybTask = Xia2JsonIspybTask(inData={"xia2DialsExecDir":str(xia2DIALSExecDir)}, workingDirectorySuffix="final")
         xia2JsonIspybTask.execute()
-
         xia2JsonFile = xia2JsonIspybTask.outData.get("ispyb_json",None)
 
         if xia2JsonFile is not None:
             logger.info("ispyb.json successfully created")
-        
-        xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
+            xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
 
-        xia2AutoProcContainer["dataCollectionId"] = self.dataCollectionId
-        xia2AutoProcContainer["autoProcProgram"]["autoProcProgramId"] = self.programId
-        xia2AutoProcContainer["autoProc"]["autoProcProgramId"] = self.programId
-        xia2AutoProcContainer["autoProcIntegration"]["autoProcIntegrationId"] = self.integrationId
-        xia2AutoProcContainer["autoProcIntegration"]["autoProcProgramId"] = self.programId
-        xia2AutoProcContainer["autoProcScalingHasInt"] = {
-            "autoProcIntegrationId" : self.integrationId
-        }
+            with open("xia2_ispyb.json","w") as fp:
+                json.dump(xia2AutoProcContainer,fp,indent=2)
 
-        self.logToIspyb(self.integrationId,
-                    'Indexing', 'Successful', 'Xia2Dials finished')
+            if self.dataCollectionId is not None:
+                ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
+                ispybStoreAutoProcResults.execute()
 
-
-        # ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
-        # ispybStoreAutoProcResults.execute()
-
+        if inData.get("test",False):
+            self.tmpdir.cleanup()
             
+
 
     def eiger_template_to_master(self, fmt):
         if UtilsConfig.isMAXIV():
@@ -432,17 +381,31 @@ class Xia2DialsTask(AbstractTask):
                 "bltimeStamp": datetime.now().isoformat(timespec='seconds'),
             }
         }
-    def loadAndFixJsonOutput(self,jsonFile):
-        """fixes some of the output from the xia2 JSON output."""
+        autoprocStatus = ISPyBStoreAutoProcStatus(inData=statusInput, workingDirectorySuffix="")
+        autoprocStatus.execute()
+
+    def loadAndFixJsonOutput(self,jsonFile, trunc_len=256):
+        """fixes some of the output from the xia2 JSON output
+        for submission to ISPyB."""
         autoProcContainer = {
-            "autoProcScalingStatistics" : []
+            "dataCollectionId" : self.dataCollectionId
         }
         with open(jsonFile,'r') as fp:
             jsonFile = json.load(fp)
-        
+
         autoProcContainer["autoProcProgram"] = jsonFile["AutoProcProgramContainer"]["AutoProcProgram"]
+        autoProcContainer["autoProcProgram"]["autoProcProgramId"] = self.programId
+
         autoProcContainer["autoProcProgram"]["processingPrograms"] = autoProcContainer["autoProcProgram"].pop("processingProgram")
+        autoProcContainer["autoProcProgram"]["processingCommandLine"] = ""
+        autoProcContainer["autoProcProgram"]["processingStatus"] = "SUCCESS"
+        autoProcContainer["autoProcProgram"]["processingPrograms"] = "xia2DIALS"
+        autoProcContainer["autoProcProgram"]["processingStartTime"] = self.timeStart
+        autoProcContainer["autoProcProgram"]["processingEndTime"] = self.timeEnd
+
         autoProcContainer["autoProc"] = jsonFile["AutoProc"]
+        autoProcContainer["autoProc"]["autoProcProgramId"] = self.programId
+
         autoProcContainer["autoProc"]["refinedCellA"] = autoProcContainer["autoProc"].pop("refinedCell_a")
         autoProcContainer["autoProc"]["refinedCellB"] = autoProcContainer["autoProc"].pop("refinedCell_b")
         autoProcContainer["autoProc"]["refinedCellC"] = autoProcContainer["autoProc"].pop("refinedCell_c")
@@ -451,6 +414,8 @@ class Xia2DialsTask(AbstractTask):
         autoProcContainer["autoProc"]["refinedCellGamma"] = autoProcContainer["autoProc"].pop("refinedCell_gamma")
 
         autoProcContainer["autoProcIntegration"] = jsonFile["AutoProcScalingContainer"]["AutoProcIntegrationContainer"][0]["AutoProcIntegration"]
+        autoProcContainer["autoProcIntegration"]["autoProcIntegrationId"] = self.integrationId
+        autoProcContainer["autoProcIntegration"]["autoProcProgramId"] = self.programId
         autoProcContainer["autoProcIntegration"]["cellA"] = autoProcContainer["autoProcIntegration"].pop("cell_a")
         autoProcContainer["autoProcIntegration"]["cellB"] = autoProcContainer["autoProcIntegration"].pop("cell_b")
         autoProcContainer["autoProcIntegration"]["cellC"] = autoProcContainer["autoProcIntegration"].pop("cell_c")
@@ -459,16 +424,126 @@ class Xia2DialsTask(AbstractTask):
         autoProcContainer["autoProcIntegration"]["cellGamma"] = autoProcContainer["autoProcIntegration"].pop("cell_gamma")
         autoProcContainer["autoProcIntegration"]["refinedXbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedXBeam")
         autoProcContainer["autoProcIntegration"]["refinedYbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedYBeam")
-        
 
+        # round up some values...
+        for k,v in autoProcContainer["autoProcIntegration"].items():
+            if isinstance(v,float):
+                autoProcContainer["autoProcIntegration"][k] = round(v,2)
+
+        autoProcContainer["autoProcScalingHasInt"] = {
+            "autoProcIntegrationId" : self.integrationId
+        }
         autoProcContainer["autoProcScalingStatistics"] = jsonFile["AutoProcScalingContainer"]["AutoProcScalingStatistics"]
 
-        autoProcContainer["autoProcScaling"] = jsonFile["AutoProcScalingContainer"]["AutoProcScaling"]
+        for shell in autoProcContainer["autoProcScalingStatistics"]:
+            shell["rmerge"] = shell.pop("rMerge")
+            shell["rmerge"] += 100.0
+            shell["ccAno"] = shell.pop("ccAnomalous")
+            shell["meanIoverSigI"] = shell.pop("meanIOverSigI")
+            shell["rmeasAllIplusIminus"] = shell.pop("rMeasAllIPlusIMinus")
+            shell["rmeasAllIplusIminus"] *= 100
+            shell["rmeasWithinIplusIminus"] = shell.pop("rMeasWithinIPlusIMinus")
+            shell["rmeasWithinIplusIminus"] *= 100
+            shell["rpimWithinIplusIminus"] = shell.pop("rPimWithinIPlusIMinus")
+            shell["rpimWithinIplusIminus"] *= 100
+            shell["rpimAllIplusIminus"] = shell.pop("rPimAllIPlusIMinus")
+            shell["rpimAllIplusIminus"] *= 100
+            for k,v in shell.items():
+                if isinstance(v,float):
+                    shell[k] = round(v,2)
+
+        autoProcAttachmentContainerList = []
+        for file in self.pyarchDirectory.iterdir():
+            attachmentContainer = {
+                "file" : file,
+            }
+            autoProcAttachmentContainerList.append(attachmentContainer)
+
+        autoProcContainer["autoProcProgramAttachment"] = autoProcAttachmentContainerList
 
 
         return autoProcContainer
 
+class Xia2DialsExecTask(AbstractTask):
+    def run(self, inData):
+        outData = {}
+        logger.debug(f"working directory is {self.getWorkingDirectory()}")
+        self.masterFilePath = inData["masterFilePath"]
+        self.imageNoStart = inData["imageNoStart"]
+        self.imageNoEnd = inData["imageNoEnd"]
+        self.proteinAcronym = inData["proteinAcronym"]
+        self.sampleName = inData["sampleName"]
 
+        self.spaceGroupNumber = inData.get("spaceGroupNumber",0)
+        self.spaceGroupString = inData.get("spaceGroupString","")
+
+        self.unitCell = inData.get("unitCell",None)
+        self.lowResLimit = inData.get("lowResolutionLimit",None)
+        self.highResLimit = inData.get("highResolutionLimit",None)
+        self.doAnom = inData.get("doAnom",False)
+
+        outData["workingDirectory"] = self.getWorkingDirectory()
+
+        xia2DialsSetup = UtilsConfig.get("Xia2DialsTask","xia2DialsSetup", None)
+        logger.debug(f"xia2DialsSetup: {xia2DialsSetup}")
+        xia2DialsExecutable = UtilsConfig.get("Xia2DialsTask","xia2DialsExecutable", "xia2")
+        maxNoProcessors = UtilsConfig.get("Xia2DialsTask", "maxNoProcessors", os.cpu_count())
+        xia2DialsFastMode = distutils.util.strtobool(UtilsConfig.get("Xia2DialsTask","xia2DialsFastMode"))
+
+        #prepare nproc, njobs for dials.integrate
+        dialsIntegratePhil = self.getWorkingDirectory() / "dials_integrate.phil"
+        cpusPerJob = 8
+        numJobs = 4
+        with open(dialsIntegratePhil,'w') as fp:
+            fp.write(f"""integration {{
+    block {{
+        size = Auto
+        units = *degrees radians frames
+    }}
+    mp {{
+        nproc={cpusPerJob}
+        njobs={numJobs}
+    }}
+}}""")
+        
+        #set up command line
+        if xia2DialsSetup:
+            commandLine = f". {xia2DialsSetup} \n"
+        else:
+            commandLine = ""
+        commandLine += f" {xia2DialsExecutable}"
+        #add flags, if present
+        commandLine += " pipeline=dials"
+        if self.doAnom:
+            commandLine += " atom=X"
+        commandLine += f" image={self.masterFilePath}:{self.imageNoStart}:{self.imageNoEnd}"
+        if maxNoProcessors:
+            commandLine += f" nproc={int(maxNoProcessors)}"
+
+        commandLine += f" project={self.proteinAcronym} crystal={self.sampleName}"
+
+        if xia2DialsFastMode:
+            commandLine += " dials.fast_mode=True"
+        if self.spaceGroupNumber != 0:
+            commandLine += f" space_group={self.spaceGroupString}"
+            commandLine += " unit_cell={cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}".format(**self.unitCell)
+
+        if self.lowResLimit is not None or self.highResLimit is not None:
+            low = self.lowResLimit if self.lowResLimit else 1000.0
+            high = self.highResLimit if self.highResLimit else 0.1
+            commandLine += f" resolution.d_min={low}"
+            commandLine += f" resolution.d_max={high}"
+        commandLine += f" integrate.mosaic=new dials.integrate.phil_file={dialsIntegratePhil}"
+        logger.info("xia2Dials command is {}".format(commandLine))
+
+        try:
+            self.runCommandLine(commandLine, listCommand=[])
+        except RuntimeError:
+            self.setFailure()
+            return
+        return outData
+
+        
 
 class Xia2JsonIspybTask(AbstractTask):
     def run(self, inData):

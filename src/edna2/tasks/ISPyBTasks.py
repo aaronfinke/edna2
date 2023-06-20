@@ -542,21 +542,21 @@ class ISPyBStoreAutoProcResults(AbstractTask):
                 "anomalousCompletenessEllipsoidal": None,
                 }
     
-    def getInDataSchema(self):
-        return {
-             "$ref": self.getSchemaUrl("ispybAutoprocIntegration.json")
-        }
+    # def getInDataSchema(self):
+    #     return {
+    #          "$ref": self.getSchemaUrl("ispybAutoprocIntegration.json")
+    #     }
     
-    def getOutDataSchema(self):
-        return {
-            "type":"object",
-            "properties": {
-                "autoProcId": {"type": ["integer","null"] },
-                "autoProcIntegrationId": {"type": ["integer","null"] },
-                "autoProcScalingId": {"type": ["integer","null"] },
-                "autoProcProgramId": {"type":["integer","null"] },
-            }
-        }
+    # def getOutDataSchema(self):
+    #     return {
+    #         "type":"object",
+    #         "properties": {
+    #             "autoProcId": {"type": ["integer","null"] },
+    #             "autoProcIntegrationId": {"type": ["integer","null"] },
+    #             "autoProcScalingId": {"type": ["integer","null"] },
+    #             "autoProcProgramId": {"type":["integer","null"] },
+    #         }
+    #     }
     
     def run(self,inData):
         outData = {
@@ -843,3 +843,33 @@ class ISPyBStoreAutoProcStatus(AbstractTask):
             "autoProcStatusId": autoProcStatusId,
             }
         return outData
+
+def createIntegrationId(task, comments, isAnom=False):
+    """
+    gets integrationID and programID, 
+    sets processing status to RUNNING.
+    """
+    statusInput = {
+        "dataCollectionId": task.dataCollectionId,
+        "autoProcIntegration" : {
+            "anomalous": isAnom,
+        },
+        "autoProcProgram": {
+            "processingCommandLine": task.processingCommandLine,
+            "processingPrograms": task.processingPrograms,
+            "processingStatus": "RUNNING",
+            "processingStartTime": task.startDateTime,
+        },
+        "autoProcStatus": {
+            "step":  "Indexing",
+            "status": "Launched",
+            "comments": comments,
+            "bltimeStamp": datetime.now().isoformat(timespec='seconds'),
+        }
+    }
+    autoprocStatus = ISPyBStoreAutoProcStatus(inData=statusInput,workingDirectorySuffix="createIntegrationId")
+
+    # get our EDNAproc status id
+    autoprocStatus.execute()
+    return (autoprocStatus.outData["autoProcIntegrationId"],
+            autoprocStatus.outData["autoProcProgramId"])

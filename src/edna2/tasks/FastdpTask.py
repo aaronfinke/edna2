@@ -72,6 +72,7 @@ class FastdpTask(AbstractTask):
             )
     
     def run(self, inData):
+        self.tmpdir = None
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
         self.processingPrograms="fast_dp"
@@ -175,19 +176,21 @@ class FastdpTask(AbstractTask):
         self.resultsDirectory.mkdir(exist_ok=True, parents=True, mode=0o755)
 
         #make pyarch directory 
-        reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
-        pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
-        self.pyarchDirectory = Path(pyarchDirectory)
-        try:
-            self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
-        except OSError as e:
-            logger.error(f"Error when creating pyarch_dir: {e}")
+        if inData.get("test",False):
             self.tmpdir = tempfile.TemporaryDirectory() 
             self.pyarchDirectory = Path(self.tmpdir.name)
+        else:
+            reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
+            pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
+            self.pyarchDirectory = Path(pyarchDirectory)
+            try:
+                self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
+                logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
+            except OSError as e:
+                logger.error(f"Error when creating pyarch_dir: {e}")
+                self.tmpdir = tempfile.TemporaryDirectory() 
+                self.pyarchDirectory = Path(self.tmpdir.name)
 
-        for file in self.resultsDirectory.iterdir():
-            pyarchFile = UtilsPath.createPyarchFilePath(file)
-            shutil.copy(file,pyarchFile)
         
         isH5 = False
         if any(beamline in pathToStartImage for beamline in ["id23eh1", "id29"]):
@@ -340,10 +343,6 @@ class FastdpTask(AbstractTask):
         with open(fastDpJson,"r") as fp:
             self.fastDpResults = json.load(fp)
 
-        autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
-        with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:
-            json.dump(autoProcResults, fp, indent=2,default=lambda o:str(o))
-
         # Add XDS_ASCII.HKL if present and gzip it
         pathToXdsAsciiHkl = self.fastDpResultFiles.get("xdsAsciiHkl")
         if pathToXdsAsciiHkl.exists():
@@ -365,6 +364,11 @@ class FastdpTask(AbstractTask):
         pyarchFastDpLog = self.pyarchPrefix + "_fast_dp.log"
         shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.resultsDirectory / pyarchFastDpLog)
         shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.pyarchDirectory / pyarchFastDpLog)
+
+        if not inData.get("test",False):
+            for file in self.resultsDirectory.iterdir():
+                pyarchFile = UtilsPath.createPyarchFilePath(file)
+                shutil.copy(file,pyarchFile)
         
         autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
         with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:

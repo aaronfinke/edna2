@@ -1,4 +1,4 @@
- #
+#
 # Copyright (c) European Synchrotron Radiation Facility (ESRF)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -19,34 +19,41 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-__authors__ = ["A. Finke"]
+__authors__ = ["O. Svensson"]
 __license__ = "MIT"
-__date__ = "15/05/2023"
-
-# Corresponding EDNA code:
-# https://github.com/olofsvensson/edna-mx
-# mxv1/src/EDHandlerESRFPyarchv1_0.py
+__date__ = "23/01/2023"
 
 import os
-import time
-import pathlib
-import tempfile
-import xmltodict
-import json
+import unittest
 
+from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 
+from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
+
 logger = UtilsLogging.getLogger()
 
-def jsonFromXML(filePath) -> str:
-    with open(filePath,"r") as fp:
-        xmlFile = fp.read()
-    orderedDict = xmltodict.parse(xmlFile)
-    return json.dumps(orderedDict)
+class Xia2DialsExecTest(unittest.TestCase):
 
-def dictfromXML(filePath) -> dict:
-    with open(filePath,"r") as fp:
-        xmlFile = fp.read()
-    orderedDict = xmltodict.parse(xmlFile)
-    return json.loads(json.dumps(orderedDict))
+    def setUp(self):
+        self.dataPath = UtilsTest.prepareTestDataPath(__file__)
+        
+    def test_execute_Edna2ProcTask(self):
+        referenceDataPath = self.dataPath / 'inDataXia2Dials_problems.json'
+        problemIdFile = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
+        problemIdList = problemIdFile["dataCollectionIds"]
+        for problemId in problemIdList:
+            logger.info(f"*** NEW SAMPLE ***: dataCollectionid {problemId}")
+            xia2DialsTask = Xia2DialsTask(inData={
+                "dataCollectionId": problemId,
+                "test":True,
+                "timeOut": 3600
+            })
+            xia2DialsTask.execute()
+            logger.info(f"*** END OF SAMPLE ***: dataCollectionid {problemId}")
+
+        # self.assertTrue(xia2DialsTask.isSuccess())
+
+if __name__ == '__main__':
+    unittest.main()

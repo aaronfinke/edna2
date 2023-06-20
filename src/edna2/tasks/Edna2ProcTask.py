@@ -117,6 +117,7 @@ class Edna2ProcTask(AbstractTask):
 
 
     def run(self, inData):
+        self.tmpdir = None
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
         self.processingPrograms="EDNA2_proc"
@@ -132,11 +133,9 @@ class Edna2ProcTask(AbstractTask):
 
 
         logger.info("EDNA2 Auto Processing started")
-        strHost = socket.gethostname()
-        logger.info(f"running on {strHost}")
+        logger.info(f"Running on {socket.gethostname()}")
         try:
-            strLoad = os.getloadavg()
-            logger.info("System load avg: {0}".format(strLoad))
+            logger.info(f"System load avg: {os.getloadavg()}")
         except OSError:
             pass
 
@@ -780,17 +779,24 @@ class Edna2ProcTask(AbstractTask):
 
         self.endDateTime = datetime.now().isoformat(timespec='seconds')
 
-        reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
-        pyarchDir = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
-        self.pyarchDir = Path(pyarchDir)
-        try:
-            self.pyarchDir.mkdir(exist_ok=True,parents=True)
-        except OSError as e:
-            logger.error(f"Error when creating pyarch_dir: {e}")
-            self.pyarchDir = self.resultsDirectory
-        for file in self.resultsDirectory.iterdir():
-            pyarchFile = UtilsPath.createPyarchFilePath(file)
-            shutil.copy(file,pyarchFile)
+        if inData.get("test",False):
+            self.tmpdir = tempfile.TemporaryDirectory() 
+            self.pyarchDirectory = Path(self.tmpdir.name)
+        else:
+            reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
+            pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
+            self.pyarchDirectory = Path(pyarchDirectory)
+            try:
+                self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
+                logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
+                for file in self.resultsDirectory.iterdir():
+                    pyarchFile = UtilsPath.createPyarchFilePath(file)
+                    shutil.copy(file,pyarchFile)
+            except OSError as e:
+                logger.error(f"Error when creating pyarch_dir: {e}")
+                self.tmpdir = tempfile.TemporaryDirectory() 
+                self.pyarchDirectory = Path(self.tmpdir.name)
+
 
         # Let's get results into a container for ispyb
         self.autoProcResultsContainerAnom = self.generateAutoProcScalingResultsContainer(
@@ -822,6 +828,9 @@ class Edna2ProcTask(AbstractTask):
 
         self.timeEnd = time.perf_counter()
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")
+        if inData.get("test",False):
+            self.tmpdir.cleanup()
+
         return 
         
 
@@ -855,7 +864,7 @@ class Edna2ProcTask(AbstractTask):
         autoProcResultsContainer["autoProc"] = autoProcContainer
 
         autoProcAttachmentContainerList = []
-        for file in self.pyarchDir.iterdir():
+        for file in self.pyarchDirectory.iterdir():
             attachmentContainer = {
                 "file" : file,
             }

@@ -33,29 +33,33 @@ from edna2.utils import UtilsLogging
 from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
 
 logger = UtilsLogging.getLogger()
+import tracemalloc
 
 class Xia2DialsExecTest(unittest.TestCase):
 
     def setUp(self):
+        tracemalloc.start()
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_execute_Edna2ProcTask(self):
         referenceDataPath = self.dataPath / 'inDataXia2Dials.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
-        edna2proctask = Xia2DialsTask(inData=inData)
-        edna2proctask.execute()
-        self.assertTrue(edna2proctask.isSuccess())
+        inData["timeOut"] = 1800
+        xia2DialsTask = Xia2DialsTask(inData=inData)
+        xia2DialsTask.execute()
+        self.assertTrue(xia2DialsTask.isSuccess())
         
     # def test_execute_Edna2ProcTask(self):
     #     referenceDataPath = self.dataPath / 'inDataXia2Dials_problems.json'
     #     problemIdFile = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
     #     problemIdList = problemIdFile["dataCollectionIds"]
     #     for problemId in problemIdList:
-    #         edna2proctask = Xia2DialsTask(inData={
+    #         xia2DialsTask = Xia2DialsTask(inData={
     #             "dataCollectionId": problemId,
-    #             "test":True
+    #             "test":True,
+    #             "timeOut": 1800
     #         })
-    #         edna2proctask.execute()
+    #         xia2DialsTask.execute()
         # self.assertTrue(edna2proctask.isSuccess())
 
 if __name__ == '__main__':

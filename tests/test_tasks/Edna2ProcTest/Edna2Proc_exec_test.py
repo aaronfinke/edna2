@@ -26,6 +26,8 @@ __date__ = "23/01/2023"
 import os
 import unittest
 
+import tracemalloc
+
 from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
@@ -37,6 +39,7 @@ logger = UtilsLogging.getLogger()
 class Edna2ProcExecTest(unittest.TestCase):
 
     def setUp(self):
+        tracemalloc.start()
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_execute_Edna2ProcTask(self):
