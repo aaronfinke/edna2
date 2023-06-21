@@ -310,6 +310,8 @@ class Xia2DialsTask(AbstractTask):
         xia2DIALSExec.setTimeout(timeOut)
         xia2DIALSExec.execute()
         if xia2DIALSExec.isFailure():
+            if xia2DIALSExec["timeoutExit"] == True:
+                logger.error(f"Operation timed out after {timeOut} s.")
             self.setFailure()
             return
         self.timeEnd = datetime.now().isoformat(timespec="seconds")
