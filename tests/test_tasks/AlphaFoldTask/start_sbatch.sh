@@ -1,4 +1,4 @@
-#SBATCH --exclusive
+#!/bin/bash
 module purge
 module add fosscuda/2020b AlphaFold
 export ALPHAFOLD_DATA_DIR=/sw/pkg/miv/mx/db/alphafold-2021b

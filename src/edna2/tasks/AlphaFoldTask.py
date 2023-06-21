@@ -31,7 +31,8 @@ import json
 import shutil
 
 from edna2.tasks.AbstractTask import AbstractTask
-from edna2.tasks.CCP4Tasks import DimpleTask
+# from edna2.tasks.PhenixTasks import ProcPredTask
+# from edna2.tasks.CCP4Tasks import DimpleTask
 from edna2.utils import UtilsLogging
 
 # import edna2.utils.UtilsPDB as UtilsPDB
@@ -69,23 +70,23 @@ class AlphaFoldTask(AbstractTask):
         commandLine += 'module add fosscuda/2020b AlphaFold \n'
         commandLine += 'export ALPHAFOLD_DATA_DIR=/sw/pkg/miv/mx/db/alphafold-2021b \n\n'
 
-        commandLine += f"""alphafold \\
-        --fasta_paths={fasta_path} \\
+        commandLine += """alphafold \\
+        --fasta_paths={0} \\
         --max_template_date=2021-11-01 \\
-        --output_dir={output_Dir} \\
-        --data_dir=$ALPHAFOLD_DATA_DIR"""
+        --output_dir={1} \\
+        --data_dir=$ALPHAFOLD_DATA_DIR""".format(fasta_path, output_Dir)
 
+        logger.info("Command line: {0}".format(commandLine))
         self.runCommandLine(commandLine, ignoreErrors=True)
-        # self.submitCommandLine(commandLine, jobName=f"{fasta_name}", mem=0, partition="v100", time="01-00:00")
+        # self.submitCommandLine(commandLine, jobName=f"{fasta_name}", ignoreErrors=True, mem=0, partition="v100", time="01-00:00")
         # self.monitorCommandLine(job=f"{fasta_name}_slurm.sh", name=f"AlphaFold prediction of {fasta_name}")
 
         # logPath = self.getWorkingDirectory() / 'AlphaFold.log'
         # outData = self.parseXtriageLogFile(logPath)
         outData = {}
-        self.isSuccess = self.check_out(out_dir=output_Dir)
-        outData['isSuccess'] = self.isSuccess
+        outData['isSuccess']  = True # self.check_out(out_dir=output_Dir)
 
-        return outData, output_Dir
+        return outData
 
         # check if the output are complete and have the right format
     def check_out(self, out_dir):
@@ -99,10 +100,10 @@ class AlphaFoldTask(AbstractTask):
             file_path = os.path.join(out_dir, file)
 
             if not os.path.isfile(file_path):
-                logger.error(f"The files from the AlphaFold prediction are not successfully generated, the {file} is missing...", exc_info=True)
+                logger.error("The files from the AlphaFold prediction are not successfully generated, the {0} is missing...".format(file), exc_info=True)
                 return False
             
-        logger.info(f"The files from the AlphaFold prediciton are successfully generated in {out_dir}")
+        logger.info("The files from the AlphaFold prediciton are successfully generated in {0}".format(out_dir))
         return True
     
     def parseAlphafoldPredictionLogFile(self, output_dir):

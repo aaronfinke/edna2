@@ -51,6 +51,7 @@ class AlphaFoldTaskExecTest(unittest.TestCase):
         alphaFoldTask.execute() 
         self.assertTrue(alphaFoldTask.isSuccess())
         outData = alphaFoldTask.outData
+        print(outData)
         self.assertTrue(outData['isSuccess'])
         
 if __name__ == '__main__':
