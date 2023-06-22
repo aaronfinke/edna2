@@ -49,7 +49,6 @@ class AlphaFoldTask(AbstractTask):
     def run(self, inData):
         fasta_path = inData.get("fasta_path")
         output_Dir = self._workingDirectory 
-        # ALPHAFOLD_DATA_DIR = os.environ.get('ALPHAFOLD_DATA_DIR', None)
     
         try:
             with open(fasta_path, mode="r") as file:
@@ -70,21 +69,21 @@ class AlphaFoldTask(AbstractTask):
         commandLine += 'module add fosscuda/2020b AlphaFold \n'
         commandLine += 'export ALPHAFOLD_DATA_DIR=/sw/pkg/miv/mx/db/alphafold-2021b \n\n'
 
-        commandLine += """alphafold \\
-        --fasta_paths={0} \\
-        --max_template_date=2021-11-01 \\
-        --output_dir={1} \\
-        --data_dir=$ALPHAFOLD_DATA_DIR""".format(fasta_path, output_Dir)
+        commandLine += 'alphafold '
+        commandLine += f'--fasta_paths={fasta_path} '
+        commandLine += f'--max_template_date=2021-11-01 '
+        commandLine += f'--output_dir={output_Dir} '
+        commandLine += '--data_dir=$ALPHAFOLD_DATA_DIR'
 
         logger.info("Command line: {0}".format(commandLine))
         self.runCommandLine(commandLine, ignoreErrors=True)
         # self.submitCommandLine(commandLine, jobName=f"{fasta_name}", ignoreErrors=True, mem=0, partition="v100", time="01-00:00")
         # self.monitorCommandLine(job=f"{fasta_name}_slurm.sh", name=f"AlphaFold prediction of {fasta_name}")
 
-        # logPath = self.getWorkingDirectory() / 'AlphaFold.log'
-        # outData = self.parseXtriageLogFile(logPath)
+        outputDir = str(pathlib.Path(output_Dir).resolve())+f'/{fasta_name}'
         outData = {}
-        outData['isSuccess']  = True # self.check_out(out_dir=output_Dir)
+        outData['outputDir'] = outputDir
+        outData['isSuccess'] = self.check_out(out_dir=outputDir)
 
         return outData
 
