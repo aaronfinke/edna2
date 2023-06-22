@@ -294,7 +294,7 @@ class Xia2DialsTask(AbstractTask):
         try: 
             self.integrationId,self.programId = createIntegrationId(
                                     self, 
-                                    "Creating anomalous integration ID", 
+                                    "Creating integration ID", 
                                     isAnom=self.doAnom)
         except Exception as e:
             logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
@@ -324,6 +324,10 @@ class Xia2DialsTask(AbstractTask):
             targetFile = self.resultsDirectory / f"{self.pyarchPrefix}_{resultFile.name}"
             UtilsPath.systemCopyFile(resultFile,targetFile)
 
+        for file in self.resultsDirectory.glob("*"):
+            targetFile = self.pyarchDirectory / file.name
+            UtilsPath.systemCopyFile(file,targetFile)
+
         # run xia2.ispyb_json
         xia2JsonIspybTask = Xia2JsonIspybTask(inData={"xia2DialsExecDir":str(xia2DIALSExecDir)}, workingDirectorySuffix="final")
         xia2JsonIspybTask.execute()
@@ -333,8 +337,8 @@ class Xia2DialsTask(AbstractTask):
             logger.info("ispyb.json successfully created")
             xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
 
-            with open("xia2_ispyb.json","w") as fp:
-                json.dump(xia2AutoProcContainer,fp,indent=2)
+            # with open("xia2_ispyb.json","w") as fp:
+            #     json.dump(xia2AutoProcContainer,fp,indent=2)
 
             if self.dataCollectionId is not None:
                 ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
@@ -426,11 +430,17 @@ class Xia2DialsTask(AbstractTask):
         autoProcContainer["autoProcIntegration"]["cellGamma"] = autoProcContainer["autoProcIntegration"].pop("cell_gamma")
         autoProcContainer["autoProcIntegration"]["refinedXbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedXBeam")
         autoProcContainer["autoProcIntegration"]["refinedYbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedYBeam")
+        autoProcContainer["autoProcIntegration"]["anomalous"] = self.doAnom
+        autoProcContainer["autoProcIntegration"]["dataCollectionId"] = self.dataCollectionId
+
 
         # round up some values...
         for k,v in autoProcContainer["autoProcIntegration"].items():
             if isinstance(v,float):
-                autoProcContainer["autoProcIntegration"][k] = round(v,2)
+                if any(x for x in ["cellA","cellB","cellC"] if x in k):
+                    autoProcContainer["autoProcIntegration"][k] = round(v,3)
+                else:
+                    autoProcContainer["autoProcIntegration"][k] = round(v,2)
 
         autoProcContainer["autoProcScalingHasInt"] = {
             "autoProcIntegrationId" : self.integrationId
@@ -439,20 +449,23 @@ class Xia2DialsTask(AbstractTask):
 
         for shell in autoProcContainer["autoProcScalingStatistics"]:
             shell["rmerge"] = shell.pop("rMerge")
-            shell["rmerge"] += 100.0
             shell["ccAno"] = shell.pop("ccAnomalous")
             shell["meanIoverSigI"] = shell.pop("meanIOverSigI")
             shell["rmeasAllIplusIminus"] = shell.pop("rMeasAllIPlusIMinus")
-            shell["rmeasAllIplusIminus"] *= 100
             shell["rmeasWithinIplusIminus"] = shell.pop("rMeasWithinIPlusIMinus")
-            shell["rmeasWithinIplusIminus"] *= 100
             shell["rpimWithinIplusIminus"] = shell.pop("rPimWithinIPlusIMinus")
-            shell["rpimWithinIplusIminus"] *= 100
             shell["rpimAllIplusIminus"] = shell.pop("rPimAllIPlusIMinus")
-            shell["rpimAllIplusIminus"] *= 100
+
             for k,v in shell.items():
+                if any(x for x in ["rmerge","rmeas","rpim"] if x in k):
+                    shell[k] *= 100
                 if isinstance(v,float):
-                    shell[k] = round(v,2)
+                    if any(x for x in ["cellA","cellB","cellC"] if x in k):
+                        autoProcContainer["autoProcIntegration"][k] = round(v,3)
+                    else:
+                        shell[k] = round(v,2)
+
+
 
         autoProcAttachmentContainerList = []
         for file in self.pyarchDirectory.iterdir():

@@ -353,7 +353,8 @@ class AutoPROCTask(AbstractTask):
             autoProcContainer = self.autoPROCXMLtoISPyBdict(xml_path=ispybXml, data_collection_id=self.dataCollectionId, 
                                                             program_id=self.programId, 
                                                             integration_id=self.integrationId,
-                                                            processing_programs= self.processingPrograms)
+                                                            processing_programs= self.processingPrograms,
+                                                            anomalous=self.doAnom)
 
         ispybXmlStaraniso = self.autoPROCExecDir / "autoPROC_staraniso.xml"
         if ispybXmlStaraniso.is_file():
@@ -361,7 +362,8 @@ class AutoPROCTask(AbstractTask):
             autoProcContainerStaraniso = self.autoPROCXMLtoISPyBdict(xml_path=ispybXmlStaraniso, data_collection_id=self.dataCollectionId, 
                                                                      program_id=self.programIdStaraniso, 
                                                                      integration_id=self.integrationIdStaraniso,
-                                                                     processing_programs=self.processingProgramsStaraniso)
+                                                                     processing_programs=self.processingProgramsStaraniso,
+                                                                     anomalous=self.doAnom)
 
         #get CIF Files and gzip them
         autoPROCStaranisoAllCif = self.autoPROCExecDir / "Data_1_autoPROC_STARANISO_all.cif"
@@ -491,7 +493,7 @@ class AutoPROCTask(AbstractTask):
         return 
     
     @staticmethod
-    def autoPROCXMLtoISPyBdict(xml_path, data_collection_id=None, program_id=None, integration_id=None, processing_programs=None, trunc_len=256):
+    def autoPROCXMLtoISPyBdict(xml_path, data_collection_id=None, program_id=None, integration_id=None, processing_programs=None, anomalous=False, trunc_len=256):
         dict_data = UtilsXML.dictfromXML(xml_path)
         autoProcXMLContainer = dict_data["AutoProcContainer"]
         autoProcContainer = {
@@ -549,6 +551,7 @@ class AutoPROCTask(AbstractTask):
         autoProcContainer["autoProcIntegration"]["cellGamma"] = autoProcContainer["autoProcIntegration"].pop("cell_gamma")
         autoProcContainer["autoProcIntegration"]["refinedXbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedXBeam")
         autoProcContainer["autoProcIntegration"]["refinedYbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedYBeam")
+        autoProcContainer["autoProcIntegration"]["anomalous"] = anomalous
 
         autoProcScalingHasIntContainer = {
             "autoProcIntegrationId" : integration_id,
