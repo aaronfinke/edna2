@@ -318,15 +318,31 @@ class Xia2DialsTask(AbstractTask):
         self.logToIspyb(self.integrationId,
             'Indexing', 'Successful', 'Xia2Dials finished')
 
-        xia2DIALSExecDir = xia2DIALSExec.outData["workingDirectory"]
+        xia2DIALSExecDir = Path(xia2DIALSExec.outData["workingDirectory"])
         logger.debug(f"Working directory is {xia2DIALSExecDir}")
-        for resultFile in Path(str(xia2DIALSExecDir) + "/DataFiles").glob("*"):
+
+        for resultFile in Path(xia2DIALSExecDir / "DataFiles").glob("*"):
             targetFile = self.resultsDirectory / f"{self.pyarchPrefix}_{resultFile.name}"
             UtilsPath.systemCopyFile(resultFile,targetFile)
+        
+        for logFile in Path(xia2DIALSExecDir / "LogFiles").glob("*"):
+            targetFile = self.resultsDirectory / f"{self.pyarchPrefix}_{logFile.name}"
+            UtilsPath.systemCopyFile(logFile,targetFile)
+
+        xia2Html = xia2DIALSExecDir /  "xia2.html"
+        if xia2Html.exists():
+            targetFile = self.resultsDirectory / f"{self.pyarchPrefix}_{xia2Html.name}"
+            UtilsPath.systemCopyFile(xia2Html,targetFile)
+        
+        xia2Txt = xia2DIALSExecDir /  "xia2.txt"
+        if xia2Txt.exists():
+            targetFile = self.resultsDirectory / f"{self.pyarchPrefix}_{xia2Txt.name}"
+            UtilsPath.systemCopyFile(xia2Txt,targetFile)
 
         for file in self.resultsDirectory.glob("*"):
             targetFile = self.pyarchDirectory / file.name
             UtilsPath.systemCopyFile(file,targetFile)
+
 
         # run xia2.ispyb_json
         xia2JsonIspybTask = Xia2JsonIspybTask(inData={"xia2DialsExecDir":str(xia2DIALSExecDir)}, workingDirectorySuffix="final")
@@ -336,9 +352,6 @@ class Xia2DialsTask(AbstractTask):
         if xia2JsonFile is not None:
             logger.info("ispyb.json successfully created")
             xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
-
-            # with open("xia2_ispyb.json","w") as fp:
-            #     json.dump(xia2AutoProcContainer,fp,indent=2)
 
             if self.dataCollectionId is not None:
                 ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
@@ -447,24 +460,27 @@ class Xia2DialsTask(AbstractTask):
         }
         autoProcContainer["autoProcScalingStatistics"] = jsonFile["AutoProcScalingContainer"]["AutoProcScalingStatistics"]
 
+        try:
+            Isa = self.getIsa()
+        except:
+            logger.error("Could not get Isa value from logs.")
+            Isa = None
+
+
         for shell in autoProcContainer["autoProcScalingStatistics"]:
-            shell["rmerge"] = shell.pop("rMerge")
+            shell["rmerge"] = shell.pop("rMerge") * 100
             shell["ccAno"] = shell.pop("ccAnomalous")
             shell["meanIoverSigI"] = shell.pop("meanIOverSigI")
-            shell["rmeasAllIplusIminus"] = shell.pop("rMeasAllIPlusIMinus")
-            shell["rmeasWithinIplusIminus"] = shell.pop("rMeasWithinIPlusIMinus")
-            shell["rpimWithinIplusIminus"] = shell.pop("rPimWithinIPlusIMinus")
-            shell["rpimAllIplusIminus"] = shell.pop("rPimAllIPlusIMinus")
+            shell["rmeasAllIplusIminus"] = shell.pop("rMeasAllIPlusIMinus") * 100
+            shell["rmeasWithinIplusIminus"] = shell.pop("rMeasWithinIPlusIMinus") * 100
+            shell["rpimWithinIplusIminus"] = shell.pop("rPimWithinIPlusIMinus") * 100
+            shell["rpimAllIplusIminus"] = shell.pop("rPimAllIPlusIMinus") * 100
+            if shell["scalingStatisticsType"] == "overall":
+                shell["isa"] = round(float(Isa),2)
 
             for k,v in shell.items():
-                if any(x for x in ["rmerge","rmeas","rpim"] if x in k):
-                    shell[k] *= 100
                 if isinstance(v,float):
-                    if any(x for x in ["cellA","cellB","cellC"] if x in k):
-                        autoProcContainer["autoProcIntegration"][k] = round(v,3)
-                    else:
-                        shell[k] = round(v,2)
-
+                    shell[k] = round(v,2)
 
 
         autoProcAttachmentContainerList = []
@@ -478,6 +494,16 @@ class Xia2DialsTask(AbstractTask):
 
 
         return autoProcContainer
+    
+    def getIsa(self):
+        """extract the last estimated Isa value from _SCALE.log file."""
+        Isa = None
+        for scaleLogFile in self.resultsDirectory.glob("*SCALE.log"):
+            with open(scaleLogFile,"r") as fp:
+                for line in fp:
+                    if "estimated I/sigma asymptotic limit" in line:
+                        Isa = line.split()[-1]
+        return Isa
 
 class Xia2DialsExecTask(AbstractTask):
     def run(self, inData):
@@ -497,7 +523,7 @@ class Xia2DialsExecTask(AbstractTask):
         self.highResLimit = inData.get("highResolutionLimit",None)
         self.doAnom = inData.get("doAnom",False)
 
-        outData["workingDirectory"] = self.getWorkingDirectory()
+        outData["workingDirectory"] = str(self.getWorkingDirectory())
 
         xia2DialsSetup = UtilsConfig.get("Xia2DialsTask","xia2DialsSetup", None)
         logger.debug(f"xia2DialsSetup: {xia2DialsSetup}")

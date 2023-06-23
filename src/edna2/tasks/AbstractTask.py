@@ -331,8 +331,9 @@ class AbstractTask():  # noqa R0904
         self._process.start()
 
     def join(self):
-        logger.debug(f"timeout for {self}: {self.getTimeout()}")
         timeOut = self.getTimeout()
+        if timeOut is not None:
+            logger.debug(f"timeout for {self}: {timeOut}")
         self._process.join(timeout=timeOut)
         # deal with timeouts
         if self._process.exitcode is None:

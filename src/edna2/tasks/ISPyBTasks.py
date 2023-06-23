@@ -625,7 +625,7 @@ class ISPyBStoreAutoProcResults(AbstractTask):
                 cellAlpha=autoProcIntegrationData.get("cellAlpha"),
                 cellBeta=autoProcIntegrationData.get("cellBeta"),
                 cellGamma=autoProcIntegrationData.get("cellGamma"),
-                anomalous=autoProcIntegrationData.get("anomalous"),
+                anomalous=autoProcIntegrationData.get("anomalous", False),
                 dataCollectionId=dataCollectionId,
                 client=client)
         if autoProcIntegrationId is None:
@@ -825,7 +825,7 @@ class ISPyBStoreAutoProcStatus(AbstractTask):
                 client=client,
                 dataCollectionId=dataCollectionId,
                 autoProcProgramId=autoProcProgramId,
-                anomalous=autoProcIntegration.get("anomalous")
+                anomalous=autoProcIntegration.get("anomalous", False)
             )
         autoProcStatusId = UtilsIspyb.storeOrUpdateAutoProcStatus(
             client=client,
