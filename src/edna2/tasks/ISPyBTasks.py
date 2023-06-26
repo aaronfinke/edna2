@@ -770,6 +770,29 @@ class ISPyBStoreAutoProcResults(AbstractTask):
 
         return autoProcStoreIspybResults.outData["autoProcIntegrationId"], autoProcStoreIspybResults.outData["autoProcProgramId"]
 
+    @staticmethod
+    def setIspybToTimeout(dataCollectionId=None, autoProcProgramId=None, autoProcIntegrationId=None, processingCommandLine=None, processingPrograms=None, isAnom=False, timeStart=None, timeEnd=None):
+        inputStoreAutoProcAnom = {
+            "dataCollectionId": dataCollectionId,
+            "autoProcProgram":  {
+                "autoProcProgramId": autoProcProgramId,
+                "processingCommandLine": processingCommandLine,
+                "processingPrograms": processingPrograms,
+                "processingStatus": "TIMEOUT",
+                "processingStartTime": timeStart,
+                "processingEndTime": timeEnd,
+                },
+            "autoProcIntegration" : {
+                "anomalous":isAnom,
+                "autoProcIntegrationId" : autoProcIntegrationId,
+            }
+        }
+        autoProcStoreIspybResults = ISPyBStoreAutoProcResults(inData=inputStoreAutoProcAnom, workingDirectorySuffix="setFailed")
+        autoProcStoreIspybResults.execute()
+
+        return autoProcStoreIspybResults.outData["autoProcIntegrationId"], autoProcStoreIspybResults.outData["autoProcProgramId"]
+
+
 class ISPyBStoreAutoProcStatus(AbstractTask):
     def getOutDataSchema(self):
         return {

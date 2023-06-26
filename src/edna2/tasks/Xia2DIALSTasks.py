@@ -70,10 +70,11 @@ class Xia2DialsTask(AbstractTask):
                     timeStart=self.startDateTime, 
                     timeEnd=datetime.now().isoformat(timespec="seconds")
                 )
-                self.logToIspyb(self.integrationId,
-                    'Indexing', 'Failed', 'AutoPROC ended')
+            self.logToIspyb(self.integrationId,
+                'Indexing', 'Failed', 'Xia2DIALS ended')
 
     def run(self, inData):
+        logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
@@ -303,7 +304,7 @@ class Xia2DialsTask(AbstractTask):
         self.logToIspyb(self.integrationId,
                             'Indexing', 'Launched', 'Xia2 started')
 
-        timeOut = inData.get("timeOut",None)
+        timeOut = inData.get("timeout",None)
         if timeOut is None:
             timeOut = UtilsConfig.get(self,"timeOut",3600)
         xia2DIALSExec = Xia2DialsExecTask(inData=xia2DIALSExecinData, workingDirectorySuffix="0")
