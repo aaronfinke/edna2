@@ -72,23 +72,27 @@ class AlphaFoldTask(AbstractTask):
         commandLine += 'alphafold '
         commandLine += f'--fasta_paths={fasta_path} '
         commandLine += f'--max_template_date=2021-11-01 '
+        commandLine += f'--model_preset=monomer '
         commandLine += f'--output_dir={output_Dir} '
         commandLine += '--data_dir=$ALPHAFOLD_DATA_DIR'
 
         logger.info("Command line: {0}".format(commandLine))
-        self.runCommandLine(commandLine, ignoreErrors=True)
+        logPath = self.getWorkingDirectory() / 'AlphaFold.log'
+        self.runCommandLine(commandLine, ignoreErrors=True, logPath=logPath)
         # self.submitCommandLine(commandLine, jobName=f"{fasta_name}", ignoreErrors=True, mem=0, partition="v100", time="01-00:00")
         # self.monitorCommandLine(job=f"{fasta_name}_slurm.sh", name=f"AlphaFold prediction of {fasta_name}")
 
         outputDir = str(pathlib.Path(output_Dir).resolve())+f'/{fasta_name}'
         outData = {}
         outData['outputDir'] = outputDir
-        outData['isSuccess'] = self.check_out(out_dir=outputDir)
+
+        outData['AlphaFoldResults'] = self.parseAlphafoldResultFiles(outputDir)
+        outData['isSuccess'] = self.check_out(outputDir)
 
         return outData
 
         # check if the output are complete and have the right format
-    def check_out(self, out_dir):
+    def check_out(self, output_dir):
         """
         Check if all output files are created (first one or ranked_0 is the most relevant in the pipeline)
         """
@@ -96,20 +100,29 @@ class AlphaFoldTask(AbstractTask):
 
         # Check if all files are present in the directory
         for file in files_to_check:
-            file_path = os.path.join(out_dir, file)
+            file_path = os.path.join(output_dir, file)
 
             if not os.path.isfile(file_path):
                 logger.error("The files from the AlphaFold prediction are not successfully generated, the {0} is missing...".format(file), exc_info=True)
                 return False
             
-        logger.info("The files from the AlphaFold prediciton are successfully generated in {0}".format(out_dir))
+        logger.info("The files from the AlphaFold prediciton are successfully generated in {0}".format(output_dir))
         return True
     
-    def parseAlphafoldPredictionLogFile(self, output_dir):
+    def parseAlphafoldLogFile(self, pathToLogFile: pathlib.Path):
+        outData = {
+            "logPath" : str(pathToLogFile)
+        }
+
+        if pathToLogFile.is_file():
+            with open(pathToLogFile,'r') as logfile:
+                pass
+    
+    def parseAlphafoldResultFiles(self, output_dir):
         """
         Extract AlphaFold prediction information
         """
-
+        # overall/features information
             #  dict_keys (['aatype'
             # 'between_segment_residues',
             # 'domain_name',
@@ -123,27 +136,22 @@ class AlphaFoldTask(AbstractTask):
             # 'template_ domain_names'
             # 'template sequence',
             # 'template_sum_probs'])
-        AlphaFoldResults = {
-            "overall/features" : {
-                "featuresTime" : None,
-                "DomainName" : None,
-                "Template_ domain_names": None
-            },
+        
+        # ProteinModels / model speficic information
             # dict_keys (['distogram', 'experimentally_ resolved', 'masked msa',
             # 'predicted_aligned_error', "predicted dot'. structure module"
             # 'olddt'. 'alianed confidence probs'
             # 'max_predicted_aligned_error', 'ptm',
             # 'iptm', 'ranking_confidence'])
+
+        AlphaFoldResults = {
+            "overall/features" : {
+            },
+
             "ProteinModels": {
-                "result_model_1(ranked_0)" : None,
-                "result_model_2(ranked_1)" : None,
-                "result_model_3(ranked_2)" : None,
-                "result_model_4(ranked_3)" : None,
-                "result_model_5(ranked_5)" : None,
             },
         }
 
-        extract = []
         # open features.pkl
         try:
             feature_dict = pickle.load(open(f"{output_dir}/features.pkl", "rb"))
@@ -152,23 +160,41 @@ class AlphaFoldTask(AbstractTask):
             return None
         
         AlphaFoldResults["overall/features"]["DomainName"] = feature_dict["domain_name"]
-        AlphaFoldResults["overall/features"]["featuyy"] = feature_dict["domain_name"]
-        AlphaFoldResults["overall/features"]["DomainName"] = feature_dict["domain_name"]
-        AlphaFoldResults["overall/features"]["featuyy"] = feature_dict["domain_name"]
-        AlphaFoldResults["overall/features"]["DomainName"] = feature_dict["domain_name"]
-        AlphaFoldResults["overall/features"]["featuyy"] = feature_dict["domain_name"]
+        AlphaFoldResults["overall/features"]["SequenceLength"] = feature_dict["seq_length"][0]
+        AlphaFoldResults["overall/features"]["Sequence"] = feature_dict["sequence"]
+        AlphaFoldResults["overall/features"]["NumberOfAlignments"] = feature_dict["num_alignments"]
+
+
+        AlphaFoldResults["overall/features"]["TemplateDomains"] = {}
+
+        AlphaFoldResults["overall/features"]["TemplateDomains"]["NumberOfTemplateDomains"] = feature_dict["template_sum_probs"]
+
+        for name, sequence in zip(
+            feature_dict["template_domain_names"],
+            feature_dict["template_sequence"]
+        ):
+            AlphaFoldResults["overall/features"]["TemplateDomains"][name] = sequence
 
         # open ranking_debug and model information
         try:
             with open(f"{output_dir}/ranking_debug.json","r") as file:
                 ranking_dict = json.load(file)
+
+                for model in ranking_dict["order"]:
+                    if model in ranking_dict["plddts"].keys():
+                        key = f"result_{model}(ranked_{ranking_dict['order'].index(model)})"
+                        AlphaFoldResults["ProteinModels"][key] = {
+                            "plddt": ranking_dict["plddts"][model]
+                        }
         except:
             logger.error("ranking_debug.json log file could not be parsed")
             return None
-        
+
         try:
             with open(f"{output_dir}/timings.json","r") as file:
                 timings_dict = json.load(file)
+
+                AlphaFoldResults["overall/features"]["featuresTime"] = timings_dict["features"]
         except:
             logger.error("timings.json log file could not be parsed")
             return None
@@ -181,9 +207,3 @@ class AlphaFoldTask(AbstractTask):
                 return None
         
         return AlphaFoldResults
-        
-class visualizeProteinPrediction(AbstractTask):
-    """
-    Visualize and interpret predicted proteins
-    """
-    pass
