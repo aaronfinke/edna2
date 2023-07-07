@@ -16,3 +16,4 @@ dist/*.egg
 *.out
 *.err
 build
+config/local_aaron.ini

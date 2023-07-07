@@ -31,6 +31,7 @@ import os
 import re
 import fabio
 import pathlib
+import h5py
 from edna2.utils import UtilsConfig
 
 def __compileAndMatchRegexpTemplate(pathToImage):
@@ -206,3 +207,30 @@ def mergeCbfInDirectory(cbfDirectory, prefix=None, newPrefix=None):
         )
         mergeCbf(list_image, new_cbf_path)
         image_number += 1
+
+def getNumberOfImages(masterFilePath):
+    """Given an h5 master file, generate an image list for SubWedgeAssembly."""
+    numImages = None
+    masterFilePath = pathlib.Path(masterFilePath)
+    with h5py.File(masterFilePath,'r') as fp:
+        depends_on = fp['/entry/sample/depends_on'][()].decode()
+        numImages = len(fp[depends_on][()])
+    return numImages
+
+
+
+
+def generateImageListFromH5Master_fast(masterFilePath):
+    """Given an h5 master file, generate an image list for SubWedgeAssembly."""
+    masterFilePath = pathlib.Path(masterFilePath)
+    m = re.search(r"\S+_\d{1,2}(?=_master.h5)",masterFilePath.name)
+    image_list_stem = m.group(0)
+
+    image_list = []
+    with h5py.File(masterFilePath,'r') as master_file:
+        data_file_low = list(master_file['/entry/data'].keys())[0]
+        data_file_high = list(master_file['/entry/data'].keys())[-1]        
+        image_nr_high = int(master_file['/entry/data'][data_file_high].attrs['image_nr_high'])
+        image_nr_low = int(master_file['/entry/data'][data_file_low].attrs['image_nr_low'])
+        image_list.append(f"{str(masterFilePath.parent)}/{image_list_stem}_{image_nr_low:06}.h5")
+    return image_nr_low, image_nr_high, {"imagePath": image_list}

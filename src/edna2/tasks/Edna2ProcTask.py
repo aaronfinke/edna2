@@ -52,6 +52,7 @@ from edna2.utils import UtilsLogging
 from edna2.utils import UtilsDetector
 from edna2.utils import UtilsSymmetry
 from edna2.utils import UtilsIspyb
+from edna2.utils import UtilsCCTBX
 
 
 logger = UtilsLogging.getLogger()
@@ -122,8 +123,17 @@ class Edna2ProcTask(AbstractTask):
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
         self.processingPrograms="EDNA2_proc"
         self.processingCommandLine = ""
+        self.dataCollectionId = inData.get("dataCollectionId", None)
+        self.anomalous = inData.get("anomalous",False)
+        self.spaceGroup = inData.get("spaceGroup",0)
+        self.unitCell = inData.get("unitCell",None)
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        self.imageNoStart = inData.get("imageNoStart",None)
+        self.imageNoEnd = inData.get("imageNoEnd",None)
+        self.masterFilePath = inData.get("masterFilePath",None)
 
-        if inData.get("doAnomandNoAnom", True):
+
+        if inData.get("anomalous", True):
             self.doAnom = True
             self.doNoAnom = True
         else: 
@@ -139,92 +149,87 @@ class Edna2ProcTask(AbstractTask):
         except OSError:
             pass
 
-        spaceGroupNumber = None
-        spaceGroup = inData.get("spaceGroup",0)
-        unitCell = inData.get("unitCell",None)
+        #set up SG and unit cell
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
-        if spaceGroup != 0:
-            try:
-                spaceGroupInfo = sgtbx.space_group_info(spaceGroup).symbol_and_number()
-                spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
-                spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-                logger.info("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
-            except:
-                logger.debug("Could not parse space group")
-                spaceGroupNumber = 0
-        else:
-            logger.info("No space group supplied")
-
-        # need both SG and unit cell
-        if spaceGroup != 0 and unitCell is not None:
-            try:
-                unitCellList = [float(x) for x in unitCell.split(',')]
-                #if there are zeroes parsed in, need to deal with it
-                if 0.0 in unitCellList:
-                    raise Exception
-                unitCell = {"cell_a": unitCellList[0],
-                            "cell_b": unitCellList[1],
-                            "cell_c": unitCellList[2],
-                            "cell_alpha": unitCellList[3],
-                            "cell_beta": unitCellList[4],
-                            "cell_gamma": unitCellList[5]}
-                logger.info("Supplied unit cell is {cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**unitCell))
-            except:
-                logger.debug("could not parse unit cell")
-                unitCell = None
+        # set up unit cell
+        if self.unitCell is not None:
+            self.unitCell = UtilsCCTBX.parseUnitCell(self.unitCell)
         else:
             logger.info("No unit cell supplied")
 
-        self.dataCollectionId = inData.get('dataCollectionId')
-
-        if self.dataCollectionId is not None:
-            identifier = str(self.dataCollectionId)
-            dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
-            ispybDataCollection = dict(dataCollectionWS3VO)
-            logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
-            if ispybDataCollection is not None:
-                directory = ispybDataCollection.get("imageDirectory")
+        if self.onlineAutoProcessing:
+            if self.dataCollectionId is None:
+                logger.error("No dataCollectionId, exiting.")
+                self.setFailure()
+                return 
+            try:
+                dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
+                ispybDataCollection = dict(dataCollectionWS3VO)
+                logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
+                self.imageDirectory = ispybDataCollection.get("imageDirectory")
                 if UtilsConfig.isEMBL():
-                    template = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
+                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
                 elif UtilsConfig.isMAXIV():
-                    template = ispybDataCollection["fileTemplate"]
+                    self.fileTemplate = ispybDataCollection["fileTemplate"]
                 else:
-                    template = ispybDataCollection["fileTemplate"].replace("%04d", "####")
+                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%04d", "####")
                 self.imageNoStart = ispybDataCollection["startImageNumber"]
                 numImages = ispybDataCollection["numberOfImages"]
                 self.imageNoEnd = numImages - self.imageNoStart + 1
-                pathToStartImage = os.path.join(directory, template % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, template % self.imageNoEnd)
-            else:
-                identifier = str(int(time.time()))
-                directory = self.dataInput.dirN.value
-                template = self.dataInput.templateN.value
-                self.imageNoStart = self.dataInput.fromN.value
-                self.imageNoEnd = self.dataInput.toN.value
-                if UtilsConfig.isEMBL():
-                    fileTemplate = template.replace("#####", "%05d")
-                else:
-                    fileTemplate = template.replace("####", "%04d")
-
-                pathToStartImage = os.path.join(directory, fileTemplate % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, fileTemplate % self.imageNoEnd)
-
-            # Determine pyarch prefix
-            if UtilsConfig.isALBA():
-                listPrefix = template.split("_")
-                self.pyarchPrefix = "ep_{0}_{1}".format("_".join(listPrefix[:-2]),
-                                                        listPrefix[-2])
-            else:
-                listPrefix = template.split("_")
-                self.pyarchPrefix = "ep_{0}_{1}".format(listPrefix[-3], listPrefix[-2])
-
-
-            if self.imageNoEnd - self.imageNoStart < 8:
-                #if self.imageNoEnd - self.imageNoStart < -1:
-                logger.error("There are fewer than 8 images, aborting")
+                pathToStartImage = os.path.join(self.imageDirectory,
+                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
+                pathToEndImage = os.path.join(self.imageDirectory,
+                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
+            except:
+                logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
+                if self.masterFilePath is None:
+                    logger.error("No dataCollectionId or masterFilePath found, exiting")
+                    self.setFailure()
+                    return
+                self.masterFilePath = Path(self.masterFilePath)
+                self.imageDirectory = self.masterFilePath.parent
+                masterFileName = self.masterFilePath.name
+                try:
+                    self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
+                except:
+                    logger.error(f"File template not found: {masterFileName}")
+                    self.setFailure()
+                    return
+                numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
+                self.imageNoStart = inData.get("imageNoStart",1)
+                self.imageNoEnd = inData.get("imageNoEnd",numImages)
+                logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
+                pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
+                lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
+                pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
+        else:
+            if self.masterFilePath is None:
+                logger.error("No dataCollectionId or masterFilePath found, exiting")
                 self.setFailure()
                 return
+            self.masterFilePath = Path(self.masterFilePath)
+            self.imageDirectory = self.masterFilePath.parent
+            masterFileName = self.masterFilePath.name
+            try:
+                self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
+            except:
+                logger.error(f"File template not found: {masterFileName}")
+                self.setFailure()
+                return
+            numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
+            self.imageNoStart = inData.get("imageNoStart",1)
+            self.imageNoEnd = inData.get("imageNoEnd",numImages)
+            logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
+            pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
+            lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
+            pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
 
+        if self.imageNoEnd - self.imageNoStart < 8:
+            #if self.imageNoEnd - self.imageNoStart < -1:
+            logger.error("There are fewer than 8 images, aborting")
+            self.setFailure()
+            return
         logger.info(f"dataCollectionId: {self.dataCollectionId}")
 
         isH5 = False
@@ -237,32 +242,33 @@ class Edna2ProcTask(AbstractTask):
         elif any(beamline in pathToStartImage for beamline in ["id30a3"]):
             minSizeFirst = 100000
             minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
             isH5 = True
         elif UtilsConfig.isMAXIV():
             minSizeFirst = 100000
             minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
             isH5 = True
         else:
             minSizeFirst = 1000000
             minSizeLast = 1000000        
         
-        if isH5 and inData.get("masterFilePath") is None:
-            self.masterFilePath = os.path.join(directory,
-                                self.eiger_template_to_master(template))
-        elif isH5:
-            self.masterFilePath = inData.get("masterFilePath")
+        listPrefix = self.fileTemplate.split("_")
+        if UtilsConfig.isALBA():
+            self.pyarchPrefix = "ap_{0}_{1}".format("_".join(listPrefix[:-2]),
+                                                       listPrefix[-2])
+        elif UtilsConfig.isMAXIV():
+            self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
         else:
-            logger.error("Only supporing HDF5 data at this time. Stopping.")
-            self.setFailure()
-            return
+            if len(listPrefix) > 2:
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
+            elif len(listPrefix) > 1:
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[:-2], listPrefix[-2])
+            else:
+                self.pyarchPrefix = "ap_{0}_run".format(listPrefix[0])
+
+        if self.masterFilePath is None:
+            self.masterFilePath = os.path.join(self.imageDirectory,
+                    self.eiger_template_to_master(self.fileTemplate))
+
 
 
         logger.info("Waiting for start image: {0}".format(pathToStartImage))
@@ -314,7 +320,7 @@ class Edna2ProcTask(AbstractTask):
         self.setLogFileName(f'edna2_proc.log')
 
         #XXX todo: I hate this
-        if not inData.get("subWedge"):
+        if not inData.get("subWedge"):  
             logger.info("Generating subwedge...")
             #num_of_images, image_list = Edna2ProcTask.generateImageListFromH5Master(inData=inData)
             self.imgNumLow, self.imgNumHigh, self.imageList = self.generateImageListFromH5Master_fast(masterFilePath=self.masterFilePath)
@@ -330,8 +336,8 @@ class Edna2ProcTask(AbstractTask):
             self.setFailure()
             return
         
-        self.xdsIndexingInData["unitCell"] = unitCell
-        self.xdsIndexingInData["spaceGroupNumber"] = spaceGroupNumber
+        self.xdsIndexingInData["unitCell"] = self.unitCell
+        self.xdsIndexingInData["spaceGroupNumber"] = self.spaceGroupNumber
         self.xdsIndexingInData["isAnom"] = self.doAnom
 
         self.indexing = XDSIndexing(inData=self.xdsIndexingInData, workingDirectorySuffix="init")

@@ -27,17 +27,17 @@ import shutil
 import tempfile
 import numpy as np
 from pathlib import Path
+import math
 import gzip
 import time
 import re
 import json
 from datetime import datetime
+import socket
 STRF_TEMPLATE = "%a %b %d %H:%M:%S %Y"
 
 # for the os.chmod
 from stat import *
-
-from cctbx import sgtbx
 
 from edna2.tasks.AbstractTask import AbstractTask
 
@@ -45,13 +45,13 @@ from edna2.utils import UtilsPath
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
-
+from edna2.utils import UtilsCCTBX
+from edna2.utils import UtilsImage
 
 logger = UtilsLogging.getLogger()
 
 from edna2.tasks.XDSTasks import XDSTask
 from edna2.tasks.CCP4Tasks import AimlessTask
-# from edna2.tasks.XSCALETasks import XSCALETask
 from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults
 from edna2.tasks.WaitFileTask import WaitFileTask
 
@@ -59,118 +59,161 @@ class FastdpTask(AbstractTask):
 
     def setFailure(self):
         self._dictInOut["isFailure"] = True
-        if self.integrationId is not None and self.programId is not None:
-            ISPyBStoreAutoProcResults.setIspybToFailed(
-                dataCollectionId=self.dataCollectionId,
-                autoProcProgramId=self.programId, 
-                autoProcIntegrationId=self.integrationId, 
-                processingCommandLine=self.processingCommandLine, 
-                processingPrograms=self.processingPrograms, 
-                isAnom=False, 
-                timeStart=self.startDateTime, 
-                timeEnd=datetime.now().isoformat(timespec='seconds')
-            )
-    
+        if self.onlineAutoProcessing:
+            if self.integrationId is not None and self.programId is not None:
+                ISPyBStoreAutoProcResults.setIspybToFailed(
+                    dataCollectionId=self.dataCollectionId,
+                    autoProcProgramId=self.programId, 
+                    autoProcIntegrationId=self.integrationId, 
+                    processingCommandLine=self.processingCommandLine, 
+                    processingPrograms=self.processingPrograms, 
+                    isAnom=False, 
+                    timeStart=self.startDateTime, 
+                    timeEnd=datetime.now().isoformat(timespec='seconds')
+                )
+    def getInDataSchema(self):
+        return {
+            "type": "object",
+            "properties":
+            {
+                "dataCollectionId": {"type":"integer"},
+                "masterFilePath": {"type":"string"},
+                "spaceGroup": {"type":["integer","string"]},
+                "unitCell": {"type":"string"},
+                "anomalous": {"type":"boolean"},
+                "workingDirectory": {"type":"string"},
+                "onlineAutoProcessing": {"type":"boolean"},
+                "imageNoStart" : {"type":"integer"},
+                "imageNoEnd" : {"type":"integer"},
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "dataCollectionId"
+                    ]
+                },
+                {
+                    "required": [
+                        "masterFilePath"
+                    ]
+                },         
+            ]
+        }
+
     def run(self, inData):
-        self.tmpdir = None
         self.timeStart = time.perf_counter()
+        self.tmpdir = None
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
         self.processingPrograms="fast_dp"
         self.processingCommandLine = ""
         self.lowRes = 50
-
         self.setLogFileName('fastDp.log')
-        self.dataCollectionId = inData.get("dataCollectionId")
         self.tmpdir = None
-        directory = None
-        template = None
-        self.imageNoStart = None
-        self.imageNoEnd = None
+        self.imageDirectory = None
+        self.fileTemplate = None
         pathToStartImage = None
         pathToEndImage = None
-        userName = os.environ["USER"]
-        beamline = "unknown"
-        proposal = "unknown"
+        self.dataCollectionId = inData.get("dataCollectionId", None)
+        self.anomalous = inData.get("anomalous",False)
+        self.spaceGroup = inData.get("spaceGroup",0)
+        self.unitCell = inData.get("unitCell",None)
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        self.imageNoStart = inData.get("imageNoStart",None)
+        self.imageNoEnd = inData.get("imageNoEnd",None)
+        self.masterFilePath = inData.get("masterFilePath",None)
 
-        doAnom = inData.get("doAnomandNoAnom",False)
 
-        spaceGroup = inData.get("spaceGroup",0)
-        unitCell = inData.get("unitCell",None)
 
-        logger.debug(f"Working directory is {self.getWorkingDirectory()}")
+        logger.info("EDNA2 Auto Processing started")
+        logger.info(f"Running on {socket.gethostname()}")
 
-        if spaceGroup != 0:
-            try:
-                spaceGroupInfo = sgtbx.space_group_info(spaceGroup).symbol_and_number()
-                spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
-                spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-                logger.info("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
-            except:
-                logger.debug("Could not parse space group")
-                spaceGroupNumber = 0
-        else:
-            spaceGroupNumber = 0
-            logger.info("No space group supplied")
+        try:
+            logger.info(f"System load avg: {os.getloadavg()}")
+        except OSError:
+            pass
 
-        # need both SG and unit cell
-        if spaceGroup != 0 and unitCell is not None:
-            try:
-                unitCellList = [float(x) for x in unitCell.split(',')]
-                #if there are zeroes parsed in, need to deal with it
-                if 0.0 in unitCellList:
-                    raise Exception
-                unitCell = {"cell_a": unitCellList[0],
-                            "cell_b": unitCellList[1],
-                            "cell_c": unitCellList[2],
-                            "cell_alpha": unitCellList[3],
-                            "cell_beta": unitCellList[4],
-                            "cell_gamma": unitCellList[5]}
-                logger.info("Supplied unit cell is {cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**unitCell))
-            except:
-                logger.debug("could not parse unit cell")
-                unitCell = None
+        #set up SG and unit cell
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
+
+        # set up unit cell
+        if self.unitCell is not None:
+            self.unitCell = UtilsCCTBX.parseUnitCell(self.unitCell)
         else:
             logger.info("No unit cell supplied")
 
-
-        if self.dataCollectionId is not None:
-            identifier = str(self.dataCollectionId)
-            dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
-            ispybDataCollection = dict(dataCollectionWS3VO)
-            logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
-            if ispybDataCollection is not None:
-                directory = ispybDataCollection.get("imageDirectory")
+        if self.onlineAutoProcessing:
+            if self.dataCollectionId is None:
+                logger.error("No dataCollectionId, exiting.")
+                self.setFailure()
+                return 
+            try:
+                dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
+                ispybDataCollection = dict(dataCollectionWS3VO)
+                logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
+                self.imageDirectory = ispybDataCollection.get("imageDirectory")
                 if UtilsConfig.isEMBL():
-                    template = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
+                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
                 elif UtilsConfig.isMAXIV():
-                    template = ispybDataCollection["fileTemplate"]
+                    self.fileTemplate = ispybDataCollection["fileTemplate"]
                 else:
-                    template = ispybDataCollection["fileTemplate"].replace("%04d", "####")
+                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%04d", "####")
                 self.imageNoStart = ispybDataCollection["startImageNumber"]
                 numImages = ispybDataCollection["numberOfImages"]
                 self.imageNoEnd = numImages - self.imageNoStart + 1
-                pathToStartImage = os.path.join(directory, template % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, template % self.imageNoEnd)
-            else:
-                identifier = str(int(time.time()))
-                directory = self.dataInput.dirN.value
-                template = self.dataInput.templateN.value
-                self.imageNoStart = self.dataInput.fromN.value
-                self.imageNoEnd = self.dataInput.toN.value
-                if UtilsConfig.isEMBL():
-                    fileTemplate = template.replace("#####", "%05d")
-                else:
-                    fileTemplate = template.replace("####", "%04d")
-
-                pathToStartImage = os.path.join(directory, fileTemplate % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, fileTemplate % self.imageNoEnd)
-
-            if self.imageNoEnd - self.imageNoStart < 8:
-                #if self.imageNoEnd - self.imageNoStart < -1:
-                logger.error("There are fewer than 8 images, aborting")
+                pathToStartImage = os.path.join(self.imageDirectory,
+                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
+                pathToEndImage = os.path.join(self.imageDirectory,
+                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
+            except:
+                logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
+                if self.masterFilePath is None:
+                    logger.error("No dataCollectionId or masterFilePath found, exiting")
+                    self.setFailure()
+                    return
+                self.masterFilePath = Path(self.masterFilePath)
+                self.imageDirectory = self.masterFilePath.parent
+                masterFileName = self.masterFilePath.name
+                try:
+                    self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
+                except:
+                    logger.error(f"File template not found: {masterFileName}")
+                    self.setFailure()
+                    return
+                numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
+                self.imageNoStart = inData.get("imageNoStart",1)
+                self.imageNoEnd = inData.get("imageNoEnd",numImages)
+                logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
+                pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
+                lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
+                pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
+        else:
+            if self.masterFilePath is None:
+                logger.error("No dataCollectionId or masterFilePath found, exiting")
                 self.setFailure()
                 return
-        
+            self.masterFilePath = Path(self.masterFilePath)
+            self.imageDirectory = self.masterFilePath.parent
+            masterFileName = self.masterFilePath.name
+            try:
+                self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
+            except:
+                logger.error(f"File template not found: {masterFileName}")
+                self.setFailure()
+                return
+            numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
+            self.imageNoStart = inData.get("imageNoStart",1)
+            self.imageNoEnd = inData.get("imageNoEnd",numImages)
+            logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
+            pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
+            lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
+            pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
+
+        if self.imageNoEnd - self.imageNoStart < 8:
+            #if self.imageNoEnd - self.imageNoStart < -1:
+            logger.error("There are fewer than 8 images, aborting")
+            self.setFailure()
+            return
+    
         #make results directory
         self.resultsDirectory = self.getWorkingDirectory() / "results"
         self.resultsDirectory.mkdir(exist_ok=True, parents=True, mode=0o755)
@@ -192,32 +235,21 @@ class FastdpTask(AbstractTask):
                 self.pyarchDirectory = Path(self.tmpdir.name)
 
         
-        isH5 = False
-        if any(beamline in pathToStartImage for beamline in ["id23eh1", "id29"]):
+        if any(beamline in str(pathToStartImage) for beamline in ["id23eh1", "id29"]):
             minSizeFirst = 6000000
             minSizeLast = 6000000
-        elif any(beamline in pathToStartImage for beamline in ["id23eh2", "id30a1"]):
+        elif any(beamline in str(pathToStartImage) for beamline in ["id23eh2", "id30a1"]):
             minSizeFirst = 2000000
             minSizeLast = 2000000
-        elif any(beamline in pathToStartImage for beamline in ["id30a3"]):
+        elif any(beamline in str(pathToStartImage) for beamline in ["id30a3"]):
             minSizeFirst = 100000
             minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
-            isH5 = True
         elif UtilsConfig.isMAXIV():
             minSizeFirst = 100000
             minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
-            isH5 = True
         else:
-            minSizeFirst = 1000000
-            minSizeLast = 1000000        
+            minSizeFirst = 100000
+            minSizeLast = 100000        
 
         logger.info("Waiting for start image: {0}".format(pathToStartImage))
         waitFileFirst = WaitFileTask(inData= {
@@ -239,31 +271,33 @@ class FastdpTask(AbstractTask):
 
         self.timeStart = datetime.now().isoformat(timespec='seconds')
 
-        if inData.get("dataCollectionId") is not None:
+        if self.onlineAutoProcessing:
             #set ISPyB to running
             self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
                 dataCollectionId=self.dataCollectionId,
                 processingCommandLine = self.processingCommandLine,
                 processingPrograms = self.processingPrograms,
-                isAnom = doAnom,
+                isAnom = self.anomalous,
                 timeStart = self.timeStart)
         
         # Determine pyarch prefix
+        listPrefix = self.fileTemplate.split("_")
         if UtilsConfig.isALBA():
-            listPrefix = template.split("_")
             self.pyarchPrefix = "ap_{0}_{1}".format("_".join(listPrefix[:-2]),
                                                        listPrefix[-2])
-        else:
-            listPrefix = template.split("_")
+        elif UtilsConfig.isMAXIV():
             self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
-
-        if isH5:
-            masterFilePath = os.path.join(directory,
-                                self.eiger_template_to_master(template))
         else:
-            logger.error("Only supporing HDF5 data at this time. Stopping.")
-            self.setFailure()
-            return
+            if len(listPrefix) > 2:
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
+            elif len(listPrefix) > 1:
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[:-2], listPrefix[-2])
+            else:
+                self.pyarchPrefix = "ap_{0}_run".format(listPrefix[0])
+
+        if self.masterFilePath is None:
+            self.masterFilePath = os.path.join(self.imageDirectory,
+                    self.eiger_template_to_master(self.fileTemplate))
 
         #set up command line
         fastdpSetup = UtilsConfig.get(self,"fastdpSetup", None)
@@ -274,8 +308,8 @@ class FastdpTask(AbstractTask):
         pathToNeggiaPlugin = UtilsConfig.get(self, "pathToNeggiaPlugin", None)
         highResolutionLimit = inData.get("highResolutionLimit", None)
         atom = inData.get("atom", None)
-        if atom is None and doAnom:
-            atom = "S"
+        if atom is None and self.anomalous:
+            atom = "X"
         beamX = inData.get("beamX",None)
         beamY = inData.get("beamY",None)
 
@@ -290,12 +324,12 @@ class FastdpTask(AbstractTask):
         commandLine += " -k {0}".format(numCores) if numCores else ""
         commandLine += " -R {0}".format(self.lowRes) if self.lowRes else ""
         commandLine += " -r {0}".format(highResolutionLimit) if highResolutionLimit else ""
-        commandLine += " -s {0}".format(spaceGroupNumber) if spaceGroupNumber else ""
-        commandLine += " -c \"{cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}\"".format(**unitCell) if unitCell else ""
+        commandLine += " -s {0}".format(self.spaceGroupNumber) if self.spaceGroupNumber else ""
+        commandLine += " -c \"{cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}\"".format(**self.unitCell) if self.unitCell else ""
         commandLine += " -a {0}".format(atom) if atom else ""
         commandLine += " -b {0},{1}".format(beamX, beamY) if beamX and beamY else ""
-        commandLine += " -l {0}".format(pathToNeggiaPlugin) if isH5 and pathToNeggiaPlugin else ""
-        commandLine += " {0}".format(masterFilePath)
+        commandLine += " -l {0}".format(pathToNeggiaPlugin) if pathToNeggiaPlugin else ""
+        commandLine += " {0}".format(self.masterFilePath)
 
         logger.info("fastdp command is {}".format(commandLine))
         try:
@@ -370,12 +404,13 @@ class FastdpTask(AbstractTask):
                 pyarchFile = UtilsPath.createPyarchFilePath(file)
                 shutil.copy(file,pyarchFile)
         
-        autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
-        with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:
-            json.dump(autoProcResults, fp, indent=2,default=lambda o:str(o))
-
-        ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcResults, workingDirectorySuffix="uploadFinal")
-        ispybStoreAutoProcResults.execute()
+        if self.onlineAutoProcessing:
+            autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
+            with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:
+                json.dump(autoProcResults, fp, indent=2,default=lambda o:str(o))
+            ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcResults, workingDirectorySuffix="uploadFinal")
+            ispybStoreAutoProcResults.execute()
+            
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
 
@@ -508,10 +543,4 @@ class FastdpTask(AbstractTask):
         else:
             fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
         return fmt_string.format(num)
-
-
-
-
-
-
 
