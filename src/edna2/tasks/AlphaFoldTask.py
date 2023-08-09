@@ -58,6 +58,11 @@ class AlphaFoldTask(AbstractTask):
                     logger.error("The input is not a fasta file!")
                     sys.exit(1)
                 else:
+                    if line.count('>') == 1:
+                        monomer = True
+                    else:
+                        monomer = False
+
                     line = line.strip()
                     fasta_name = line[1:5]
 
@@ -72,7 +77,10 @@ class AlphaFoldTask(AbstractTask):
         commandLine += 'alphafold '
         commandLine += f'--fasta_paths={fasta_path} '
         commandLine += f'--max_template_date=2021-11-01 '
-        commandLine += f'--model_preset=monomer '
+        if monomer:
+            commandLine += f'--model_preset=monomer '
+        else:
+            commandLine += f'--model_preset=multimer '
         commandLine += f'--output_dir={output_Dir} '
         commandLine += '--data_dir=$ALPHAFOLD_DATA_DIR'
 
@@ -145,12 +153,9 @@ class AlphaFoldTask(AbstractTask):
             # 'iptm', 'ranking_confidence'])
 
         AlphaFoldResults = {
-            "overall/features" : {
-            },
-
-            "ProteinModels": {
-            },
-        }
+            "overall/features" : None,
+            "ProteinModels": None,
+        }   
 
         # open features.pkl
         try:
