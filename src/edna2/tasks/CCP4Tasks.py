@@ -352,9 +352,44 @@ class UniqueifyTask(AbstractTask):
 
         return outData
 
+class DimpleTask(AbstractTask):
+    """
+    This task runs dimple to replace B-factors and (optinally) break the model into domains
+    """
 
+    def run(self, inData):
+        output_Dir = self._workingDirectory 
+        outData = {}
+        if os.environ.get('CCP4', None) is None:
+            commandLine = 'source /mxn/groups/sw/mxsw/env_setup/ccp4_env.sh \n'
+        else:
+            commandLine = ''
+            logger.info(f"CCP4 version is {os.environ.get('CCP4_VERSION', None)}")
+
+        commandLine += 'dimple '
+        commandLine += f'{inData["PDB_file"]} '
+        commandLine += f'{inData["MTZ_file"]} '
+        commandLine += f'{output_Dir} '
+
+        logPath = self.getWorkingDirectory() / 'dimple.log'
+        self.runCommandLine(commandLine, logPath=logPath)
+        with open(str(logPath)) as f:
+            logText = f.read()
+        
+        logger.info("Command line: {0}".format(commandLine))
+
+        # outData = self.parseProcessPredictedModel(logPath)
+        
+        if Path(f"{output_Dir}/final.pdb").exists() and Path(f"{output_Dir}/final.mtz").exists():
+            outData["isSuccess"] = True
+
+        return outData
     
+    def parseDimpleLog(self, logPath):
+        if logPath.exists():
+            with open(str(logPath)) as f:
+                log = f.read()
 
-
+        
 
 
