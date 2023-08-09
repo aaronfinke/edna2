@@ -214,3 +214,57 @@ class DistlSignalStrengthTask(AbstractTask):
                 imageQualityIndicators['saturationRangeMax'] = saturationRangeMax
                 imageQualityIndicators['saturationRangeAverage'] = saturationRangeAverage
         return imageQualityIndicators
+
+class PhenixProcessPredictedModelTask(AbstractTask):
+    """
+    This task runs phenix.process_predicted_model to replace B-factors and (optinally) break the model into domains
+    """
+
+    def run(self, inData):
+        if os.environ.get('PHENIX', None) is None:
+            commandLine = 'source /mxn/groups/sw/mxsw/env_setup/phenix_env.sh \n'
+        else:
+            commandLine = ''
+            logger.info(f"PHENIX version is {os.environ.get('PHENIX_VERSION', None)}")
+
+        commandLine += 'phenix.process_predicted_model '
+        commandLine += inData['PDB_file']
+        commandLine += ' '
+
+        logPath = self.getWorkingDirectory() / 'PhenixProcPM.log'
+        self.runCommandLine(commandLine, logPath=logPath)
+        if logPath.exists():
+            with open(str(logPath)) as f:
+                logText = f.read()
+        else:
+            logger.error(f"Log file {logPath} does not exist")
+        
+        logger.info("Command line: {0}".format(commandLine))
+
+        outData = self.parseProcessPredictedModel(logText)
+        
+
+        return outData
+
+    def parseProcessPredictedModel(self, logText):
+        outData = {}
+
+        for line in logText.split("\n"):
+            if line.find("Working directory:") != -1:
+                outData['workingDirectory'] = line.split(":")[1].strip()
+            elif line.find("Found model,") != -1:
+                outData['processedModel'] = line.split(",")[1].strip()
+            elif line.find("B-value field") != -1:
+                outData['B-value'] = line.split(" ")[2:]
+            elif line.find("Maximum B-Value") != -1:
+                outData['maximumB-value'] = line.split(":")[1]
+            elif line.find("Maximum rmsd") != -1:
+                outData['maximumRmsd'] = line.split(" ")[3:4]
+            elif line.find("Clusters:") != -1:
+                outData['Clusters'] = line.split(":")[1]
+            elif line.find("Threshold:") != -1:
+                outData['Threshold'] = line.split(":")[1]
+            elif line.find("Job complete") != -1:
+                outData['jobComplete'] = True
+
+        return outData
