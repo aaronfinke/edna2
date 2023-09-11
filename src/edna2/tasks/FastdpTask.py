@@ -403,9 +403,9 @@ class FastdpTask(AbstractTask):
             for file in self.resultsDirectory.iterdir():
                 pyarchFile = UtilsPath.createPyarchFilePath(file)
                 shutil.copy(file,pyarchFile)
-        
+
+        autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=self.anomalous)        
         if self.onlineAutoProcessing:
-            autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=False)
             with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:
                 json.dump(autoProcResults, fp, indent=2,default=lambda o:str(o))
             ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcResults, workingDirectorySuffix="uploadFinal")
@@ -413,6 +413,10 @@ class FastdpTask(AbstractTask):
             
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
+        
+        self.outData = autoProcResults
+
+        return self.outData
 
 
         

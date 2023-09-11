@@ -360,7 +360,7 @@ class XDSTask(AbstractTask):
 #            "INDEX_QUALITY= 0.3",
         ]
         if inData.get("idxref",None) is not None:
-            if inData.get("idxref",None).get("spaceGroupNumber",None) is not None:
+            if inData.get("idxref",None).get("spaceGroupNumber",0) != 0:
                 spaceGroupNumber = inData.get("idxref").get("spaceGroupNumber")
                 unitCell = inData.get("idxref").get("unitCell")
                 unitCellConstants = "{cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**unitCell)
@@ -369,7 +369,7 @@ class XDSTask(AbstractTask):
                     "UNIT_CELL_CONSTANTS={0}".format(unitCellConstants),
                 ]
 
-        elif inData.get("spaceGroupNumber",None) is not None:
+        elif inData.get("spaceGroupNumber",0) != 0:
             spaceGroupNumber = inData["spaceGroupNumber"]
             unitCell = inData["unitCell"]
             unitCellConstants = "{cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**unitCell)

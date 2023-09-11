@@ -78,8 +78,9 @@ class MAXIVAutoProcessing(AbstractTask):
                 "spaceGroup": {"type":["integer","string"]},
                 "unitCell": {"type":"string"},
                 "residues": {"type":"integer"},
-                "doAnom": {"type":"boolean"},
+                "anomalous": {"type":"boolean"},
                 "workingDirectory": {"type":"string"},
+                "pdb": {"type":"string"}
             }
         }
     
@@ -90,12 +91,15 @@ class MAXIVAutoProcessing(AbstractTask):
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
-        self.dataCollectionId = inData.get("dataCollectionId", None)
         self.tmpdir = None
 
-        self.doAnom = inData.get("doAnom",False)
+        self.dataCollectionId = inData.get("dataCollectionId", None)
+        self.anomalous = inData.get("anomalous",False)
         self.spaceGroup = inData.get("spaceGroup",0)
         self.unitCell = inData.get("unitCell",None)
+        self.residues = inData.get("residues",None)
+        self.workingDirectory = inData.get("workingDirectory", self.getWorkingDirectory())
+        self.pdb = inData.get("pdb",None)
 
         self.proteinAcronym = "AUTOMATIC"
         self.sampleName = "DEFAULT"
@@ -144,91 +148,66 @@ class MAXIVAutoProcessing(AbstractTask):
         else:
             logger.info("No unit cell supplied")
 
-        if self.dataCollectionId is not None:
-            dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
-            if dataCollectionWS3VO is not None:
-                ispybDataCollection = dict(dataCollectionWS3VO)
-                logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
-                directory = ispybDataCollection.get("imageDirectory")
-                if UtilsConfig.isEMBL():
-                    template = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
-                elif UtilsConfig.isMAXIV():
-                    template = ispybDataCollection["fileTemplate"]
-                else:
-                    template = ispybDataCollection["fileTemplate"].replace("%04d", "####")
-                self.imageNoStart = inData.get("imageNoStart", ispybDataCollection["startImageNumber"])
-                numImages = ispybDataCollection["numberOfImages"]
-                self.imageNoEnd = inData.get("imageNoEnd", (numImages - self.imageNoStart + 1))  
-                pathToStartImage = os.path.join(directory, template % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, template % self.imageNoEnd)
-            else:
-                directory = self.dataInput.dirN.value
-                template = self.dataInput.templateN.value
-                self.imageNoStart = self.dataInput.fromN.value
-                self.imageNoEnd = self.dataInput.toN.value
-                if UtilsConfig.isEMBL():
-                    fileTemplate = template.replace("#####", "%05d")
-                else:
-                    fileTemplate = template.replace("####", "%04d")
-
-                pathToStartImage = os.path.join(directory, fileTemplate % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, fileTemplate % self.imageNoEnd)
-
-        isH5 = False
-        if any(beamline in pathToStartImage for beamline in ["id23eh1", "id29"]):
-            minSizeFirst = 6000000
-            minSizeLast = 6000000
-        elif any(beamline in pathToStartImage for beamline in ["id23eh2", "id30a1"]):
-            minSizeFirst = 2000000
-            minSizeLast = 2000000
-        elif any(beamline in pathToStartImage for beamline in ["id30a3"]):
-            minSizeFirst = 100000
-            minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
-            isH5 = True
-        elif UtilsConfig.isMAXIV():
-            minSizeFirst = 100000
-            minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
-            isH5 = True
-        else:
-            minSizeFirst = 1000000
-            minSizeLast = 1000000        
-
-        logger.info("Waiting for start image: {0}".format(pathToStartImage))
-        waitFileFirst = WaitFileTask(inData= {
-            "file":pathToStartImage,
-            "expectedSize": minSizeFirst
-        })
-        waitFileFirst.execute()
-        if waitFileFirst.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the first image {1}!".format(waitFileFirst.outData["timeOut"], pathToStartImage))
+        if self.dataCollectionId is None:
+            logger.error("No dataCollectionId, exiting.")
+            self.setFailure()
+            return 
         
-        logger.info("Waiting for end image: {0}".format(pathToEndImage))
-        waitFileLast = WaitFileTask(inData= {
-            "file":pathToEndImage,
-            "expectedSize": minSizeLast
-        })
-        waitFileLast.execute()
-        if waitFileLast.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
+        try:
+            dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
+            ispybDataCollection = dict(dataCollectionWS3VO)
+            logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
+            self.imageDirectory = ispybDataCollection.get("imageDirectory")
+            if UtilsConfig.isEMBL():
+                self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
+            elif UtilsConfig.isMAXIV():
+                self.fileTemplate = ispybDataCollection["fileTemplate"]
+            else:
+                self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%04d", "####")
+            self.imageNoStart = ispybDataCollection["startImageNumber"]
+            numImages = ispybDataCollection["numberOfImages"]
+            self.imageNoEnd = numImages - self.imageNoStart + 1
+            pathToStartImage = os.path.join(self.imageDirectory,
+                                            self.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
+            pathToEndImage = os.path.join(self.imageDirectory,
+                                            self.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
+        except:
+            logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
+            if self.masterFilePath is None:
+                logger.error("No dataCollectionId or masterFilePath found, exiting")
+                self.setFailure()
+                return
+            self.masterFilePath = Path(self.masterFilePath)
+            self.imageDirectory = self.masterFilePath.parent
+            masterFileName = self.masterFilePath.name
+            try:
+                self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
+            except:
+                logger.error(f"File template not found: {masterFileName}")
+                self.setFailure()
+                return
+            numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
+            self.imageNoStart = inData.get("imageNoStart",1)
+            self.imageNoEnd = inData.get("imageNoEnd",numImages)
+            logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
 
         edna2ProcTask = Edna2ProcTask(inData={
+            "onlineAutoProcessing": True,
             "datacollectionId": self.dataCollectionId,
             "unitCell": self.unitCell,
-            "spaceGroup": self.spaceGroup
+            "spaceGroup": self.spaceGroup,
+            "imageNoStart": self.imageNoStart,
+            "imageNoEnd": self.imageNoEnd,
             }, workingDirectorySuffix="0")
 
         fastDpTask = FastdpTask(inData={
+            "onlineAutoProcessing": True,
             "datacollectionId": self.dataCollectionId,
             "unitCell": self.unitCell,
-            "spaceGroup": self.spaceGroup
+            "spaceGroup": self.spaceGroup,
+            "masterFilePath":self.masterFilePath,
+            "imageNoStart": self.imageNoStart,
+            "imageNoEnd": self.imageNoEnd,
             }, workingDirectorySuffix="0")
         
         edna2ProcTask.start()
@@ -237,5 +216,10 @@ class MAXIVAutoProcessing(AbstractTask):
         edna2ProcTask.join()
         fastDpTask.join()
 
-        
+        outData = {
+            "edna2Proc":edna2ProcTask.outData,
+            "fastDp":fastDpTask.outData
+        }
+
+        return outData
 

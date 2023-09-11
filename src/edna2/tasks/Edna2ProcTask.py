@@ -60,7 +60,7 @@ logger = UtilsLogging.getLogger()
 from edna2.tasks.XDSTasks import XDSIndexing, XDSIntegration, XDSRerunCorrect
 from edna2.tasks.SubWedgeAssembly import SubWedgeAssembly
 from edna2.tasks.CCP4Tasks import PointlessTask, AimlessTask, TruncateTask, UniqueifyTask
-# from edna2.tasks.XSCALETasks import XSCALETask
+from edna2.tasks.XSCALETasks import XSCALETask
 from edna2.tasks.PhenixTasks import PhenixXTriageTask
 from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, ISPyBStoreAutoProcStatus
 from edna2.tasks.WaitFileTask import WaitFileTask
@@ -131,7 +131,7 @@ class Edna2ProcTask(AbstractTask):
         self.imageNoStart = inData.get("imageNoStart",None)
         self.imageNoEnd = inData.get("imageNoEnd",None)
         self.masterFilePath = inData.get("masterFilePath",None)
-
+        self.outData = None
 
         if inData.get("anomalous", True):
             self.doAnom = True
@@ -528,90 +528,90 @@ class Edna2ProcTask(AbstractTask):
                         'Anomalous resolution cutoffs finished')
 
         self.bins = [x["res"] for x in self.xdsRerun_anom.outData["completenessEntries"] if x["include_res_based_on_cc"] is True]
-        # self.timeXscaleStart = time.perf_counter()
-        # self.xscaleTaskData = {
-        #     "xdsAsciiPath_anom" : self.xdsRerun_anom.outData["xdsAsciiHkl"],
-        #     "xdsAsciiPath_noAnom": self.xdsRerun_noAnom.outData["xdsAsciiHkl"],
-        #     "bins" : self.bins,
-        #     "sgNumber": self.pointlessTask.outData["sgnumber"],
-        #     "cell" : self.pointlessTask.outData["cell"],
-        # }
+        self.timeXscaleStart = time.perf_counter()
+        self.xscaleTaskData = {
+            "xdsAsciiPath_anom" : self.xdsRerun_anom.outData["xdsAsciiHkl"],
+            "xdsAsciiPath_noAnom": self.xdsRerun_noAnom.outData["xdsAsciiHkl"],
+            "bins" : self.bins,
+            "sgNumber": self.pointlessTask.outData["sgnumber"],
+            "cell" : self.pointlessTask.outData["cell"],
+        }
 
-        # self.xscaleTaskData_mergeAnom = self.xscaleTaskData
-        # self.xscaleTaskData_mergeAnom['isAnom'] = True
-        # self.xscaleTaskData_mergeAnom['merge'] = True
-        # self.xscaleTaskData_mergeAnom['res'] = self.anomResCutoff
+        self.xscaleTaskData_mergeAnom = self.xscaleTaskData
+        self.xscaleTaskData_mergeAnom['isAnom'] = True
+        self.xscaleTaskData_mergeAnom['merge'] = True
+        self.xscaleTaskData_mergeAnom['res'] = self.anomResCutoff
 
-        # self.xscaleTask_mergeAnom = XSCALETask(inData=self.xscaleTaskData_mergeAnom, workingDirectorySuffix="mergeAnom")
+        self.xscaleTask_mergeAnom = XSCALETask(inData=self.xscaleTaskData_mergeAnom, workingDirectorySuffix="mergeAnom")
         
-        # self.xscaleTaskData_mergenoAnom = self.xscaleTaskData
-        # self.xscaleTaskData_mergenoAnom['isAnom'] = False
-        # self.xscaleTaskData_mergenoAnom['merge'] = True
-        # self.xscaleTaskData_mergenoAnom['res'] = self.noAnomResCutoff
+        self.xscaleTaskData_mergenoAnom = self.xscaleTaskData
+        self.xscaleTaskData_mergenoAnom['isAnom'] = False
+        self.xscaleTaskData_mergenoAnom['merge'] = True
+        self.xscaleTaskData_mergenoAnom['res'] = self.noAnomResCutoff
 
-        # self.xscaleTask_mergenoAnom = XSCALETask(inData=self.xscaleTaskData_mergenoAnom, workingDirectorySuffix="mergenoAnom")
+        self.xscaleTask_mergenoAnom = XSCALETask(inData=self.xscaleTaskData_mergenoAnom, workingDirectorySuffix="mergenoAnom")
 
-        # self.xscaleTaskData_unmergeAnom = self.xscaleTaskData
-        # self.xscaleTaskData_unmergeAnom['isAnom'] = True
-        # self.xscaleTaskData_unmergeAnom['merge'] = False
-        # self.xscaleTaskData_unmergeAnom['res'] = self.anomResCutoff
+        self.xscaleTaskData_unmergeAnom = self.xscaleTaskData
+        self.xscaleTaskData_unmergeAnom['isAnom'] = True
+        self.xscaleTaskData_unmergeAnom['merge'] = False
+        self.xscaleTaskData_unmergeAnom['res'] = self.anomResCutoff
 
-        # self.xscaleTask_unmergeAnom = XSCALETask(inData=self.xscaleTaskData_unmergeAnom, workingDirectorySuffix="unmergeAnom")
+        self.xscaleTask_unmergeAnom = XSCALETask(inData=self.xscaleTaskData_unmergeAnom, workingDirectorySuffix="unmergeAnom")
 
-        # self.xscaleTaskData_unmergenoAnom = self.xscaleTaskData
-        # self.xscaleTaskData_unmergenoAnom['isAnom'] = False
-        # self.xscaleTaskData_unmergenoAnom['merge'] = False
-        # self.xscaleTaskData_unmergenoAnom['res'] = self.noAnomResCutoff
+        self.xscaleTaskData_unmergenoAnom = self.xscaleTaskData
+        self.xscaleTaskData_unmergenoAnom['isAnom'] = False
+        self.xscaleTaskData_unmergenoAnom['merge'] = False
+        self.xscaleTaskData_unmergenoAnom['res'] = self.noAnomResCutoff
 
-        # self.xscaleTask_unmergenoAnom = XSCALETask(inData=self.xscaleTaskData_unmergenoAnom, workingDirectorySuffix="unmergenoAnom")
+        self.xscaleTask_unmergenoAnom = XSCALETask(inData=self.xscaleTaskData_unmergenoAnom, workingDirectorySuffix="unmergenoAnom")
 
-        # logger.info("Starting XSCALE merging...")
-        # self.logToIspyb(self.integrationId,
-        #              'Scaling', 'Launched', 'Start of XSCALE')
+        logger.info("Starting XSCALE merging...")
+        self.logToIspyb(self.integrationId,
+                     'Scaling', 'Launched', 'Start of XSCALE')
 
-        # self.xscaleTask_mergeAnom.start()
-        # self.xscaleTask_mergenoAnom.start()
-        # self.xscaleTask_unmergeAnom.start()
-        # self.xscaleTask_unmergenoAnom.start()
+        self.xscaleTask_mergeAnom.start()
+        self.xscaleTask_mergenoAnom.start()
+        self.xscaleTask_unmergeAnom.start()
+        self.xscaleTask_unmergenoAnom.start()
 
-        # self.xscaleTask_mergeAnom.join()
-        # self.xscaleTask_mergenoAnom.join()
-        # self.xscaleTask_unmergeAnom.join()
-        # self.xscaleTask_unmergenoAnom.join()
+        self.xscaleTask_mergeAnom.join()
+        self.xscaleTask_mergenoAnom.join()
+        self.xscaleTask_unmergeAnom.join()
+        self.xscaleTask_unmergenoAnom.join()
 
-        # time4 = time.perf_counter()
-        # self.timeXscale = time4-time3
+        time4 = time.perf_counter()
+        self.timeXscale = time4-time3
 
-        # for task in [self.xscaleTask_mergeAnom,self.xscaleTask_mergenoAnom,
-        #              self.xscaleTask_unmergeAnom,self.xscaleTask_unmergenoAnom]:
-        #     if task.isFailure():
-        #         logger.error("XSCALE generation failed")
-        #         self.logToIspyb(self.integrationId,
-        #                  'Scaling',
-        #                  'Failed',
-        #                  'XSCALE failed after {0:.1f}s'.format(self.timeXscale))
-        #         self.setFailure()
-        #         return
+        for task in [self.xscaleTask_mergeAnom,self.xscaleTask_mergenoAnom,
+                     self.xscaleTask_unmergeAnom,self.xscaleTask_unmergenoAnom]:
+            if task.isFailure():
+                logger.error("XSCALE generation failed")
+                self.logToIspyb(self.integrationId,
+                         'Scaling',
+                         'Failed',
+                         'XSCALE failed after {0:.1f}s'.format(self.timeXscale))
+                self.setFailure()
+                return
         
-        # logger.info("XSCALE generation finished.")
-        # self.logToIspyb(self.integrationId,
-        #         'Scaling',
-        #         'Successful',
-        #         'XSCALE finished in {0:.1f}s'.format(self.timeXscale))
+        logger.info("XSCALE generation finished.")
+        self.logToIspyb(self.integrationId,
+                'Scaling',
+                'Successful',
+                'XSCALE finished in {0:.1f}s'.format(self.timeXscale))
 
-        # self.xscaleTask_mergeAnomLPFile = self.resultsDirectory / "ep__merged_anom_XSCALE.LP"
-        # shutil.copy(self.xscaleTask_mergeAnom.outData["xscaleLp"], self.xscaleTask_mergeAnomLPFile)
+        self.xscaleTask_mergeAnomLPFile = self.resultsDirectory / "ep__merged_anom_XSCALE.LP"
+        shutil.copy(self.xscaleTask_mergeAnom.outData["xscaleLp"], self.xscaleTask_mergeAnomLPFile)
 
-        # self.xscaleTask_mergenoAnomLPFile = self.resultsDirectory / "ep__merged_noanom_XSCALE.LP"
-        # shutil.copy(self.xscaleTask_mergenoAnom.outData["xscaleLp"], self.xscaleTask_mergenoAnomLPFile)
+        self.xscaleTask_mergenoAnomLPFile = self.resultsDirectory / "ep__merged_noanom_XSCALE.LP"
+        shutil.copy(self.xscaleTask_mergenoAnom.outData["xscaleLp"], self.xscaleTask_mergenoAnomLPFile)
 
-        # self.xscaleTask_unmergeAnomLPFile = self.resultsDirectory / "ep__unmerged_anom_XSCALE.LP"
-        # shutil.copy(self.xscaleTask_unmergeAnom.outData["xscaleLp"], self.xscaleTask_unmergeAnomLPFile)
+        self.xscaleTask_unmergeAnomLPFile = self.resultsDirectory / "ep__unmerged_anom_XSCALE.LP"
+        shutil.copy(self.xscaleTask_unmergeAnom.outData["xscaleLp"], self.xscaleTask_unmergeAnomLPFile)
 
-        # self.xscaleTask_unmergenoAnomLPFile = self.resultsDirectory / "ep__unmerged_noanom_XSCALE.LP"
-        # shutil.copy(self.xscaleTask_unmergenoAnom.outData["xscaleLp"], self.xscaleTask_unmergenoAnomLPFile)
+        self.xscaleTask_unmergenoAnomLPFile = self.resultsDirectory / "ep__unmerged_noanom_XSCALE.LP"
+        shutil.copy(self.xscaleTask_unmergenoAnom.outData["xscaleLp"], self.xscaleTask_unmergenoAnomLPFile)
 
-        #logger.debug(f"XSCALE output: {self.xscaleTask_mergeAnom.outData}")
+        logger.debug(f"XSCALE output: {self.xscaleTask_mergeAnom.outData}")
 
         self.pointlessTaskAnominData = {
             'input_file' :  self.xdsRerun_anom.outData["xdsAsciiHkl"],
@@ -830,14 +830,17 @@ class Edna2ProcTask(AbstractTask):
             self.setFailure()
             return
 
-
+        self.outData = {
+            "anomalousData": self.autoProcResultsContainerAnom,
+            "nonAnomalousData": self.autoProcResultsContainerNoAnom
+        }
 
         self.timeEnd = time.perf_counter()
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")
         if inData.get("test",False):
             self.tmpdir.cleanup()
 
-        return 
+        return self.outData
         
 
     def generateAutoProcScalingResultsContainer(self, programId, integrationId, isAnom):
