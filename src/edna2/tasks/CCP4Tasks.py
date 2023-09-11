@@ -369,7 +369,7 @@ class DimpleTask(AbstractTask):
         commandLine += 'dimple '
         commandLine += f'{inData["PDB_file"]} '
         commandLine += f'{inData["MTZ_file"]} '
-        commandLine += f'{output_Dir} '
+        commandLine += f'{output_Dir}'
 
         logPath = self.getWorkingDirectory() / 'dimple.log'
         self.runCommandLine(commandLine, logPath=logPath)

@@ -47,12 +47,12 @@ class AlphaFoldTask(AbstractTask):
     """
 
     def run(self, inData):
-        fasta_path = inData.get("fasta_path")
+        fasta_path = inData.get("FASTA_file")
         output_Dir = self._workingDirectory 
-    
+
         try:
             with open(fasta_path, mode="r") as file:
-                line = file.readline()
+                line = file.read()
 
                 if not line.startswith('>'):
                     logger.error("The input is not a fasta file!")
@@ -82,7 +82,7 @@ class AlphaFoldTask(AbstractTask):
         else:
             commandLine += f'--model_preset=multimer '
         commandLine += f'--output_dir={output_Dir} '
-        commandLine += '--data_dir=$ALPHAFOLD_DATA_DIR'
+        commandLine += '--data_dir=$ALPHAFOLD_DATA_DIR '
 
         logger.info("Command line: {0}".format(commandLine))
         logPath = self.getWorkingDirectory() / 'AlphaFold.log'

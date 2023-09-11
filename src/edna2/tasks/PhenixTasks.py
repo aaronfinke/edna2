@@ -229,7 +229,7 @@ class PhenixProcessPredictedModelTask(AbstractTask):
 
         commandLine += 'phenix.process_predicted_model '
         commandLine += inData['PDB_file']
-        commandLine += ' '
+        # commandLine += ' '
 
         logPath = self.getWorkingDirectory() / 'PhenixProcPM.log'
         self.runCommandLine(commandLine, logPath=logPath)

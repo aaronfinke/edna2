@@ -24,7 +24,6 @@ __license__ = "MIT"
 __date__ = "12/06/2023"
 
 import unittest
-import time
 
 from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
@@ -41,7 +40,7 @@ class AlphaFoldTaskExecTest(unittest.TestCase):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     @unittest.skipIf(UtilsConfig.getSite() == 'Default',
-                    'Cannot run pointless test with default config')
+                    'Cannot run AlphaFold test with default config')
     def test_execute_AlphaFoldPrediction(self):
         referenceDataPath = self.dataPath / 'inDataAlphaFoldTask.json'
         tmpDir = UtilsTest.createTestTmpDirectory('AlphaFoldTask')
@@ -51,7 +50,6 @@ class AlphaFoldTaskExecTest(unittest.TestCase):
         alphaFoldTask.execute() 
         self.assertTrue(alphaFoldTask.isSuccess())
         outData = alphaFoldTask.outData
-        print(outData)
         self.assertTrue(outData['isSuccess'])
         
 if __name__ == '__main__':
