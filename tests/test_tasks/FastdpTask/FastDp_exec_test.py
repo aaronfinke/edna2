@@ -40,7 +40,7 @@ class FastdpTest(unittest.TestCase):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_execute_FastdpTask(self):
-        referenceDataPath = self.dataPath / 'inDataFastdp_local.json'
+        referenceDataPath = self.dataPath / 'inDataFastdp.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
         fastdptask = FastdpTask(inData=inData)
         fastdptask.execute()

@@ -32,6 +32,7 @@ import time
 import pathlib
 import tempfile
 import shutil
+import hashlib
 
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
@@ -168,10 +169,14 @@ def createPyarchFilePath(filePath):
 
 
 def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
+    """Wait for the file to appear on disk.
+    """
     file_path = pathlib.Path(file)
     final_size = None
     has_timed_out = False
     should_continue = True
+    fileHash = "abc"
+    fileHash_old = "def"
     file_dir = file_path.parent
     if os.name != "nt" and file_dir.exists():
         # Patch provided by Sebastien 2018/02/09 for forcing NFS cache:
@@ -183,11 +188,12 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
     # Check if file is there
     if file_path.exists():
         file_size = file_path.stat().st_size
-        if expectedSize is not None:
-            # Check size
-            if file_size > expectedSize:
-                should_continue = False
-        final_size = file_size
+        fileHash_old = get_md5Hash(file_path)
+        # if expectedSize is not None:
+        #     # Check size
+        #     if file_size > expectedSize:
+        #         should_continue = False
+        # final_size = file_size
     if should_continue:
         logger.info("Waiting for file %s" % file_path)
         #
@@ -209,19 +215,32 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
             else:
                 # Check if file is there
                 if file_path.exists():
+                    fileHash = get_md5Hash(file_path)
                     file_size = file_path.stat().st_size
                     if expectedSize is not None:
                         # Check that it has right size
-                        if file_size > expectedSize:
+                        if file_size > expectedSize and fileHash == fileHash_old:
                             should_continue = False
                     else:
-                        should_continue = False
+                        if fileHash == fileHash_old:
+                            should_continue = False
                     final_size = file_size
+                    fileHash_old = fileHash
             if should_continue:
                 # Sleep 1 s
                 time.sleep(1)
     return has_timed_out, final_size
 
+def get_md5Hash(file):
+    file_path = pathlib.Path(file)
+    if not file_path.exists():
+        return None
+    with open(file_path, "rb") as fp:
+        md5Hash = hashlib.md5()
+        while chunk := fp.read(8192):
+            md5Hash.update(chunk)
+    hexHash = md5Hash.hexdigest()
+    return hexHash
 
 def stripDataDirectoryPrefix(data_directory):
     """ Removes any paths before /data/..., e.g. /gpfs/easy/data/..."""

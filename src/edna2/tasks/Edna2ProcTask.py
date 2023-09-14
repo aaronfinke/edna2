@@ -132,6 +132,7 @@ class Edna2ProcTask(AbstractTask):
         self.imageNoEnd = inData.get("imageNoEnd",None)
         self.masterFilePath = inData.get("masterFilePath",None)
         self.outData = None
+        self.resultFilePaths = []
 
         if inData.get("anomalous", True):
             self.doAnom = True
@@ -409,20 +410,21 @@ class Edna2ProcTask(AbstractTask):
 
         #copy the XDS.INP file from the successful run into the results directory.
         xds_INP_result_path = self.resultsDirectory / f"{self.pyarchPrefix}_successful_XDS.INP"
-        shutil.copy(Path(self.integration.outData["xdsInp"]), xds_INP_result_path)
-
         integrateLp_path = self.resultsDirectory / f"{self.pyarchPrefix}_INTEGRATE.LP"
-        shutil.copy(Path(self.integration.outData["integrateLp"]), integrateLp_path)
-
         correctLp_path = self.resultsDirectory / f"{self.pyarchPrefix}_CORRECT.LP"
-        shutil.copy(Path(self.integration.outData["correctLp"]), correctLp_path)
-
         integrateHkl_path = self.resultsDirectory / f"{self.pyarchPrefix}_INTEGRATE.HKL"
-        shutil.copy(Path(self.integration.outData["integrateHkl"]), integrateHkl_path)
-
         xdsAsciiHkl_path = self.resultsDirectory / f"{self.pyarchPrefix}_XDS_ASCII.HKL"
-        shutil.copy(Path(self.integration.outData["xdsAsciiHkl"]), xdsAsciiHkl_path)
+        try:
+            shutil.copy(Path(self.integration.outData["integrateHkl"]), integrateHkl_path)
+            shutil.copy(Path(self.integration.outData["xdsInp"]), xds_INP_result_path)
+            shutil.copy(Path(self.integration.outData["integrateLp"]), integrateLp_path)
+            shutil.copy(Path(self.integration.outData["correctLp"]), correctLp_path)
+            shutil.copy(Path(self.integration.outData["xdsAsciiHkl"]), xdsAsciiHkl_path)
+        except Exception as e:
+            logger.warning("Couldn't copy file to result directory")
+            logger.warning(e)
 
+        self.resultFilePaths.extend([xds_INP_result_path,integrateLp_path,correctLp_path,integrateHkl_path,xdsAsciiHkl_path])
 
         #calculate resolution cutoff
 
@@ -599,17 +601,21 @@ class Edna2ProcTask(AbstractTask):
                 'Successful',
                 'XSCALE finished in {0:.1f}s'.format(self.timeXscale))
 
-        self.xscaleTask_mergeAnomLPFile = self.resultsDirectory / "ep__merged_anom_XSCALE.LP"
-        shutil.copy(self.xscaleTask_mergeAnom.outData["xscaleLp"], self.xscaleTask_mergeAnomLPFile)
+        xscaleTask_mergeAnomLPFile = self.resultsDirectory / "ep__merged_anom_XSCALE.LP"
+        xscaleTask_mergenoAnomLPFile = self.resultsDirectory / "ep__merged_noanom_XSCALE.LP"
+        xscaleTask_unmergeAnomLPFile = self.resultsDirectory / "ep__unmerged_anom_XSCALE.LP"
+        xscaleTask_unmergenoAnomLPFile = self.resultsDirectory / "ep__unmerged_noanom_XSCALE.LP"
+        self.resultFilePaths.extend([xscaleTask_mergeAnomLPFile,xscaleTask_mergenoAnomLPFile,
+                                     xscaleTask_unmergeAnomLPFile,xscaleTask_unmergenoAnomLPFile])
+        try:
+            shutil.copy(self.xscaleTask_mergeAnom.outData["xscaleLp"], xscaleTask_mergeAnomLPFile)
+            shutil.copy(self.xscaleTask_mergenoAnom.outData["xscaleLp"], xscaleTask_mergenoAnomLPFile)
+            shutil.copy(self.xscaleTask_unmergeAnom.outData["xscaleLp"], xscaleTask_unmergeAnomLPFile)
+            shutil.copy(self.xscaleTask_unmergenoAnom.outData["xscaleLp"], xscaleTask_unmergenoAnomLPFile)
+        except Exception as e:
+            logger.warning("Couldn't copy file to result directory")
+            logger.warning(e)
 
-        self.xscaleTask_mergenoAnomLPFile = self.resultsDirectory / "ep__merged_noanom_XSCALE.LP"
-        shutil.copy(self.xscaleTask_mergenoAnom.outData["xscaleLp"], self.xscaleTask_mergenoAnomLPFile)
-
-        self.xscaleTask_unmergeAnomLPFile = self.resultsDirectory / "ep__unmerged_anom_XSCALE.LP"
-        shutil.copy(self.xscaleTask_unmergeAnom.outData["xscaleLp"], self.xscaleTask_unmergeAnomLPFile)
-
-        self.xscaleTask_unmergenoAnomLPFile = self.resultsDirectory / "ep__unmerged_noanom_XSCALE.LP"
-        shutil.copy(self.xscaleTask_unmergenoAnom.outData["xscaleLp"], self.xscaleTask_unmergenoAnomLPFile)
 
         logger.debug(f"XSCALE output: {self.xscaleTask_mergeAnom.outData}")
 
@@ -633,13 +639,16 @@ class Edna2ProcTask(AbstractTask):
         self.pointlessTaskNoAnom.join()
         self.pointlessTaskAnom.join()
         
+        pointlessAnomUnmergedMtzPath = self.resultsDirectory / (f"{self.pyarchPrefix}_ep__anom_pointless_unmerged.mtz")
+        pointlessNoAnomUnmergedMtzPath = self.resultsDirectory / (f"{self.pyarchPrefix}_ep__noanom_pointless_unmerged.mtz")
+        self.resultFilePaths.extend([pointlessAnomUnmergedMtzPath,pointlessNoAnomUnmergedMtzPath])
+
         try:
-            pointlessAnomUnmergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_" + self.pointlessTaskAnominData["output_file"]
             shutil.copy(Path(self.pointlessTaskAnom.outData["pointlessUnmergedMtz"]), pointlessAnomUnmergedMtzPath)
-            pointlessNoAnomUnmergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_" + self.pointlessTaskNoAnominData["output_file"]
             shutil.copy(Path(self.pointlessTaskNoAnom.outData["pointlessUnmergedMtz"]), pointlessNoAnomUnmergedMtzPath)
-        except:
-            logger.error("error copying pointless results to directory")
+        except Exception as e:
+            logger.warning("Couldn't copy file to result directory")
+            logger.warning(e)
 
         self.aimlessTask_anomData = {
             "input_file" : self.pointlessTaskAnom.outData["pointlessUnmergedMtz"],
@@ -670,25 +679,34 @@ class Edna2ProcTask(AbstractTask):
 
 
         logger.info(f"Aimless finished.")
+
+        aimlessAnomMergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_anom_aimless.mtz"
+        aimlessAnomUnmergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_anom_aimless_unmerged.mtz.gz"
+        aimlessAnomLogPath = self.resultsDirectory / f"{self.pyarchPrefix}_aimless_anom.log"
+        aimlessNoanomMergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_noanom_aimless.mtz"
+        aimlessNoanomUnmergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_noanom_aimless_unmerged.mtz.gz"
+        aimlessNoAnomLogPath = self.resultsDirectory / f"{self.pyarchPrefix}_aimless_noanom.log"
+
+        self.resultFilePaths.extend([aimlessAnomMergedMtzPath,aimlessAnomUnmergedMtzPath,
+                                     aimlessAnomLogPath,aimlessNoanomMergedMtzPath,
+                                     aimlessNoanomUnmergedMtzPath,aimlessNoAnomLogPath])
+
         try:
-            aimlessAnomMergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_anom_aimless.mtz"
             shutil.copy(Path(self.aimlessTask_anom.outData["aimlessMergedMtz"]), aimlessAnomMergedMtzPath)
-            aimlessAnomUnmergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_anom_aimless_unmerged.mtz.gz"
             shutil.copy(Path(self.aimlessTask_anom.outData["aimlessUnmergedMtz"]), aimlessAnomUnmergedMtzPath)
-            aimlessAnomLogPath = self.resultsDirectory / f"{self.pyarchPrefix}_aimless_anom.log"
             shutil.copy(Path(self.aimlessTask_anom.outData["aimlessLog"]), aimlessAnomLogPath)
-
-            aimlessNoanomMergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_noanom_aimless.mtz"
             shutil.copy(Path(self.aimlessTask_noanom.outData["aimlessMergedMtz"]), aimlessNoanomMergedMtzPath)
-            aimlessNoanomUnmergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_noanom_aimless_unmerged.mtz.gz"
             shutil.copy(Path(self.aimlessTask_noanom.outData["aimlessUnmergedMtz"]), aimlessNoanomUnmergedMtzPath)
-            aimlessNoAnomLogPath = self.resultsDirectory / f"{self.pyarchPrefix}_aimless_noanom.log"
             shutil.copy(Path(self.aimlessTask_noanom.outData["aimlessLog"]), aimlessNoAnomLogPath)
-
         except Exception as e:
-            logger.error("Error copying aimless results to directory: {0}".format(e))
-            self.setFailure()
-            return 
+            logger.warning("Couldn't copy file to result directory")
+            logger.warning(e)
+        
+        if self.if_anomalous_signal(self.aimlessTask_anom.outData["aimlessLog"],threshold=1.0):
+            logger.info("Significant anomalous signal for this dataset.")
+        else:
+            logger.info("Insufficient anomalous signal for this dataset.")
+
         
         logger.info("Start phenix.xtriage run...")
         self.phenixXTriageTaskData = {
@@ -751,27 +769,23 @@ class Edna2ProcTask(AbstractTask):
         self.uniqueifyNoAnom.join()
         self.phenixXTriageTask.join()
 
+        truncateAnomLog = self.resultsDirectory / f"{self.pyarchPrefix}_truncate_anom.log"
+        truncateNoAnomLog = self.resultsDirectory / f"{self.pyarchPrefix}_truncate_noanom.log"
+        uniqueAnomMtz = self.resultsDirectory / f"{self.pyarchPrefix}_anom_truncate.mtz"
+        uniqueNoAnomMtz = self.resultsDirectory / f"{self.pyarchPrefix}_noanom_truncate.mtz"
+        phenixXTriageTaskLog = self.resultsDirectory / f"{self.pyarchPrefix}_phenix_xtriage_anom.mtz"
+
+
         try: 
-            truncateAnomLog = self.resultsDirectory / f"{self.pyarchPrefix}_truncate_anom.log"
-            truncateNoAnomLog = self.resultsDirectory / f"{self.pyarchPrefix}_truncate_noanom.log"
             shutil.copy(Path(self.truncateAnom.outData["truncateLogPath"]),truncateAnomLog)
             shutil.copy(Path(self.truncateNoAnom.outData["truncateLogPath"]),truncateNoAnomLog)
-        except Exception as e:
-            logger.error("Error copying truncate log to results directory: {0}".format(e))
-
-        try:
-            uniqueAnomMtz = self.resultsDirectory / f"{self.pyarchPrefix}_anom_truncate.mtz"
-            uniqueNoAnomMtz = self.resultsDirectory / f"{self.pyarchPrefix}_noanom_truncate.mtz"
             shutil.copy(Path(self.uniqueifyAnom.outData["uniqueifyOutputMtz"]),uniqueAnomMtz)
             shutil.copy(Path(self.uniqueifyNoAnom.outData["uniqueifyOutputMtz"]),uniqueNoAnomMtz)
-        except Exception as e:
-            logger.error("Error copying uniqueify mtz to results directory: {0}".format(e))
-
-        try:
-            phenixXTriageTaskLog = self.resultsDirectory / f"{self.pyarchPrefix}_phenix_xtriage_anom.mtz"
             shutil.copy(Path(self.phenixXTriageTask.outData["logPath"]), phenixXTriageTaskLog)
         except:
-            logger.error("Error copying phenix.xtriage results to directory")
+            logger.warning("Couldn't copy file to result directory")
+            logger.warning(e)
+
         logger.info("Phenix.xtriage finished.")
 
         if self.phenixXTriageTask.outData["hasTwinning"] and self.phenixXTriageTask.outData["hasPseudotranslation"]:
@@ -789,19 +803,26 @@ class Edna2ProcTask(AbstractTask):
             self.tmpdir = tempfile.TemporaryDirectory() 
             self.pyarchDirectory = Path(self.tmpdir.name)
         else:
-            reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
-            pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
-            self.pyarchDirectory = Path(pyarchDirectory)
-            try:
-                self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
-                logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
-                for file in self.resultsDirectory.iterdir():
-                    pyarchFile = UtilsPath.createPyarchFilePath(file)
-                    shutil.copy(file,pyarchFile)
-            except OSError as e:
-                logger.error(f"Error when creating pyarch_dir: {e}")
-                self.tmpdir = tempfile.TemporaryDirectory() 
-                self.pyarchDirectory = Path(self.tmpdir.name)
+            self.pyarchDirectory = self.storeDataOnPyarch(self.resultFilePaths)
+
+        # if inData.get("test",False):
+        #     self.tmpdir = tempfile.TemporaryDirectory() 
+        #     self.pyarchDirectory = Path(self.tmpdir.name)
+        # else:
+        #     reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
+        #     pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
+        #     self.pyarchDirectory = Path(pyarchDirectory)
+        #     try:
+        #         self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
+        #         logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
+        #         for file in self.resultsDirectory.iterdir():
+        #             pyarchFile = UtilsPath.createPyarchFilePath(file)
+        #             shutil.copy(file,pyarchFile)
+        #     except OSError as e:
+        #         logger.error(f"Error when creating pyarch_dir: {e}")
+        #         self.tmpdir = tempfile.TemporaryDirectory() 
+        #         self.pyarchDirectory = Path(self.tmpdir.name)
+
 
 
         # Let's get results into a container for ispyb
@@ -819,16 +840,16 @@ class Edna2ProcTask(AbstractTask):
         self.ispybStoreAutoProcResultsAnom.execute()
         if self.ispybStoreAutoProcResultsAnom.isFailure():
             logger.error("ISPyB Store anom autoproc results failed.")
-            self.setFailure()
-            return
+            # self.setFailure()
+            # return
         
         logger.info("Sending noanom data to ISPyB...")
         self.ispybStoreAutoProcResultsNoAnom = ISPyBStoreAutoProcResults(inData=self.autoProcResultsContainerNoAnom, workingDirectorySuffix='noanom')
         self.ispybStoreAutoProcResultsNoAnom.execute()
         if self.ispybStoreAutoProcResultsNoAnom.isFailure():
             logger.error("ISPyB Store noanom autoproc results failed.")
-            self.setFailure()
-            return
+            # self.setFailure()
+            # return
 
         self.outData = {
             "anomalousData": self.autoProcResultsContainerAnom,
@@ -837,11 +858,28 @@ class Edna2ProcTask(AbstractTask):
 
         self.timeEnd = time.perf_counter()
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")
-        if inData.get("test",False):
+        if self.tmpdir is not None:
             self.tmpdir.cleanup()
 
         return self.outData
         
+    @classmethod
+    def storeDataOnPyarch(cls,resultFilePaths):
+        #create paths on Pyarch
+        pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0])
+        for resultFile in [f for f in resultFilePaths if f.exists()]:
+            resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
+            if not resultFilePyarchPath.parent.exists():
+                resultFilePyarchPath.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+            try:
+                logger.info(f"Copying {resultFile} to pyarch directory")
+                shutil.copy(resultFile,resultFilePyarchPath)
+            except Exception as e:
+                logger.warning(f"Couldn't copy file {resultFile} to results directory {resultFilePyarchPath.parent}")
+                logger.warning(e)
+        return pyarchDirectory
+                
+
 
     def generateAutoProcScalingResultsContainer(self, programId, integrationId, isAnom):
 
@@ -1059,3 +1097,23 @@ class Edna2ProcTask(AbstractTask):
         autoprocStatus.execute()
         return (autoprocStatus.outData["autoProcIntegrationId"],
                 autoprocStatus.outData["autoProcProgramId"])
+    
+    def if_anomalous_signal(self, aimless_log, threshold = 1.0):
+        """Grab the anomalous CC RCR value and see if it is 
+        sufficiently large to run fast_ep. Generally, a value 
+        greater than 1 indicates a significant anomalous signal."""
+        cc_rcr = 0.0
+        try:
+            with open(aimless_log,'r') as fp:
+                for line in fp:
+                    if "$TABLE:  Correlations CC(1/2) within dataset, XDSdataset" in line:
+                        while "Overall" not in line: 
+                            line = next(fp)
+                        cc_rcr = float(line.split()[3])
+        except:
+            pass
+        if cc_rcr >= threshold:
+            return True
+        else:
+            return False
+    
