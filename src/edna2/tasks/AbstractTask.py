@@ -36,6 +36,7 @@ import socket
 
 from edna2.utils import UtilsPath
 from edna2.utils import UtilsLogging
+from edna2.utils import UtilsConfig
 
 logger = UtilsLogging.getLogger()
 
@@ -206,31 +207,30 @@ class AbstractTask():  # noqa R0904
             errorLog = f.read()
         return errorLog
 
-    def submitCommandLine(self, commandLine, jobName, partition, ignoreErrors):
+    def submitCommandLine(self, commandLine, ignoreErrors, partition=None, jobName="EDNA2"):
+        exclusive = UtilsConfig.get("Slurm","is_exclusive",False)
+        nodes = UtilsConfig.get("Slurm","nodes",1)
+        core = UtilsConfig.get("Slurm","cores",10)
+        time = UtilsConfig.get("Slurm","time","01:00:00")
+        mem = UtilsConfig.get("Slurm","mem",4000)
         workingDir = str(self._workingDirectory)
         if workingDir.startswith("/mntdirect/_users"):
             workingDir = workingDir.replace("/mntdirect/_users", "/home/esrf")
-        nodes = 1
-        core = 10
-        time = "1:00:00"
-        mem = 16000  # 16 Gb memory by default
         script = "#!/bin/bash\n"
         script += '#SBATCH --job-name="{0}"\n'.format(jobName)
-        if partition is None:
-            partition = "mx"
-        else:
-            partition = "mx,{0}".format(partition)
         script += "#SBATCH --partition={0}\n".format(partition)
-        script += "#SBATCH --exclusive\n"
-        script += "#SBATCH --mem={0}\n".format(mem)
+        script += "#SBATCH --exclusive\n" if exclusive else ""
+        script += "#SBATCH --mem={0}\n".format(mem) if not exclusive else ""
         script += "#SBATCH --nodes={0}\n".format(nodes)
-        script += "#SBATCH --nodes=1\n"  # Necessary for not splitting jobs! See ATF-57
-        script += "#SBATCH --cpus-per-task={0}\n".format(core)
+        # script += "#SBATCH --nodes=1\n"  # Necessary for not splitting jobs! See ATF-57
+        script += "#SBATCH --cpus-per-task={0}\n".format(core) if not exclusive else ""
         script += "#SBATCH --time={0}\n".format(time)
         script += "#SBATCH --chdir={0}\n".format(workingDir)
-        script += "#SBATCH --output=stdout.txt\n"
-        script += "#SBATCH --error=stderr.txt\n"
+        script += "#SBATCH --output=EDNA_%j.out\n"
+        script += "#SBATCH --error=EDNA_%j.err\n"
         script += commandLine + "\n"
+        script += "echo $0\n"
+        script += "echo \"Running on %N\"\n"
         shellFile = self._workingDirectory / (jobName + "_slurm.sh")
         with open(str(shellFile), "w") as f:
             f.write(script)

@@ -131,7 +131,7 @@ class Edna2ProcTask(AbstractTask):
         self.imageNoStart = inData.get("imageNoStart",None)
         self.imageNoEnd = inData.get("imageNoEnd",None)
         self.masterFilePath = inData.get("masterFilePath",None)
-        self.outData = None
+        outData = {}
         self.resultFilePaths = []
 
         if inData.get("anomalous", True):
@@ -704,8 +704,10 @@ class Edna2ProcTask(AbstractTask):
         
         if self.if_anomalous_signal(self.aimlessTask_anom.outData["aimlessLog"],threshold=1.0):
             logger.info("Significant anomalous signal for this dataset.")
+            outData["HighAnomSignal"] = True
         else:
             logger.info("Insufficient anomalous signal for this dataset.")
+            outData["HighAnomSignal"] = False
 
         
         logger.info("Start phenix.xtriage run...")
@@ -851,22 +853,21 @@ class Edna2ProcTask(AbstractTask):
             # self.setFailure()
             # return
 
-        self.outData = {
-            "anomalousData": self.autoProcResultsContainerAnom,
-            "nonAnomalousData": self.autoProcResultsContainerNoAnom
-        }
+        outData["anomalousData"] = self.autoProcResultsContainerAnom
+        outData["nonAnomalousData"] = self.autoProcResultsContainerNoAnom
 
         self.timeEnd = time.perf_counter()
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
 
-        return self.outData
+        return outData
         
     @classmethod
-    def storeDataOnPyarch(cls,resultFilePaths):
+    def storeDataOnPyarch(cls,resultFilePaths, pyarchDirectory=None):
         #create paths on Pyarch
-        pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0])
+        if pyarchDirectory is None:
+            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0])
         for resultFile in [f for f in resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
             if not resultFilePyarchPath.parent.exists():

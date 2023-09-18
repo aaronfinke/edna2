@@ -121,10 +121,11 @@ class FastdpTask(AbstractTask):
         self.imageNoStart = inData.get("imageNoStart",None)
         self.imageNoEnd = inData.get("imageNoEnd",None)
         self.masterFilePath = inData.get("masterFilePath",None)
+        outData = {}
 
 
 
-        logger.info("EDNA2 Auto Processing started")
+        logger.info("fastdp auto processing started")
         logger.info(f"Running on {socket.gethostname()}")
 
         try:
@@ -217,23 +218,6 @@ class FastdpTask(AbstractTask):
         #make results directory
         self.resultsDirectory = self.getWorkingDirectory() / "results"
         self.resultsDirectory.mkdir(exist_ok=True, parents=True, mode=0o755)
-
-        #make pyarch directory 
-        if inData.get("test",False):
-            self.tmpdir = tempfile.TemporaryDirectory() 
-            self.pyarchDirectory = Path(self.tmpdir.name)
-        else:
-            reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
-            pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
-            self.pyarchDirectory = Path(pyarchDirectory)
-            try:
-                self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
-                logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
-            except OSError as e:
-                logger.error(f"Error when creating pyarch_dir: {e}")
-                self.tmpdir = tempfile.TemporaryDirectory() 
-                self.pyarchDirectory = Path(self.tmpdir.name)
-
         
         if any(beamline in str(pathToStartImage) for beamline in ["id23eh1", "id29"]):
             minSizeFirst = 6000000
@@ -333,7 +317,8 @@ class FastdpTask(AbstractTask):
 
         logger.info("fastdp command is {}".format(commandLine))
         try:
-            self.runCommandLine(commandLine, listCommand=[])
+            # self.runCommandLine(commandLine, listCommand=[])
+            self.submitCommandLine(commandLine, partition="fujitsu",ignoreErrors=False,jobName="fast_dp")
         except RuntimeError:
             self.setFailure()
             return
@@ -364,7 +349,6 @@ class FastdpTask(AbstractTask):
         if pathToAimlessLog.exists():
             pyarchAimlessLog = self.pyarchPrefix + "_aimless.log"
             shutil.copy(pathToAimlessLog, self.resultsDirectory /  pyarchAimlessLog)
-            shutil.copy(pathToAimlessLog, self.pyarchDirectory / pyarchAimlessLog)
             self.aimlessData = AimlessTask.extractAimlessResults(pathToAimlessLog)
             logger.debug(f"aimlessData = {self.aimlessData}")
         #extract ISa...
@@ -382,27 +366,26 @@ class FastdpTask(AbstractTask):
         if pathToXdsAsciiHkl.exists():
             pyarchXdsAsciiHkl = self.pyarchPrefix + "_XDS_ASCII.HKL.gz"
             with open(pathToXdsAsciiHkl, 'rb') as f_in:
-                with gzip.open(os.path.join(self.pyarchDirectory, pyarchXdsAsciiHkl), 'wb') as f_out:
+                with gzip.open(os.path.join(self.resultsDirectory, pyarchXdsAsciiHkl), 'wb') as f_out:
                     shutil.copyfileobj(f_in, f_out)
-            if self.resultsDirectory:
-                shutil.copy(self.pyarchDirectory / pyarchXdsAsciiHkl, self.resultsDirectory /  pyarchXdsAsciiHkl)
         
         # Add fast_dp.mtz if present and gzip it
         pathToFastDpMtz = self.fastDpResultFiles.get("fastDpMtz")
         if pathToFastDpMtz.exists():
             pyarchFastDpMtz = self.pyarchPrefix + "_fast_dp.mtz"
             shutil.copy(pathToFastDpMtz, self.resultsDirectory /  pyarchFastDpMtz)
-            shutil.copy(pathToFastDpMtz, self.pyarchDirectory / pyarchFastDpMtz)
         
         # add fast_dp.log to results/pyarch directory
         pyarchFastDpLog = self.pyarchPrefix + "_fast_dp.log"
         shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.resultsDirectory / pyarchFastDpLog)
-        shutil.copy(self.getWorkingDirectory() / "fast_dp.log", self.pyarchDirectory / pyarchFastDpLog)
 
-        if not inData.get("test",False):
-            for file in self.resultsDirectory.iterdir():
-                pyarchFile = UtilsPath.createPyarchFilePath(file)
-                shutil.copy(file,pyarchFile)
+        resultFilePaths = list(self.resultsDirectory.iterdir())
+
+        if inData.get("test",False):
+            self.tmpdir = tempfile.TemporaryDirectory() 
+            self.pyarchDirectory = Path(self.tmpdir.name)
+        else:
+            self.pyarchDirectory = self.storeDataOnPyarch(resultFilePaths)
 
         autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=self.anomalous)        
         if self.onlineAutoProcessing:
@@ -414,9 +397,16 @@ class FastdpTask(AbstractTask):
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
         
-        self.outData = autoProcResults
+        outData["fast_dp_results"] = autoProcResults
+        if self.if_anomalous_signal(pathToAimlessLog, threshold=1.0):
+            logger.info("Significant anomalous signal for this dataset.")
+            outData["HighAnomSignal"] = True
+        else:
+            logger.info("Insufficient anomalous signal for this dataset.")
+            outData["HighAnomSignal"] = False
 
-        return self.outData
+
+        return outData
 
 
         
@@ -490,6 +480,23 @@ class FastdpTask(AbstractTask):
 
         return autoProcResultsContainer
 
+    @classmethod
+    def storeDataOnPyarch(cls,resultFilePaths, pyarchDirectory=None):
+        #create paths on Pyarch
+        if pyarchDirectory is None:
+            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0])
+        for resultFile in [f for f in resultFilePaths if f.exists()]:
+            resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
+            if not resultFilePyarchPath.parent.exists():
+                resultFilePyarchPath.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+            try:
+                logger.info(f"Copying {resultFile} to pyarch directory")
+                shutil.copy(resultFile,resultFilePyarchPath)
+            except Exception as e:
+                logger.warning(f"Couldn't copy file {resultFile} to results directory {resultFilePyarchPath.parent}")
+                logger.warning(e)
+        return pyarchDirectory
+
 
     def fastDpJsonToISPyBScalingStatistics(self, fastDpResults, aimlessResults=None, isAnom=False):
         autoProcScalingContainer = []
@@ -548,3 +555,21 @@ class FastdpTask(AbstractTask):
             fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
         return fmt_string.format(num)
 
+    def if_anomalous_signal(self, aimless_log, threshold = 1.0):
+        """Grab the anomalous CC RCR value and see if it is 
+        sufficiently large to run fast_ep. Generally, a value 
+        greater than 1 indicates a significant anomalous signal."""
+        cc_rcr = 0.0
+        try:
+            with open(aimless_log,'r') as fp:
+                for line in fp:
+                    if "$TABLE:  Correlations CC(1/2) within dataset, XDSdataset" in line:
+                        while "Overall" not in line: 
+                            line = next(fp)
+                        cc_rcr = float(line.split()[3])
+        except:
+            pass
+        if cc_rcr >= threshold:
+            return True
+        else:
+            return False
