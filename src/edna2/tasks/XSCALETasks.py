@@ -60,10 +60,16 @@ class XSCALETask(AbstractTask):
         commandLine = "/mxn/groups/sw/mxsw/XDS/xscale_par"
         self.isAnom = inData["isAnom"]
         self.merge = inData["merge"]
+        onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        partition = UtilsConfig.get("XDSTask","slurm_partition",None)
+
         listXSCALE_INP = self.generateXSCALE_INP(inData=inData, isAnom=self.isAnom, merge=self.merge)
         self.writeXSCALE_INP(listXSCALE_INP, self.getWorkingDirectory())
         self.setLogFileName("xscale.log")
-        self.runCommandLine(commandLine, listCommand=[])
+        if onlineAutoProcessing:
+            self.submitCommandLine(commandLine, jobName="EDNA2_XSCALE", partition=partition, ignoreErrors=False)
+        else:
+            self.runCommandLine(commandLine, listCommand=[])
         # Work in progress!
         outData = self.parseXSCALEOutput()
         return outData

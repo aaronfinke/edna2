@@ -55,6 +55,25 @@ from edna2.tasks.WaitFileTask import WaitFileTask
 
 class AutoPROCTask(AbstractTask):
 
+    def getInDataSchema(self):
+        return {
+            "type": "object",
+            "required": ["dataCollectionId"],
+            "properties":
+            {
+                "onlineAutoProcessing":{"type":["boolean","null"]},
+                "dataCollectionId": {"type":["integer","null"]},
+                "masterFilePath": {"type":["string","null"]},
+                "spaceGroup": {"type":["integer","string"]},
+                "unitCell": {"type":["string","null"]},
+                "residues": {"type":["integer","null"]},
+                "anomalous": {"type":["boolean","null"]},
+                "imageNoStart": {"type":["integer","null"]},
+                "imageNoEnd": {"type":["integer","null"]},
+                "workingDirectory": {"type":["string","null"]},
+            }
+        }
+
     def setFailure(self):
         self._dictInOut["isFailure"] = True
         if self.integrationId is not None and self.programId is not None:
@@ -90,21 +109,21 @@ class AutoPROCTask(AbstractTask):
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
-        self.processingPrograms="autoproc2"
-        self.processingProgramsStaraniso = "autoproc_staraniso2"
+        self.processingPrograms="autoproc"
+        self.processingProgramsStaraniso = "autoproc_staraniso"
         self.processingCommandLine = ""
-
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
         self.setLogFileName(f"autoPROC_{self.startDateTimeFormatted}.log")
         self.dataCollectionId = inData.get("dataCollectionId")
         self.tmpdir = None
         directory = None
         template = None
-        self.imageNoStart = None
-        self.imageNoEnd = None
+        self.imageNoStart = inData.get("imageNoStart", None)
+        self.imageNoEnd = inData.get("imageNoEnd", None)
         pathToStartImage = None
         pathToEndImage = None
 
-        self.doAnom = inData.get("doAnom",False)
+        self.anomalous = inData.get("anomalous",False)
 
         logger.debug("Working directory is {0}".format(self.getWorkingDirectory()))
 
@@ -123,6 +142,8 @@ class AutoPROCTask(AbstractTask):
                 logger.debug("Could not parse space group")
                 self.spaceGroupNumber = 0
         else:
+            self.spaceGroupNumber = 0
+            self.spaceGroupString = ""            
             logger.info("No space group supplied")
 
         # need both SG and unit cell
@@ -258,13 +279,13 @@ class AutoPROCTask(AbstractTask):
                 dataCollectionId=self.dataCollectionId,
                 processingCommandLine = self.processingCommandLine,
                 processingPrograms = self.processingPrograms,
-                isAnom = self.doAnom,
+                isAnom = self.anomalous,
                 timeStart = self.timeStart)
             self.integrationIdStaraniso, self.programIdStaraniso = ISPyBStoreAutoProcResults.setIspybToRunning(
                 dataCollectionId=self.dataCollectionId,
                 processingCommandLine = self.processingCommandLine,
                 processingPrograms = self.processingProgramsStaraniso,
-                isAnom = self.doAnom,
+                isAnom = self.anomalous,
                 timeStart = self.timeStart)
         
         # Determine pyarch prefix
@@ -284,67 +305,39 @@ class AutoPROCTask(AbstractTask):
             self.setFailure()
             return
 
-        #set up command line
-        self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROCExec_0"
-        inc_x = 1
-        while self.autoPROCExecDir.is_dir():
-            self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROCExec_{0}".format(inc_x)
-            inc_x += 1
+        autoPROCExecinData = {
+            "dataCollectionId": self.dataCollectionId,
+            "onlineAutoProcessing": self.onlineAutoProcessing,
+            "masterFilePath" : masterFilePath,
+            "imageNoStart": self.imageNoStart,
+            "imageNoEnd" : self.imageNoEnd,
+            "spaceGroupNumber" : self.spaceGroupNumber,
+            "spaceGroupString" : self.spaceGroupString,
+            "unitCell" : self.unitCell,
+            "lowResLimit" : self.lowResLimit,
+            "highResLimit" : self.highResLimit,
+            "anomalous" : self.anomalous
+        }
 
-        autoPROCSetup = UtilsConfig.get(self,"autoPROCSetup", None)
-        autoPROCExecutable = UtilsConfig.get(self,"autoPROCExecutable", "process")
-        maxNoProcessors = UtilsConfig.get(self, "maxNoProcessors", None)
-        autoPROCmacro = UtilsConfig.get(self, "macro", None)
-
-        if autoPROCSetup is None:
-            commandLine = ""
-        else:
-            commandLine = ". " + autoPROCSetup + "\n"
-        commandLine += " {0}".format(autoPROCExecutable)
-        #add flags, if present
-        commandLine += " -B"
-        commandLine += " -d {0}".format(str(self.autoPROCExecDir))
-        commandLine += " -nthreads {0}".format(maxNoProcessors)
-        
-        commandLine += " -h5 {0}".format(masterFilePath)
-        commandLine += " -ANO" if self.doAnom else ""
-
-        if autoPROCmacro is not None:
-            for macro in autoPROCmacro.split():
-                commandLine += " -M {0}".format(macro)
-
-        if self.spaceGroup != 0 and self.unitCell is not None:
-            commandLine += " symm=\"{0}\"".format(self.spaceGroup)
-            commandLine += " cell=\"{cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}\"".format(**self.unitCell)
-
-        if self.lowResLimit is not None or self.highResLimit is not None:
-            low = self.lowResLimit if self.lowResLimit else 1000.0
-            high = self.highResLimit if self.highResLimit else 0.1
-            commandLine += " -R {0} {1}".format(low,high)
-
-        config = UtilsConfig.getConfig()
-        config.optionxform = str
-        aP_config = config["AutoPROCTask"]
-        logger.debug(f"{aP_config}")
-        for k,v in aP_config.items():
-            if k.startswith("autoPROC_"):
-                logger.debug(f"autoPROC option: {k}={v}")
-                commandLine += " {0}={1}".format(k,v)
-        
         self.logToIspyb(self.integrationId,
                     'Indexing', 'Launched', 'AutoPROC started')
         self.logToIspyb(self.integrationIdStaraniso,
                     'Indexing', 'Launched', 'AutoPROC started')
 
 
-        logger.info("autoPROC command is {}".format(commandLine))
-        
-        try:
-            self.runCommandLine(commandLine, listCommand=[])
-        except RuntimeError:
+        timeOut = inData.get("timeout",None)
+        if timeOut is None:
+            timeOut = UtilsConfig.get(self,"timeOut",3600)
+        autoPROCExec = AutoPROCExecTask(inData=autoPROCExecinData, workingDirectorySuffix="0")
+        autoPROCExec.setTimeout(timeOut)
+        autoPROCExec.execute()
+        if autoPROCExec.isFailure():
+            if autoPROCExec["timeoutExit"] == True:
+                logger.error(f"Operation timed out after {timeOut} s.")
             self.setFailure()
             return
         
+        self.autoPROCExecDir = Path(autoPROCExec.outData["workingDirectory"])
         self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
         ispybXml = self.autoPROCExecDir / "autoPROC.xml"
@@ -354,7 +347,7 @@ class AutoPROCTask(AbstractTask):
                                                             program_id=self.programId, 
                                                             integration_id=self.integrationId,
                                                             processing_programs= self.processingPrograms,
-                                                            anomalous=self.doAnom)
+                                                            anomalous=self.anomalous)
 
         ispybXmlStaraniso = self.autoPROCExecDir / "autoPROC_staraniso.xml"
         if ispybXmlStaraniso.is_file():
@@ -363,7 +356,7 @@ class AutoPROCTask(AbstractTask):
                                                                      program_id=self.programIdStaraniso, 
                                                                      integration_id=self.integrationIdStaraniso,
                                                                      processing_programs=self.processingProgramsStaraniso,
-                                                                     anomalous=self.doAnom)
+                                                                     anomalous=self.anomalous)
 
         #get CIF Files and gzip them
         autoPROCStaranisoAllCif = self.autoPROCExecDir / "Data_1_autoPROC_STARANISO_all.cif"
@@ -398,7 +391,7 @@ class AutoPROCTask(AbstractTask):
         
 
         #copy files to results directory
-        autoPROCLogFile = self.getLogPath()
+        autoPROCLogFile = autoPROCExec.getSlurmLogPath() if self.onlineAutoProcessing else autoPROCExec.getLogPath()
         autoPROCReportPdf = self.autoPROCExecDir / "report.pdf"
         autoPROCStaranisoReportPdf = self.autoPROCExecDir / "report_staraniso.pdf"
         autoPROCStaranisoAllDataUniqueMtz = self.autoPROCExecDir / "staraniso_alldata-unique.mtz"
@@ -644,3 +637,87 @@ class AutoPROCTask(AbstractTask):
 
         autoprocStatus = ISPyBStoreAutoProcStatus(inData=statusInput, workingDirectorySuffix="")
         autoprocStatus.execute()
+
+class AutoPROCExecTask(AutoPROCTask):
+    def run(self, inData):
+        outData = {}
+        logger.debug(f"working directory is {self.getWorkingDirectory()}")
+        self.onlineAutoProcessing = inData["onlineAutoProcessing"]
+        self.masterFilePath = inData["masterFilePath"]
+        self.imageNoStart = inData["imageNoStart"]
+        self.imageNoEnd = inData["imageNoEnd"]
+
+        self.spaceGroupNumber = inData.get("spaceGroupNumber",0)
+        self.spaceGroupString = inData.get("spaceGroupString","")
+
+        self.unitCell = inData.get("unitCell",None)
+        self.lowResLimit = inData.get("lowResolutionLimit",None)
+        self.highResLimit = inData.get("highResolutionLimit",None)
+        self.anomalous = inData.get("anomalous",False)
+
+
+        #set up command line
+        self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROCExec_0"
+        inc_x = 1
+        while self.autoPROCExecDir.is_dir():
+            self.autoPROCExecDir = self.getWorkingDirectory() / "AutoPROCExec_{0}".format(inc_x)
+            inc_x += 1
+
+        outData["workingDirectory"] = str(self.autoPROCExecDir)
+
+        autoPROCSetup = UtilsConfig.get("AutoPROCTask","autoPROCSetup", None)
+        autoPROCExecutable = UtilsConfig.get("AutoPROCTask","autoPROCExecutable", "process")
+        maxNoProcessors = UtilsConfig.get("AutoPROCTask", "maxNoProcessors", None)
+        autoPROCmacros = UtilsConfig.get("AutoPROCTask", "macros", None)
+
+        if autoPROCSetup is None:
+            commandLine = ""
+        else:
+            commandLine = ". " + autoPROCSetup + "\n"
+        commandLine += " {0}".format(autoPROCExecutable)
+        #add flags, if present
+        commandLine += " -B"
+        commandLine += " -d {0}".format(str(self.autoPROCExecDir))
+        commandLine += " -nthreads {0}".format(maxNoProcessors)
+        
+        commandLine += " -h5 {0}".format(self.masterFilePath)
+        commandLine += " -ANO" if self.anomalous else ""
+
+        if autoPROCmacros is not None:
+            for macro in autoPROCmacros.split():
+                commandLine += " -M {0}".format(macro)
+
+        if self.spaceGroupString != "" and self.unitCell is not None:
+            commandLine += " symm=\"{0}\"".format(self.spaceGroupString)
+            commandLine += " cell=\"{cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}\"".format(**self.unitCell)
+
+        if self.lowResLimit is not None or self.highResLimit is not None:
+            low = self.lowResLimit if self.lowResLimit else 1000.0
+            high = self.highResLimit if self.highResLimit else 0.1
+            commandLine += " -R {0} {1}".format(low,high)
+
+        config = UtilsConfig.getConfig()
+        config.optionxform = str
+        aP_config = config["AutoPROCTask"]
+        logger.debug(f"{aP_config}")
+        for k,v in aP_config.items():
+            if k.startswith("autoPROC_"):
+                logger.debug(f"autoPROC option: {k}={v}")
+                commandLine += " {0}={1}".format(k,v)
+        
+
+        logger.info("autoPROC command is {}".format(commandLine))
+    
+
+        if self.onlineAutoProcessing:
+            returncode = self.submitCommandLine(commandLine, jobName="EDNA2_aP", partition=UtilsConfig.getTaskConfig("slurm_partition"), ignoreErrors=False)
+            if returncode != 0:
+                self.setFailure()
+                return
+        else:
+            try:
+                self.runCommandLine(commandLine, listCommand=[])
+            except RuntimeError:
+                self.setFailure()
+                return
+        return outData

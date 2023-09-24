@@ -76,17 +76,17 @@ class FastdpTask(AbstractTask):
             "type": "object",
             "properties":
             {
-                "dataCollectionId": {"type":"integer"},
-                "masterFilePath": {"type":"string"},
+                "dataCollectionId": {"type":["integer","null"]},
+                "masterFilePath": {"type":["string","null"]},
                 "spaceGroup": {"type":["integer","string"]},
-                "unitCell": {"type":"string"},
-                "anomalous": {"type":"boolean"},
-                "workingDirectory": {"type":"string"},
-                "onlineAutoProcessing": {"type":"boolean"},
-                "imageNoStart" : {"type":"integer"},
-                "imageNoEnd" : {"type":"integer"},
+                "unitCell": {"type":["string","null"]},
+                "anomalous": {"type":["boolean","null"]},
+                "workingDirectory": {"type":["string","null"]},
+                "onlineAutoProcessing": {"type":["boolean","null"]},
+                "imageNoStart": {"type":["integer","null"]},
+                "imageNoEnd": {"type":["integer","null"]},
             },
-            "oneOf": [
+            "anyOf": [
                 {
                     "required": [
                         "dataCollectionId"
@@ -162,9 +162,9 @@ class FastdpTask(AbstractTask):
                 numImages = ispybDataCollection["numberOfImages"]
                 self.imageNoEnd = numImages - self.imageNoStart + 1
                 pathToStartImage = os.path.join(self.imageDirectory,
-                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
+                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
                 pathToEndImage = os.path.join(self.imageDirectory,
-                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
+                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
             except:
                 logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
                 if self.masterFilePath is None:
@@ -281,7 +281,7 @@ class FastdpTask(AbstractTask):
 
         if self.masterFilePath is None:
             self.masterFilePath = os.path.join(self.imageDirectory,
-                    self.eiger_template_to_master(self.fileTemplate))
+                    UtilsImage.eiger_template_to_master(self.fileTemplate))
 
         #set up command line
         fastdpSetup = UtilsConfig.get(self,"fastdpSetup", None)
@@ -316,12 +316,18 @@ class FastdpTask(AbstractTask):
         commandLine += " {0}".format(self.masterFilePath)
 
         logger.info("fastdp command is {}".format(commandLine))
-        try:
-            # self.runCommandLine(commandLine, listCommand=[])
-            self.submitCommandLine(commandLine, partition="fujitsu",ignoreErrors=False,jobName="fast_dp")
-        except RuntimeError:
-            self.setFailure()
-            return
+
+        if self.onlineAutoProcessing:
+            returnCode = self.submitCommandLine(commandLine, partition=UtilsConfig.get(self,"slurm_partition",None),ignoreErrors=False,jobName="EDNA2_fastdp")
+            if returnCode != 0:
+                self.setFailure()
+                return
+        else:
+            try:
+                self.runCommandLine(commandLine, listCommand=[])
+            except RuntimeError:
+                self.setFailure()
+                return
         
         self.endDateTime = datetime.now().isoformat(timespec='seconds')
         
@@ -536,24 +542,6 @@ class FastdpTask(AbstractTask):
             logger.error("autoProcScalingContainer could not be sorted")
             pass
         return autoProcScalingContainer
-
-
-
-    def eiger_template_to_master(self, fmt):
-        if UtilsConfig.isMAXIV():
-            fmt_string = fmt.replace("%06d", "master")
-        else:
-            fmt_string = fmt.replace("####", "1_master")
-        return fmt_string
-
-    def eiger_template_to_image(self, fmt, num):
-        import math
-        fileNumber = int(math.ceil(num / 100.0))
-        if UtilsConfig.isMAXIV():
-            fmt_string = fmt.replace("%06d", "data_%06d" % fileNumber)
-        else:
-            fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
-        return fmt_string.format(num)
 
     def if_anomalous_signal(self, aimless_log, threshold = 1.0):
         """Grab the anomalous CC RCR value and see if it is 

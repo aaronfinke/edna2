@@ -1,6 +1,6 @@
 {
     "dataCollectionId": 97882,
-    "doAnomandNoAnom": true,
+    "anomalous": true,
     "test": true,
     "onlineAutoProcessing":true
 }

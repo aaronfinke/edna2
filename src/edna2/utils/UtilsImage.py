@@ -234,3 +234,20 @@ def generateImageListFromH5Master_fast(masterFilePath):
         image_nr_low = int(master_file['/entry/data'][data_file_low].attrs['image_nr_low'])
         image_list.append(f"{str(masterFilePath.parent)}/{image_list_stem}_{image_nr_low:06}.h5")
     return image_nr_low, image_nr_high, {"imagePath": image_list}
+
+def eiger_template_to_master(fmt):
+    if UtilsConfig.isMAXIV():
+        fmt_string = fmt.replace("%06d", "master")
+    else:
+        fmt_string = fmt.replace("####", "1_master")
+    return fmt_string
+
+def eiger_template_to_image(fmt, num):
+    import math
+    fileNumber = int(math.ceil(num / 100.0))
+    if UtilsConfig.isMAXIV():
+        fmt_string = fmt.replace("%06d", "data_%06d" % fileNumber)
+    else:
+        fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
+    return fmt_string.format(num)
+

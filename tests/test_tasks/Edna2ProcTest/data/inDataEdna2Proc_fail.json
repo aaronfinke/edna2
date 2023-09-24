@@ -3,5 +3,5 @@
     "imagePath": "/gpfs/offline1/staff/biomax/aarfin/exemplary_data_set/data/Tau-natA5_1_master.h5",
     "spaceGroup": null,
     "unitCell": null,
-    "doAnomandNoAnom": true
+    "anomalous": true
 }

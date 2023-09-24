@@ -39,7 +39,7 @@ class MAXIVAutoProcessingTaskTest(unittest.TestCase):
     def setUp(self):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
-    def test_execute_FastdpTask(self):
+    def test_execute_MAXIVAutoProcessingTask(self):
         referenceDataPath = self.dataPath / 'inDataMaxIVAutoProcessing.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
         maxivAutoProcessing = MAXIVAutoProcessing(inData=inData)

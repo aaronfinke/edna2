@@ -62,7 +62,7 @@ from edna2.tasks.AutoPROCTask import AutoPROCTask
 from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
 from edna2.tasks.WaitFileTask import WaitFileTask
 
-class MAXIVAutoProcessing(AbstractTask):
+class MAXIVAutoProcessingTask(AbstractTask):
     """
     Runs four autoprocessing pipelines.
     """
@@ -73,14 +73,15 @@ class MAXIVAutoProcessing(AbstractTask):
             "required": ["dataCollectionId"],
             "properties":
             {
-                "dataCollectionId": {"type":"integer"},
-                "masterFilePath": {"type":"string"},
+                "dataCollectionId": {"type":["integer","null"]},
+                "masterFilePath": {"type":["string","null"]},
                 "spaceGroup": {"type":["integer","string"]},
-                "unitCell": {"type":"string"},
-                "residues": {"type":"integer"},
-                "anomalous": {"type":"boolean"},
-                "workingDirectory": {"type":"string"},
-                "pdb": {"type":"string"}
+                "unitCell": {"type":["string","null"]},
+                "residues": {"type":["integer","null"]},
+                "anomalous": {"type":["boolean","null"]},
+                "workingDirectory": {"type":["string","null"]},
+                "pdb": {"type":["string","null"]},
+                "test": {"type":["boolean","null"]}
             }
         }
     
@@ -94,17 +95,19 @@ class MAXIVAutoProcessing(AbstractTask):
         self.tmpdir = None
 
         self.dataCollectionId = inData.get("dataCollectionId", None)
+        self.masterFilePath = inData.get("masterFilePath", None)
         self.anomalous = inData.get("anomalous",False)
         self.spaceGroup = inData.get("spaceGroup",0)
         self.unitCell = inData.get("unitCell",None)
         self.residues = inData.get("residues",None)
         self.workingDirectory = inData.get("workingDirectory", self.getWorkingDirectory())
         self.pdb = inData.get("pdb",None)
+        self.test = inData.get("test",False)
 
         self.proteinAcronym = "AUTOMATIC"
         self.sampleName = "DEFAULT"
 
-        logger.info("Xia2DIALS processing started")
+        logger.info("MAX IV Autoprocessing started")
         logger.info(f"Running on {socket.gethostname()}")
         try:
             logger.info(f"System load avg: {os.getloadavg()}")
@@ -168,11 +171,12 @@ class MAXIVAutoProcessing(AbstractTask):
             numImages = ispybDataCollection["numberOfImages"]
             self.imageNoEnd = numImages - self.imageNoStart + 1
             pathToStartImage = os.path.join(self.imageDirectory,
-                                            self.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
+                                            UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
             pathToEndImage = os.path.join(self.imageDirectory,
-                                            self.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
-        except:
+                                            UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
+        except Exception as e:
             logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
+            logger.warning(e)
             if self.masterFilePath is None:
                 logger.error("No dataCollectionId or masterFilePath found, exiting")
                 self.setFailure()
@@ -193,21 +197,25 @@ class MAXIVAutoProcessing(AbstractTask):
 
         edna2ProcTask = Edna2ProcTask(inData={
             "onlineAutoProcessing": True,
-            "datacollectionId": self.dataCollectionId,
+            "dataCollectionId": self.dataCollectionId,
             "unitCell": self.unitCell,
             "spaceGroup": self.spaceGroup,
             "imageNoStart": self.imageNoStart,
             "imageNoEnd": self.imageNoEnd,
+            "anomalous": False,
+            "test": self.test
             }, workingDirectorySuffix="0")
 
         fastDpTask = FastdpTask(inData={
             "onlineAutoProcessing": True,
-            "datacollectionId": self.dataCollectionId,
+            "dataCollectionId": self.dataCollectionId,
             "unitCell": self.unitCell,
             "spaceGroup": self.spaceGroup,
             "masterFilePath":self.masterFilePath,
             "imageNoStart": self.imageNoStart,
             "imageNoEnd": self.imageNoEnd,
+            "anomalous": False,
+            "test": self.test
             }, workingDirectorySuffix="0")
         
         edna2ProcTask.start()
@@ -216,10 +224,60 @@ class MAXIVAutoProcessing(AbstractTask):
         edna2ProcTask.join()
         fastDpTask.join()
 
-        outData = {
-            "edna2Proc":edna2ProcTask.outData,
-            "fastDp":fastDpTask.outData
-        }
+        if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
+            outData = {
+                "edna2Proc":edna2ProcTask.outData,
+                "fastDp":fastDpTask.outData,
+            }
+            if edna2ProcTask.outData.get("HighAnomSignal",False) or fastDpTask.outData.get("HighAnomSignal",False):
+                self.anomalous = True
+            else:
+                self.anomalous = False
+        elif edna2ProcTask.isSuccess():
+            outData = {
+                "edna2Proc":edna2ProcTask.outData,
+            }
+            self.anomalous = edna2ProcTask.outData.get("HighAnomSignal",False)
+        elif fastDpTask.isSuccess():
+            outData = {
+                "fastDp":fastDpTask.outData,
+            }
+            self.anomalous = fastDpTask.outData.get("HighAnomSignal",False)
+        else:
+            self.anomalous = False
+         
+        autoPROCTask = AutoPROCTask(inData={
+            "onlineAutoProcessing": True,
+            "dataCollectionId": self.dataCollectionId,
+            "unitCell": self.unitCell,
+            "spaceGroup": self.spaceGroup,
+            "masterFilePath":self.masterFilePath,
+            "anomalous": self.anomalous,
+            "test":self.test
+            }, workingDirectorySuffix="0")
+        
+
+        xia2DialsTask = Xia2DialsTask(inData={
+            "onlineAutoProcessing": True,
+            "dataCollectionId": self.dataCollectionId,
+            "unitCell": self.unitCell,
+            "spaceGroup": self.spaceGroup,
+            "masterFilePath":self.masterFilePath,
+            "anomalous": self.anomalous,
+            "test":self.test
+            }, workingDirectorySuffix="0")
+
+        autoPROCTask.start()
+        xia2DialsTask.start()
+
+        autoPROCTask.join()
+        xia2DialsTask.join()
+
+        if autoPROCTask.isSuccess():
+            outData["autoPROCTask"] = autoPROCTask.outData
+        
+        if xia2DialsTask.isSuccess():
+            outData["xia2DialsTask"] = xia2DialsTask.outData
 
         return outData
 

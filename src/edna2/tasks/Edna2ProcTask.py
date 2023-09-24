@@ -79,13 +79,15 @@ class Edna2ProcTask(AbstractTask):
             "required": ["dataCollectionId"],
             "properties":
             {
-                "dataCollectionId": {"type":"integer"},
-                "masterFilePath": {"type":"string"},
+                "dataCollectionId": {"type":["integer","null"]},
+                "masterFilePath": {"type":["string","null"]},
                 "spaceGroup": {"type":["integer","string"]},
-                "unitCell": {"type":"string"},
-                "residues": {"type":"integer"},
-                "doAnomandNoAnom": {"type":"boolean"},
-                "workingDirectory": {"type":"string"},
+                "unitCell": {"type":["string","null"]},
+                "residues": {"type":["integer","null"]},
+                "anomalous": {"type":["boolean","null"]},
+                "imageNoStart": {"type":["integer","null"]},
+                "imageNoEnd": {"type":["integer","null"]},
+                "workingDirectory": {"type":["string","null"]},
             }
         }
     
@@ -134,7 +136,7 @@ class Edna2ProcTask(AbstractTask):
         outData = {}
         self.resultFilePaths = []
 
-        if inData.get("anomalous", True):
+        if self.anomalous:
             self.doAnom = True
             self.doNoAnom = True
         else: 
@@ -179,9 +181,9 @@ class Edna2ProcTask(AbstractTask):
                 numImages = ispybDataCollection["numberOfImages"]
                 self.imageNoEnd = numImages - self.imageNoStart + 1
                 pathToStartImage = os.path.join(self.imageDirectory,
-                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
+                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
                 pathToEndImage = os.path.join(self.imageDirectory,
-                                                self.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
+                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
             except:
                 logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
                 if self.masterFilePath is None:
@@ -268,7 +270,7 @@ class Edna2ProcTask(AbstractTask):
 
         if self.masterFilePath is None:
             self.masterFilePath = os.path.join(self.imageDirectory,
-                    self.eiger_template_to_master(self.fileTemplate))
+                    UtilsImage.eiger_template_to_master(self.fileTemplate))
 
 
 
@@ -340,6 +342,7 @@ class Edna2ProcTask(AbstractTask):
         self.xdsIndexingInData["unitCell"] = self.unitCell
         self.xdsIndexingInData["spaceGroupNumber"] = self.spaceGroupNumber
         self.xdsIndexingInData["isAnom"] = self.doAnom
+        self.xdsIndexingInData["onlineAutoProcessing"] = self.onlineAutoProcessing
 
         self.indexing = XDSIndexing(inData=self.xdsIndexingInData, workingDirectorySuffix="init")
 
@@ -381,6 +384,7 @@ class Edna2ProcTask(AbstractTask):
         self.integrationInData = self.indexing.outData
         del self.integrationInData["workingDirectory"]
         self.integrationInData["subWedge"] = self.indexing.inData["subWedge"]
+        self.integrationInData["onlineAutoProcessing"] = self.onlineAutoProcessing
         self.integration = XDSIntegration(inData=self.integrationInData, workingDirectorySuffix="init")
         logger.info('Integration started')
 
@@ -543,6 +547,7 @@ class Edna2ProcTask(AbstractTask):
         self.xscaleTaskData_mergeAnom['isAnom'] = True
         self.xscaleTaskData_mergeAnom['merge'] = True
         self.xscaleTaskData_mergeAnom['res'] = self.anomResCutoff
+        self.xscaleTaskData_mergeAnom['onlineAutoProcessing'] = self.onlineAutoProcessing
 
         self.xscaleTask_mergeAnom = XSCALETask(inData=self.xscaleTaskData_mergeAnom, workingDirectorySuffix="mergeAnom")
         
@@ -550,6 +555,8 @@ class Edna2ProcTask(AbstractTask):
         self.xscaleTaskData_mergenoAnom['isAnom'] = False
         self.xscaleTaskData_mergenoAnom['merge'] = True
         self.xscaleTaskData_mergenoAnom['res'] = self.noAnomResCutoff
+        self.xscaleTaskData_mergenoAnom['onlineAutoProcessing'] = self.onlineAutoProcessing
+
 
         self.xscaleTask_mergenoAnom = XSCALETask(inData=self.xscaleTaskData_mergenoAnom, workingDirectorySuffix="mergenoAnom")
 
@@ -557,6 +564,8 @@ class Edna2ProcTask(AbstractTask):
         self.xscaleTaskData_unmergeAnom['isAnom'] = True
         self.xscaleTaskData_unmergeAnom['merge'] = False
         self.xscaleTaskData_unmergeAnom['res'] = self.anomResCutoff
+        self.xscaleTaskData_unmergeAnom['onlineAutoProcessing'] = self.onlineAutoProcessing
+
 
         self.xscaleTask_unmergeAnom = XSCALETask(inData=self.xscaleTaskData_unmergeAnom, workingDirectorySuffix="unmergeAnom")
 
@@ -564,6 +573,8 @@ class Edna2ProcTask(AbstractTask):
         self.xscaleTaskData_unmergenoAnom['isAnom'] = False
         self.xscaleTaskData_unmergenoAnom['merge'] = False
         self.xscaleTaskData_unmergenoAnom['res'] = self.noAnomResCutoff
+        self.xscaleTaskData_unmergenoAnom['onlineAutoProcessing'] = self.onlineAutoProcessing
+
 
         self.xscaleTask_unmergenoAnom = XSCALETask(inData=self.xscaleTaskData_unmergenoAnom, workingDirectorySuffix="unmergenoAnom")
 
@@ -974,22 +985,6 @@ class Edna2ProcTask(AbstractTask):
         autoProcResultsContainer["autoProcScalingStatistics"] = autoProcScalingStatisticsContainerList
 
         return autoProcResultsContainer
-
-    def eiger_template_to_master(self, fmt):
-        if UtilsConfig.isMAXIV():
-            fmt_string = fmt.replace("%06d", "master")
-        else:
-            fmt_string = fmt.replace("####", "1_master")
-        return fmt_string
-
-    def eiger_template_to_image(self, fmt, num):
-        import math
-        fileNumber = int(math.ceil(num / 100.0))
-        if UtilsConfig.isMAXIV():
-            fmt_string = fmt.replace("%06d", "data_%06d" % fileNumber)
-        else:
-            fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
-        return fmt_string.format(num)
 
 
     @staticmethod

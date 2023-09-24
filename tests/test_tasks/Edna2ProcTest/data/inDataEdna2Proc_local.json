@@ -1,5 +1,5 @@
 {
     "onlineAutoProcessing": false,
-    "test": true,
+    "anomalous": true,
     "masterFilePath":"/Users/aaronfinke/Documents/repack_rust/testdata/repack-Tau-BrD1_twoen-1-13480_master.h5"
 }

@@ -44,7 +44,7 @@ from edna2.utils import UtilsPath
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
-from edna2.utils import UtilsXML
+from edna2.utils import UtilsImage
 
 
 logger = UtilsLogging.getLogger()
@@ -89,12 +89,12 @@ class Xia2DialsTask(AbstractTask):
         pathToStartImage = None
         pathToEndImage = None
 
-        self.doAnom = inData.get("doAnom",False)
+        self.anomalous = inData.get("anomalous",False)
         self.spaceGroup = inData.get("spaceGroup",0)
         self.unitCell = inData.get("unitCell",None)
         self.lowResLimit = inData.get("lowResolutionLimit",None)
         self.highResLimit = inData.get("highResolutionLimit",None)
-
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
         self.proteinAcronym = "AUTOMATIC"
         self.sampleName = "DEFAULT"
 
@@ -234,17 +234,17 @@ class Xia2DialsTask(AbstractTask):
             minSizeFirst = 100000
             minSizeLast = 100000
             pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
+                                            UtilsImage.eiger_template_to_image(template, self.imageNoStart))
             pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
+                                          UtilsImage.eiger_template_to_image(template, self.imageNoEnd))
             isH5 = True
         elif UtilsConfig.isMAXIV():
             minSizeFirst = 100000
             minSizeLast = 100000
             pathToStartImage = os.path.join(directory,
-                                            self.eiger_template_to_image(template, self.imageNoStart))
+                                            UtilsImage.eiger_template_to_image(template, self.imageNoStart))
             pathToEndImage = os.path.join(directory,
-                                          self.eiger_template_to_image(template, self.imageNoEnd))
+                                          UtilsImage.eiger_template_to_image(template, self.imageNoEnd))
             isH5 = True
         else:
             minSizeFirst = 1000000
@@ -273,13 +273,14 @@ class Xia2DialsTask(AbstractTask):
 
         if isH5:
             masterFilePath = os.path.join(directory,
-                                self.eiger_template_to_master(template))
+                                UtilsImage.eiger_template_to_master(template))
         else:
             logger.error("Only supporing HDF5 data at this time. Stopping.")
             self.setFailure()
             return
 
         xia2DIALSExecinData = {
+            "onlineAutoProcessing": self.onlineAutoProcessing,
             "masterFilePath" : masterFilePath,
             "imageNoStart": self.imageNoStart,
             "imageNoEnd" : self.imageNoEnd,
@@ -290,13 +291,13 @@ class Xia2DialsTask(AbstractTask):
             "unitCell" : self.unitCell,
             "lowResLimit" : self.lowResLimit,
             "highResLimit" : self.highResLimit,
-            "doAnom" : self.doAnom
+            "anomalous" : self.anomalous
         }
         try: 
             self.integrationId,self.programId = createIntegrationId(
                                     self, 
                                     "Creating integration ID", 
-                                    isAnom=self.doAnom)
+                                    isAnom=self.anomalous)
         except Exception as e:
             logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
         logger.info(f"integrationID: {self.integrationId}, programId: {self.programId}")
@@ -304,15 +305,15 @@ class Xia2DialsTask(AbstractTask):
         self.logToIspyb(self.integrationId,
                             'Indexing', 'Launched', 'Xia2 started')
 
-        timeOut = inData.get("timeout",None)
-        if timeOut is None:
-            timeOut = UtilsConfig.get(self,"timeOut",3600)
+        # timeOut = inData.get("timeout",None)
+        # if timeOut is None:
+        #     timeOut = UtilsConfig.get(self,"timeOut",3600)
         xia2DIALSExec = Xia2DialsExecTask(inData=xia2DIALSExecinData, workingDirectorySuffix="0")
-        xia2DIALSExec.setTimeout(timeOut)
+        # xia2DIALSExec.setTimeout(timeOut)
         xia2DIALSExec.execute()
         if xia2DIALSExec.isFailure():
-            if xia2DIALSExec["timeoutExit"] == True:
-                logger.error(f"Operation timed out after {timeOut} s.")
+            # if xia2DIALSExec["timeoutExit"] == True:
+            #     logger.error(f"Operation timed out after {timeOut} s.")
             self.setFailure()
             return
         self.timeEnd = datetime.now().isoformat(timespec="seconds")
@@ -360,25 +361,7 @@ class Xia2DialsTask(AbstractTask):
 
         if inData.get("test",False):
             self.tmpdir.cleanup()
-            
-
-
-    def eiger_template_to_master(self, fmt):
-        if UtilsConfig.isMAXIV():
-            fmt_string = fmt.replace("%06d", "master")
-        else:
-            fmt_string = fmt.replace("####", "1_master")
-        return fmt_string
-
-    def eiger_template_to_image(self, fmt, num):
-        import math
-        fileNumber = int(math.ceil(num / 100.0))
-        if UtilsConfig.isMAXIV():
-            fmt_string = fmt.replace("%06d", "data_%06d" % fileNumber)
-        else:
-            fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
-        return fmt_string.format(num)
-
+        
 
     def logToIspyb(self, integrationId, step, status, comments=""):
         # hack in the event we could not create an integration ID
@@ -444,7 +427,7 @@ class Xia2DialsTask(AbstractTask):
         autoProcContainer["autoProcIntegration"]["cellGamma"] = autoProcContainer["autoProcIntegration"].pop("cell_gamma")
         autoProcContainer["autoProcIntegration"]["refinedXbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedXBeam")
         autoProcContainer["autoProcIntegration"]["refinedYbeam"] = autoProcContainer["autoProcIntegration"].pop("refinedYBeam")
-        autoProcContainer["autoProcIntegration"]["anomalous"] = self.doAnom
+        autoProcContainer["autoProcIntegration"]["anomalous"] = self.anomalous
         autoProcContainer["autoProcIntegration"]["dataCollectionId"] = self.dataCollectionId
 
 
@@ -510,6 +493,7 @@ class Xia2DialsExecTask(AbstractTask):
     def run(self, inData):
         outData = {}
         logger.debug(f"working directory is {self.getWorkingDirectory()}")
+        self.onlineAutoProcessing = inData["onlineAutoProcessing"]
         self.masterFilePath = inData["masterFilePath"]
         self.imageNoStart = inData["imageNoStart"]
         self.imageNoEnd = inData["imageNoEnd"]
@@ -522,7 +506,7 @@ class Xia2DialsExecTask(AbstractTask):
         self.unitCell = inData.get("unitCell",None)
         self.lowResLimit = inData.get("lowResolutionLimit",None)
         self.highResLimit = inData.get("highResolutionLimit",None)
-        self.doAnom = inData.get("doAnom",False)
+        self.anomalous = inData.get("anomalous",False)
 
         outData["workingDirectory"] = str(self.getWorkingDirectory())
 
@@ -556,7 +540,7 @@ class Xia2DialsExecTask(AbstractTask):
         commandLine += f" {xia2DialsExecutable}"
         #add flags, if present
         commandLine += " pipeline=dials"
-        if self.doAnom:
+        if self.anomalous:
             commandLine += " atom=X"
         commandLine += f" image={self.masterFilePath}:{self.imageNoStart}:{self.imageNoEnd}"
         if maxNoProcessors:
@@ -578,11 +562,17 @@ class Xia2DialsExecTask(AbstractTask):
         commandLine += f" integrate.mosaic=new dials.integrate.phil_file={dialsIntegratePhil}"
         logger.info("xia2Dials command is {}".format(commandLine))
 
-        try:
-            self.runCommandLine(commandLine, listCommand=[])
-        except RuntimeError:
-            self.setFailure()
-            return
+        if self.onlineAutoProcessing:
+            returncode = self.submitCommandLine(commandLine, jobName="EDNA2_xia2", partition=UtilsConfig.getTaskConfig("slurm_partition"), ignoreErrors=False)
+            if returncode != 0:
+                self.setFailure()
+                return
+        else:
+            try:
+                self.runCommandLine(commandLine, listCommand=[])
+            except RuntimeError:
+                self.setFailure()
+                return
         return outData
 
         

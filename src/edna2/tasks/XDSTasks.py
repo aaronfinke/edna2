@@ -69,7 +69,12 @@ class XDSTask(AbstractTask):
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
-        self.runCommandLine(commandLine, listCommand=[])
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        partition = UtilsConfig.get("XDSTask","slurm_partition",None)
+        if self.onlineAutoProcessing:
+            self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
+        else:
+            self.runCommandLine(commandLine, listCommand=[])
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
         # Work in progress!
@@ -702,7 +707,10 @@ class XDSTask(AbstractTask):
     def checkLogForWarningAndErrors(self):
         """Checks the plugin/XDS log file for warning and error messages"""
         errorList = []
-        strLog = self.getLog()
+        if self.onlineAutoProcessing:
+            strLog = self.getSlurmLog()
+        else:
+            strLog = self.getLog()
         listLog = strLog.split("\n")
         for strLogLine in listLog:
             # Check for Errors
@@ -726,7 +734,14 @@ class XDSIndexing(XDSTask):
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
-        self.runCommandLine(commandLine, listCommand=[])
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        partition = UtilsConfig.get("XDSTask","slurm_partition",None)
+        if self.onlineAutoProcessing:
+            self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
+            log = self.getSlurmLogFileName()
+        else:
+            self.runCommandLine(commandLine, listCommand=[])
+            log = self.getLogFileName()
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
         insufficientIndexing = False
@@ -1021,7 +1036,12 @@ class XDSIntegration(XDSTask):
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
-        self.runCommandLine(commandLine, listCommand=[])
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        partition = UtilsConfig.get("XDSTask","slurm_partition",None)
+        if self.onlineAutoProcessing:
+            self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
+        else:
+            self.runCommandLine(commandLine, listCommand=[])
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
         # xds succeeds if XDS_ASCII.HKL is generated
@@ -1142,7 +1162,12 @@ class XDSRerunCorrect(XDSTask):
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
-        self.runCommandLine(commandLine, listCommand=[])
+        self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        partition = UtilsConfig.get("XDSTask","slurm_partition",None)
+        if self.onlineAutoProcessing:
+            self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
+        else:
+            self.runCommandLine(commandLine, listCommand=[])
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
         # xds succeeds if XDS_ASCII.HKL is generated

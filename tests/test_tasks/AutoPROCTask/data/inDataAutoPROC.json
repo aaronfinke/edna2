@@ -1,4 +1,5 @@
 {
     "dataCollectionId": 97882,
-    "test": true
+    "test": true,
+    "onlineAutoProcessing": true
 }
