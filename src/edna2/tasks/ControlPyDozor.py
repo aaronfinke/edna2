@@ -145,7 +145,7 @@ class ExecPyDozor(AbstractTask):  # pylint: disable=too-many-instance-attributes
         }
         masterDict = ReadImageHeader.readHdf5Header(inData['masterFile'])
         angle_start = masterDict['omega_start']
-        angle_step = masterDict['omega_increment']
+        angle_step = round(masterDict['omega_range_average'],3)
         counter = 0
 
         for line in output:
