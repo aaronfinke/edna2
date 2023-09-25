@@ -13,6 +13,6 @@ requests
 distro
 numpy
 scipy
-cctbx-base
+cctbx
 
 

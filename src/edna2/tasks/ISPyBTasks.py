@@ -59,7 +59,7 @@ class ISPyBRetrieveDataCollection(AbstractTask):
         httpAuthenticated = HttpAuthenticated(username=username,
                                               password=password)
         wdsl = dictConfig['ispyb_ws_url'] + '/ispybWS/ToolsForCollectionWebService?wsdl'
-        client = Client(wdsl, transport=httpAuthenticated, cache=None)
+        client = Client(wdsl, location=wdsl, transport=httpAuthenticated, cache=None)
         if 'image' in inData:
             path = pathlib.Path(inData['image'])
             indir = path.parent.as_posix()
@@ -351,7 +351,7 @@ class ISPyBFindDetectorByParam(AbstractTask):
         httpAuthenticated = HttpAuthenticated(username=username,
                                               password=password)
         wdsl = dictConfig['ispyb_ws_url'] + '/ispybWS/ToolsForCollectionWebService?wsdl'
-        client = Client(wdsl, transport=httpAuthenticated, cache=None)
+        client = Client(wdsl, location=wdsl, transport=httpAuthenticated, cache=None)
         manufacturer = inData['manufacturer']
         model = inData['model']
         mode = inData['mode']
