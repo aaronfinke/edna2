@@ -2,7 +2,7 @@
 
 # Required dependencies (from setup.py install_requires)
 matplotlib
-suds
+suds-jurko
 xmltodict
 jsonschema
 graypy
@@ -13,5 +13,6 @@ requests
 distro
 numpy
 scipy
+cctbx-base
 
 

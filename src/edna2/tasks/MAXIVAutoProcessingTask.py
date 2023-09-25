@@ -89,6 +89,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
         self.anomFlag = False
 
         logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
+        outData = {}
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
