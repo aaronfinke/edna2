@@ -30,12 +30,9 @@ import re
 import socket
 import time
 from datetime import datetime
-import json
 STRF_TEMPLATE = "%a %b %d %H:%M:%S %Y"
 
 # for the os.chmod
-from stat import *
-
 from cctbx import sgtbx
 
 from edna2.tasks.AbstractTask import AbstractTask
@@ -80,7 +77,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
     def run(self, inData):
         self.anomFlag = False
 
-        logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
+        logger.info("EDNA2 Auto Processing started")
+        logger.info(f"Running on {socket.gethostname()}")
+
         outData = {}
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")

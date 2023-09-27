@@ -74,6 +74,7 @@ class Xia2DialsTask(AbstractTask):
                 'Indexing', 'Failed', 'Xia2DIALS ended')
 
     def run(self, inData):
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory()/"EDNA_xia2DIALS.log")
         logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")

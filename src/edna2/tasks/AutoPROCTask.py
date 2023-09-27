@@ -106,6 +106,7 @@ class AutoPROCTask(AbstractTask):
 
     
     def run(self, inData):
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory()/"EDNA_autoPROC.log")
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
