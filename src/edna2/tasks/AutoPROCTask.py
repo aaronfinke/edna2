@@ -481,9 +481,14 @@ class AutoPROCTask(AbstractTask):
         ispybStoreAutoProcResultsStaraniso = ISPyBStoreAutoProcResults(inData=autoProcContainerStaraniso, workingDirectorySuffix="uploadFinal_staraniso")
         ispybStoreAutoProcResultsStaraniso.execute()
 
+        outData = {
+            "autoPROC":autoProcContainer,
+            "autoPROC_staraniso":autoProcContainerStaraniso
+        }
+
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
-        return 
+        return outData
     
     @staticmethod
     def autoPROCXMLtoISPyBdict(xml_path, data_collection_id=None, program_id=None, integration_id=None, processing_programs=None, anomalous=False, trunc_len=256):

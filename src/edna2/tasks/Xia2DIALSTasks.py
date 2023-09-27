@@ -350,10 +350,12 @@ class Xia2DialsTask(AbstractTask):
         xia2JsonIspybTask = Xia2JsonIspybTask(inData={"xia2DialsExecDir":str(xia2DIALSExecDir)}, workingDirectorySuffix="final")
         xia2JsonIspybTask.execute()
         xia2JsonFile = xia2JsonIspybTask.outData.get("ispyb_json",None)
+        outData = {}
 
         if xia2JsonFile is not None:
             logger.info("ispyb.json successfully created")
             xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
+            outData = xia2AutoProcContainer
 
             if self.dataCollectionId is not None:
                 ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
@@ -361,6 +363,9 @@ class Xia2DialsTask(AbstractTask):
 
         if inData.get("test",False):
             self.tmpdir.cleanup()
+
+        return outData
+
         
 
     def logToIspyb(self, integrationId, step, status, comments=""):
@@ -514,7 +519,7 @@ class Xia2DialsExecTask(AbstractTask):
         logger.debug(f"xia2DialsSetup: {xia2DialsSetup}")
         xia2DialsExecutable = UtilsConfig.get("Xia2DialsTask","xia2DialsExecutable", "xia2")
         maxNoProcessors = UtilsConfig.get("Xia2DialsTask", "maxNoProcessors", os.cpu_count())
-        xia2DialsFastMode = distutils.util.strtobool(UtilsConfig.get("Xia2DialsTask","xia2DialsFastMode"))
+        xia2DialsFastMode = distutils.util.strtobool(UtilsConfig.get("Xia2DialsTask","xia2DialsFastMode", "false"))
 
         #prepare nproc, njobs for dials.integrate
         dialsIntegratePhil = self.getWorkingDirectory() / "dials_integrate.phil"
