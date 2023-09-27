@@ -132,7 +132,7 @@ class ExecPyDozor(AbstractTask):  # pylint: disable=too-many-instance-attributes
             self.submitCommandLine(commandLine, ignoreErrors=False, partition=partition)
         else:
             self.runCommandLine(commandLine)
-        log = self.getLog()
+        #log = self.getLog()
         with open(inData['outputDirectory']+"/dozor.log",'r') as dozorOut:
             outData = self.parseOutput(inData, dozorOut, workingDir=self.getWorkingDirectory())
         return outData
