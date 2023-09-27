@@ -101,6 +101,8 @@ class FastdpTask(AbstractTask):
         }
 
     def run(self, inData):
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory()/"EDNA_fastdp.log")
+
         self.timeStart = time.perf_counter()
         self.tmpdir = None
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
