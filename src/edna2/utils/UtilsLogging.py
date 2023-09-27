@@ -28,6 +28,7 @@ import time
 import graypy
 import logging
 import logging.handlers
+from pathlib import Path
 
 from edna2.utils import UtilsConfig
 
@@ -42,7 +43,7 @@ def addGrayLogHandler(logger):
 
 def addStreamHandler(logger):
     streamHandler = logging.StreamHandler()
-    logFileFormat = "%(asctime)s %(levelname)-8s %(message)s"
+    logFileFormat = "%(asctime)s %(levelname)-8s %(module)-25s %(message)s"
     formatter = logging.Formatter(logFileFormat)
     streamHandler.setFormatter(formatter)
     logger.addHandler(streamHandler)
@@ -53,7 +54,7 @@ def addFileHandler(logger):
     if logPath is not None:
         if "DATE" in logPath:
             logPath = logPath.replace(
-                "DATE", time.strftime("%Y-%m-%d", time.localtime(time.time()))
+                "DATE", time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time()))
             )
         if not os.path.exists(os.path.dirname(logPath)):
             os.makedirs(os.path.dirname(logPath))
@@ -65,11 +66,27 @@ def addFileHandler(logger):
         logFileFormat = UtilsConfig.get("Logging", "log_file_format")
         if logFileFormat is None:
             logFileFormat = (
-                "%(asctime)s %(module)-20s %(funcName)-15s %(levelname)-8s %(message)s"
+                "%(asctime)s %(module)-25s %(funcName)-15s %(levelname)-8s %(message)s"
             )
         formatter = logging.Formatter(logFileFormat)
         fileHandler.setFormatter(formatter)
         logger.addHandler(fileHandler)
+
+def addLocalFileHandler(logger, logPath=Path.cwd()/"log.log"):
+
+    fileHandler = logging.handlers.RotatingFileHandler(
+        logPath, encoding='utf-8'
+    )
+    logFileFormat = UtilsConfig.get("Logging", "log_file_format")
+    if logFileFormat is None:
+        logFileFormat = (
+            "%(asctime)s %(module)-25s %(levelname)-8s %(message)s"
+        )
+    formatter = logging.Formatter(logFileFormat)
+    fileHandler.setFormatter(formatter)
+    logger.addHandler(fileHandler)
+    
+
 
 
 def setLoggingLevel(logger, level):

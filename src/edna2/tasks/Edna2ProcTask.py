@@ -49,12 +49,10 @@ from edna2.utils import UtilsImage
 from edna2.utils import UtilsPath
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
-from edna2.utils import UtilsDetector
-from edna2.utils import UtilsSymmetry
 from edna2.utils import UtilsIspyb
 from edna2.utils import UtilsCCTBX
 
-
+import logging
 logger = UtilsLogging.getLogger()
 
 from edna2.tasks.XDSTasks import XDSIndexing, XDSIntegration, XDSRerunCorrect
@@ -120,6 +118,7 @@ class Edna2ProcTask(AbstractTask):
 
 
     def run(self, inData):
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory()/"EDNA2Proc.log")
         self.tmpdir = None
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')

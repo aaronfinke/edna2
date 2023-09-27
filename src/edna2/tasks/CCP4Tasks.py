@@ -48,6 +48,7 @@ class AimlessTask(AbstractTask):
     """
 
     def run(self, inData):
+        doSubmit = inData.get('doSubmit',False)
         outData = {}
         input_file = inData['input_file']
         output_file = inData['output_file']
@@ -81,7 +82,7 @@ class AimlessTask(AbstractTask):
             'END'
             ]
         self.setLogFileName('aimless.log')
-        self.runCommandLine(commandLine, listCommand=listCommand)
+        self.runCommandLine(commandLine, doSubmit=doSubmit, listCommand=listCommand)
         outData['isSuccess'] = os.path.exists(output_file)
 
         aimlessMergedMtz = self.getWorkingDirectory() / (output_file)
