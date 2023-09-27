@@ -42,7 +42,6 @@ else:
 edna2TopLevelDir = projectHome / "src" / "edna2"
 sys.path.insert(0, str(edna2TopLevelDir))
 sys.path.insert(0,"/gpfs/offline1/staff/biomax/aarfin/edna2")
-print(str(edna2TopLevelDir))
 from edna2.utils import UtilsLogging
 
 # Parse command line
