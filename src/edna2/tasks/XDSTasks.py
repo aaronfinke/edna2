@@ -64,8 +64,8 @@ class XDSTask(AbstractTask):
             commandLine = ""
         else:
             commandLine = ". " + xdsSetup + '\n'
-
-        commandLine = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
+        xdsExecutable = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
+        commandLine += xdsExecutable
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
@@ -729,8 +729,8 @@ class XDSIndexing(XDSTask):
             commandLine = ""
         else:
             commandLine = ". " + xdsSetup + '\n'
-
-        commandLine = "/mxn/groups/sw/mxsw/XDS/xds_par"
+        xdsExecutable = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
+        commandLine += xdsExecutable
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
@@ -1031,8 +1031,8 @@ class XDSIntegration(XDSTask):
             commandLine = ""
         else:
             commandLine = ". " + xdsSetup + '\n'
-
-        commandLine = "/mxn/groups/sw/mxsw/XDS/xds_par"
+        xdsExecutable = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
+        commandLine += xdsExecutable
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
         self.setLogFileName("xds.log")
@@ -1141,8 +1141,8 @@ class XDSRerunCorrect(XDSTask):
             commandLine = ""
         else:
             commandLine = ". " + xdsSetup + '\n'
-
-        commandLine = "/mxn/groups/sw/mxsw/XDS/xds_par"
+        xdsExecutable = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
+        commandLine += xdsExecutable
         # Copy XPARM.XDS, GAIN.CBF file
         # recycle GXPARM.XDS to XPARM.XDS
         try:
