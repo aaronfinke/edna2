@@ -490,16 +490,16 @@ class FastdpTask(AbstractTask):
     def storeDataOnPyarch(cls,resultFilePaths, pyarchDirectory=None):
         #create paths on Pyarch
         if pyarchDirectory is None:
-            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0])
+            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0]).parent
+            if not pyarchDirectory.exists():
+                pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
         for resultFile in [f for f in resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
-            if not resultFilePyarchPath.parent.exists():
-                resultFilePyarchPath.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
             try:
                 logger.info(f"Copying {resultFile} to pyarch directory")
                 shutil.copy(resultFile,resultFilePyarchPath)
             except Exception as e:
-                logger.warning(f"Couldn't copy file {resultFile} to results directory {resultFilePyarchPath.parent}")
+                logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
                 logger.warning(e)
         return pyarchDirectory
 
