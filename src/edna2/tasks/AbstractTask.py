@@ -92,6 +92,7 @@ class AbstractTask():  # noqa R0904
         self._persistInOutData = True
         self._oldDir = os.getcwd()
         self._slurmId = None
+        self._jobName = type(self).__name__
 
     def getSchemaUrl(self, schemaName):
         return "file://" + str(self._schemaPath / schemaName)
@@ -253,6 +254,7 @@ class AbstractTask():  # noqa R0904
 
 
     def submitCommandLine(self, commandLine, ignoreErrors, partition=None, jobName="EDNA2"):
+        jobName = "EDNA2_" + self._jobName
         exclusive = UtilsConfig.get("Slurm","is_exclusive",False)
         nodes = UtilsConfig.get("Slurm","nodes",1)
         core = UtilsConfig.get("Slurm","cores",10)
@@ -335,7 +337,7 @@ class AbstractTask():  # noqa R0904
     ):
         if logPath is None:
             logPath = self.getLogPath()
-        jobName = self.__class__.__name__
+        jobName = type(self).__name__
         logFileName = os.path.basename(logPath)
         errorLogPath = self.getErrorLogPath()
         errorLogFileName = os.path.basename(errorLogPath)
@@ -350,7 +352,7 @@ class AbstractTask():  # noqa R0904
         with open(str(commandLinePath), "w") as f:
             f.write(commandLine)
         if doSubmit:
-            self.submitCommandLine(commandLine, jobName, partition, ignoreErrors)
+            self.submitCommandLine(commandLine, partition, ignoreErrors)
         else:
             pipes = subprocess.Popen(
                 commandLine,

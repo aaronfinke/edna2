@@ -352,8 +352,39 @@ class UniqueifyTask(AbstractTask):
 
         return outData
 
+class DimpleTask(AbstractTask):
+        def run(self, inData):
+            self.doSubmit = inData.get("doSubmit", False)
+            ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
+            logger.debug(f'CCP4 Setup: {ccp4setup}')
+            if ccp4setup is None:
+                logger.warning('CCP4 setup not found!')
+                commandLine = ""
+            else:
+                commandLine = ". " + ccp4setup + '\n'
 
-    
+            self.inputMtz = inData.get('inputMtz')
+            self.inputPdb = inData.get('inputPdb')
+            if self.inputPdb is None or self.inputMtz is None:
+                logger.error("Model PDB and MTZ are required:")
+                logger.error(f"PDB: {self.inputPdb}, MTZ: {self.inputMtz}")
+                self.setFailure()
+            self.setLogFileName('dimple.log')
+
+            commandLine += 'dimple '
+            commandLine += f'{self.inputMtz} {self.inputPdb} {self.getWorkingDirectory()}'
+
+            logger.info("Running ccp4/dimple...")
+
+            if self.doSubmit:
+                self.submitCommandLine(commandLine)
+            else:
+                self.runCommandLine(commandLine)
+            # outData["uniqueifyOutputMtz"] = self.outputFile
+            # self.isSuccess = Path(self.outputFile).exists()
+
+            return 
+
 
 
 

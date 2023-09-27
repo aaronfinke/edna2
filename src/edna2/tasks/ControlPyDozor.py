@@ -128,7 +128,10 @@ class ExecPyDozor(AbstractTask):  # pylint: disable=too-many-instance-attributes
             commandLine += " -M {} ".format(inData['maskFile'])
         self.setLogFileName('pydozor.log')
         print("runCommandLine = \n{}\n".format(commandLine))
-        self.runCommandLine(commandLine, doSubmit=doSubmit, partition=partition)
+        if doSubmit:
+            self.submitCommandLine(commandLine, ignoreErrors=False, partition=partition)
+        else:
+            self.runCommandLine(commandLine)
         log = self.getLog()
         with open(inData['outputDirectory']+"/dozor.log",'r') as dozorOut:
             outData = self.parseOutput(inData, dozorOut, workingDir=self.getWorkingDirectory())

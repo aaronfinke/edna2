@@ -647,3 +647,58 @@ def setImageQualityIndicatorsPlot(dataCollectionId, plotFile, csvFile):
         dataCollectionId, plotFile, csvFile
     )
     return returnDataCollectionId
+
+def getXDSInfo(dataCollectionId, client=None):
+    """
+    Collects data from getXDSInfo collection service.
+    """
+    if dataCollectionId is None:
+        logger.error(
+                "No dataCollectionId given, cannot contact findDataCollection web service."
+            )
+        return None
+    
+    e = None
+    dataCollectionWS3VO = None
+    noTrials = 5
+    logger = UtilsLogging.getLogger()
+    try:
+        if client is None:
+            client = getCollectionWebService()
+        if client is None:
+            logger.error(
+                "No web service client available, cannot contact findDataCollection web service."
+            )
+        dataCollectionWS3VO = client.service.getXDSInfo(dataCollectionId)
+    except Exception as e:
+        logger.error(
+            "ISPyB error for findDataCollection: {0}, {1} trials left".format(
+                e, noTrials
+            )
+        )
+    return dataCollectionWS3VO
+
+def getXDSMasterFilePath(dataCollectionId) -> Path:
+
+    if dataCollectionId is None:
+        logger.error(
+                "No dataCollectionId given, cannot contact findDataCollection web service."
+            )
+        return None
+    
+    dataCollectionXDSWS3VO = getXDSInfo(dataCollectionId)
+    if dataCollectionXDSWS3VO is None:
+        logger.error(
+            "No dataCollectionId given, cannot contact findDataCollection web service."
+        )
+
+    XDSInfoDict = Client.dict(dataCollectionXDSWS3VO)
+    imageDirectory = XDSInfoDict.get("imageDirectory")
+    fileTemplate = XDSInfoDict.get("fileTemplate")
+    if imageDirectory is None or fileTemplate is None:
+        logger.error("No master file found in XDSInfo!")
+        return None
+    
+    imageDirectory = Path(imageDirectory)
+    fileTemplate = fileTemplate.replace("%06d","master")
+    return imageDirectory / fileTemplate

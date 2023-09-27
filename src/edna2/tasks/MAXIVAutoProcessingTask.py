@@ -24,14 +24,9 @@ __license__ = "MIT"
 __date__ = "20/01/2023"
 
 import os
-import math
-import shutil
-import tempfile
-import traceback
 import numpy as np
 from pathlib import Path
 import re
-import h5py
 import socket
 import time
 from datetime import datetime
@@ -46,11 +41,8 @@ from cctbx import sgtbx
 from edna2.tasks.AbstractTask import AbstractTask
 
 from edna2.utils import UtilsImage
-from edna2.utils import UtilsPath
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
-from edna2.utils import UtilsDetector
-from edna2.utils import UtilsSymmetry
 from edna2.utils import UtilsIspyb
 
 
@@ -60,7 +52,7 @@ from edna2.tasks.Edna2ProcTask import Edna2ProcTask
 from edna2.tasks.FastdpTask import FastdpTask
 from edna2.tasks.AutoPROCTask import AutoPROCTask
 from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
-from edna2.tasks.WaitFileTask import WaitFileTask
+from edna2.tasks.ControlPyDozor import ControlPyDozor
 
 class MAXIVAutoProcessingTask(AbstractTask):
     """
@@ -171,10 +163,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
             self.imageNoStart = ispybDataCollection["startImageNumber"]
             numImages = ispybDataCollection["numberOfImages"]
             self.imageNoEnd = numImages - self.imageNoStart + 1
-            pathToStartImage = os.path.join(self.imageDirectory,
-                                            UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
-            pathToEndImage = os.path.join(self.imageDirectory,
-                                            UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
+            if self.masterFilePath is None:
+                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
+
         except Exception as e:
             logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
             logger.warning(e)
@@ -195,6 +186,18 @@ class MAXIVAutoProcessingTask(AbstractTask):
             self.imageNoStart = inData.get("imageNoStart",1)
             self.imageNoEnd = inData.get("imageNoEnd",numImages)
             logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
+
+        imgQualityDozor = ControlPyDozor(inData={
+            "dataCollectionId" : self.dataCollectionId,
+            "masterFile" : self.masterFilePath,
+            "startNo" : self.imageNoStart,
+            "batchSize": numImages,
+            "directory": str(self.getWorkingDirectory()/"ControlPyDozor_0"),
+            "doISPyBUpload": True,
+            "doSubmit": True,
+            "returnSpotList": False
+        }, workingDirectorySuffix="0"
+        )
 
         edna2ProcTask = Edna2ProcTask(inData={
             "onlineAutoProcessing": True,
@@ -219,12 +222,14 @@ class MAXIVAutoProcessingTask(AbstractTask):
             "test": self.test
             }, workingDirectorySuffix="0")
         
+        imgQualityDozor.start()
         edna2ProcTask.start()
         fastDpTask.start()
 
+        imgQualityDozor.join()
         edna2ProcTask.join()
         fastDpTask.join()
-
+        return
         if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
