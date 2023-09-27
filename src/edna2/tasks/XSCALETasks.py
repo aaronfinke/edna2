@@ -62,7 +62,8 @@ class XSCALETask(AbstractTask):
             commandLine = ""
         else:
             commandLine = ". " + xdsSetup + '\n'
-        xdsExecutable = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
+        xdsExecutable = UtilsConfig.get(self, 'xscaleExecutable',"xscale_par")
+        commandLine += xdsExecutable
         self.isAnom = inData["isAnom"]
         self.merge = inData["merge"]
         onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
