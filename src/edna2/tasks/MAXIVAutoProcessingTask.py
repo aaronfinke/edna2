@@ -227,9 +227,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
         fastDpTask.start()
 
         imgQualityDozor.join()
-        edna2ProcTask.join()
         fastDpTask.join()
-        return
+        edna2ProcTask.join()
+        
         if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
