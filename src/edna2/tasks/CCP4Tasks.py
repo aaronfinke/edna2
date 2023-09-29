@@ -69,7 +69,7 @@ class AimlessTask(AbstractTask):
         end_image = inData['end_image']
         projectName = inData.get('dataCollectionID', 'EDNA_proc')
         resolution = inData.get('res', 0.0)
-        anom = inData['anom']
+        anom = inData['anomalous']
         listCommand = [
             'bins 15',
             'run 1 batch {0} to {1}'.format(start_image, end_image),

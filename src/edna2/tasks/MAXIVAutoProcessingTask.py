@@ -41,6 +41,7 @@ from edna2.utils import UtilsImage
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
+from edna2.utils import UtilsCCTBX
 
 
 logger = UtilsLogging.getLogger()
@@ -106,40 +107,12 @@ class MAXIVAutoProcessingTask(AbstractTask):
         except OSError:
             pass
 
+        #set up SG and unit cell
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
-        if self.spaceGroup != 0:
-            try:
-                spaceGroupInfo = sgtbx.space_group_info(self.spaceGroup).symbol_and_number()
-                self.spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
-                self.spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-                logger.info("Supplied space group is {}, number {}".format(self.spaceGroupString, self.spaceGroupNumber))
-            except:
-                logger.debug("Could not parse space group")
-                self.spaceGroupNumber = 0
-        else:
-            self.spaceGroupNumber = 0
-            self.spaceGroupString = ""            
-            logger.info("No space group supplied")
-
-        # need both SG and unit cell
-        if self.spaceGroup != 0 and self.unitCell is not None:
-            try:
-                unitCellList = [float(x) for x in self.unitCell.split(",")]
-                #if there are zeroes parsed in, need to deal with it
-                if 0.0 in unitCellList:
-                    raise Exception
-                self.unitCell = {
-                            "cell_a": unitCellList[0],
-                            "cell_b": unitCellList[1],
-                            "cell_c": unitCellList[2],
-                            "cell_alpha": unitCellList[3],
-                            "cell_beta": unitCellList[4],
-                            "cell_gamma": unitCellList[5]
-                            }
-                logger.info("Supplied unit cell is {cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**self.unitCell))
-            except:
-                logger.debug("could not parse unit cell")
-                self.unitCell = None
+        # set up unit cell
+        if self.unitCell is not None:
+            self.unitCell = UtilsCCTBX.parseUnitCell(self.unitCell)
         else:
             logger.info("No unit cell supplied")
 

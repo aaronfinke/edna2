@@ -35,7 +35,6 @@ import json
 import socket
 import traceback
 
-from cctbx import sgtbx
 from datetime import datetime
 
 from edna2.tasks.AbstractTask import AbstractTask
@@ -45,6 +44,7 @@ from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
 from edna2.utils import UtilsImage
+from edna2.utils import UtilsCCTBX
 
 
 logger = UtilsLogging.getLogger()
@@ -106,20 +106,7 @@ class Xia2DialsTask(AbstractTask):
         except OSError:
             pass
 
-
-        if self.spaceGroup != 0:
-            try:
-                spaceGroupInfo = sgtbx.space_group_info(self.spaceGroup).symbol_and_number()
-                self.spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
-                self.spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-                logger.info("Supplied space group is {}, number {}".format(self.spaceGroupString, self.spaceGroupNumber))
-            except:
-                logger.debug("Could not parse space group")
-                self.spaceGroupNumber = 0
-        else:
-            self.spaceGroupNumber = 0
-            self.spaceGroupString = ""            
-            logger.info("No space group supplied")
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
         # need both SG and unit cell
         if self.spaceGroup != 0 and self.unitCell is not None:

@@ -26,7 +26,7 @@ __date__ = "21/04/2019"
 import os
 import pathlib
 import configparser
-from cctbx import sgtbx
+from cctbx.sgtbx import space_group_info
 
 from edna2.utils import UtilsLogging
 
@@ -35,8 +35,11 @@ logger = UtilsLogging.getLogger()
 def parseSpaceGroup(spaceGroup):
     """parses space group and returns the space
     group number and string."""
+    if not spaceGroup:
+        logger.info("No space group supplied")
+        return 0, ""
     try:
-        spaceGroupInfo = sgtbx.space_group_info(spaceGroup).symbol_and_number()
+        spaceGroupInfo = space_group_info(spaceGroup).symbol_and_number()
         spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
         spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
         logger.info("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
@@ -46,7 +49,7 @@ def parseSpaceGroup(spaceGroup):
         spaceGroupString = ""
     return spaceGroupNumber, spaceGroupString
 
-def parseUnitCell(unitCell):
+def parseUnitCell(unitCell: str):
     """parse unit cell and return as a dict
     assumes a string with constants separated by commas"""
     unitCell = None 
