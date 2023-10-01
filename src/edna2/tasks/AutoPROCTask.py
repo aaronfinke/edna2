@@ -691,10 +691,10 @@ class AutoPROCExecTask(AbstractTask):
         config = UtilsConfig.getConfig()
         config.optionxform = str
         aP_config = config["AutoPROCTask"]
-        logger.debug(f"{aP_config}")
+        # logger.debug(f"{aP_config}")
         for k,v in aP_config.items():
             if k.startswith("autoPROC_"):
-                logger.debug(f"autoPROC option: {k}={v}")
+                logger.info(f"autoPROC option: {k}={v}")
                 commandLine += " {0}={1}".format(k,v)
         
 

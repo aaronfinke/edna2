@@ -299,11 +299,11 @@ class FastdpTask(AbstractTask):
             pyarchAimlessLog = self.pyarchPrefix + "_aimless.log"
             shutil.copy(pathToAimlessLog, self.resultsDirectory / pyarchAimlessLog)
             self.aimlessData = AimlessTask.extractAimlessResults(pathToAimlessLog)
-            logger.debug(f"aimlessData = {self.aimlessData}")
+            # logger.debug(f"aimlessData = {self.aimlessData}")
         #extract ISa...
         correctLpResults = XDSTask.parseCorrectLp(inData={"correctLp":self.getWorkingDirectory() / "CORRECT.LP",
                                                           "gxParmXds":self.getWorkingDirectory() / "GXPARM.XDS" })
-        logger.debug(f"correctLpResults: {correctLpResults}")
+        # logger.debug(f"correctLpResults: {correctLpResults}")
         self.ISa = correctLpResults.get("ISa")
         logger.debug(f"Isa = {self.ISa}")
 

@@ -453,7 +453,7 @@ class Edna2ProcTask(AbstractTask):
         self.pointlessTask = PointlessTask(inData=pointlessTaskinData, workingDirectorySuffix="init")
         self.pointlessTask.execute()
 
-        logger.debug(f"Pointless output: {self.pointlessTask.outData}")
+        # logger.debug(f"Pointless output: {self.pointlessTask.outData}")
 
         #now rerun CORRECT with corrected parameters
         rerunCor_data = {
