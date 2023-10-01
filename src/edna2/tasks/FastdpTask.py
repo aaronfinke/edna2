@@ -182,7 +182,7 @@ class FastdpTask(AbstractTask):
         pathToStartImage = dataH5ImageList[0]
         pathToEndImage = dataH5ImageList[-1]
                 
-        listPrefix = dataCollectionWS3VO.fileTemplate.split("_") if dataCollectionWS3VO else self.masterFilePath.name.split("_")
+        listPrefix = dataCollectionWS3VO.fileTemplate.split("_") if dataCollectionWS3VO else Path(self.masterFilePath).name.split("_")
 
         #generate pyarch prefix
         if UtilsConfig.isALBA():

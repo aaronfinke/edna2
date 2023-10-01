@@ -347,7 +347,7 @@ class AutoPROCTask(AbstractTask):
         
 
         #copy files to results directory
-        autoPROCLogFile = autoPROCExec.getSlurmLogPath() if self.onlineAutoProcessing else autoPROCExec.getLogPath()
+        autoPROCLogFile = autoPROCExec.outData.get("logFile")
         autoPROCReportPdf = self.autoPROCExecDir / "report.pdf"
         autoPROCStaranisoReportPdf = self.autoPROCExecDir / "report_staraniso.pdf"
         autoPROCStaranisoAllDataUniqueMtz = self.autoPROCExecDir / "staraniso_alldata-unique.mtz"
@@ -703,13 +703,16 @@ class AutoPROCExecTask(AbstractTask):
 
         if self.onlineAutoProcessing:
             returncode = self.submitCommandLine(commandLine, jobName="EDNA2_aP", partition=UtilsConfig.getTaskConfig("slurm_partition"), ignoreErrors=False)
+            outData["logFile"] = self.getSlurmLogPath()
             if returncode != 0:
                 self.setFailure()
                 return
         else:
             try:
                 self.runCommandLine(commandLine, listCommand=[])
+                outData["logFile"] = self.getLogPath()
             except RuntimeError:
                 self.setFailure()
                 return
+        
         return outData
