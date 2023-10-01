@@ -1,7 +1,10 @@
 {
-    "dataCollectionId": 74235,
-    "imagePath": "/gpfs/offline1/staff/biomax/aarfin/exemplary_data_set/data/Tau-natA5_1_master.h5",
-    "spaceGroup": null,
-    "unitCell": null,
-    "anomalous": true
+    "dataCollectionId": 97882,
+    "anomalous": false,
+    "spaceGroup": "F432",
+    "unitCell":"105.2,105.2,150.20,90,90,90",
+    "test": true,
+    "onlineAutoProcessing":false,
+    "waitForFiles":false,
+    "doUploadIspyb":true
 }

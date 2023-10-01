@@ -793,7 +793,7 @@ def getXDSInfo(dataCollectionId, client=None):
         )
     return dataCollectionWS3VO
 
-def getXDSMasterFilePath(dataCollectionId) -> Path:
+def getXDSMasterFilePath(dataCollectionId:int) -> Path:
 
     if dataCollectionId is None:
         logger.error(
@@ -815,5 +815,5 @@ def getXDSMasterFilePath(dataCollectionId) -> Path:
         return None
     
     imageDirectory = Path(imageDirectory)
-    fileTemplate = fileTemplate.replace("%06d","master")
-    return imageDirectory / fileTemplate
+    masterFile = fileTemplate.replace("%06d","master")
+    return imageDirectory / masterFile

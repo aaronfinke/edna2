@@ -33,6 +33,10 @@ import fabio
 import pathlib
 import h5py
 from edna2.utils import UtilsConfig
+from edna2.utils import UtilsLogging
+
+logger = UtilsLogging.getLogger()
+
 
 def __compileAndMatchRegexpTemplate(pathToImage):
     listResult = []
@@ -218,6 +222,20 @@ def getNumberOfImages(masterFilePath):
     return numImages
 
 
+def generateDataFileListFromH5Master(masterFilePath):
+        """Given an h5 master file, generate an image list for SubWedgeAssembly."""
+        masterFilePath = pathlib.Path(masterFilePath)
+        m = re.search(r"\S+_\d{1,2}(?=_master.h5)",masterFilePath.name)
+        image_list_stem = m.group(0)
+
+        image_list = []
+        with h5py.File(masterFilePath,'r') as master_file:
+            image_list = list(master_file['/entry/data'].keys())
+        image_list = sorted(image_list)
+        dataFileList = [masterFilePath.parent / f"{image_list_stem}_{x}.h5" for x in image_list]
+        if False in [file.exists() for file in dataFileList]:
+            logger.warning(f"generateDataFileListFromH5Master: One or more files may not exist: {dataFileList[[file.exists() for file in dataFileList].index(False)]}")
+        return sorted(dataFileList)
 
 
 def generateImageListFromH5Master_fast(masterFilePath):

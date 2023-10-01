@@ -72,10 +72,12 @@ class Edna2ProcTask(AbstractTask):
     def getInDataSchema(self):
         return {
             "type": "object",
-            "required": ["dataCollectionId"],
             "properties":
             {
                 "dataCollectionId": {"type":["integer","null"]},
+                "onlineAutoProcessing": {"type":["boolean","null"]},
+                "waitForFiles": {"type":["boolean","null"]},
+                "doUploadIspyb": {"type":["boolean","null"]},
                 "masterFilePath": {"type":["string","null"]},
                 "spaceGroup": {"type":["integer","string"]},
                 "unitCell": {"type":["string","null"]},
@@ -84,28 +86,35 @@ class Edna2ProcTask(AbstractTask):
                 "imageNoStart": {"type":["integer","null"]},
                 "imageNoEnd": {"type":["integer","null"]},
                 "workingDirectory": {"type":["string","null"]},
+                
             }
         }
     
     #sets ISPyB to FAILED if it's already logged
     def setFailure(self):
         self._dictInOut["isFailure"] = True
-        if self.integrationId is not None and self.programId is not None:
-            ISPyBStoreAutoProcResults.setIspybToFailed(
-                dataCollectionId=self.dataCollectionId,
-                autoProcProgramId=self.programId,
-                autoProcIntegrationId=self.integrationId,
-                processingCommandLine=self.processingCommandLine, 
-                processingPrograms=self.processingPrograms, 
-                isAnom=self.anomalous, 
-                timeStart=self.startDateTime, 
-                timeEnd=datetime.now().isoformat(timespec='seconds')
-            )
+        if self.doUploadIspyb:
+            if self.integrationId is not None and self.programId is not None:
+                ISPyBStoreAutoProcResults.setIspybToFailed(
+                    dataCollectionId=self.dataCollectionId,
+                    autoProcProgramId=self.programId,
+                    autoProcIntegrationId=self.integrationId,
+                    processingCommandLine=self.processingCommandLine, 
+                    processingPrograms=self.processingPrograms, 
+                    isAnom=self.anomalous, 
+                    timeStart=self.startDateTime, 
+                    timeEnd=datetime.now().isoformat(timespec='seconds')
+                )
 
 
 
     def run(self, inData):
         UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory()/"EDNA2Proc.log")
+        logger.info("EDNA2Proc started")
+        if os.environ.get('SLURM_JOB_ID'):
+            logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
+        logger.info(f"Running on {socket.gethostname()}")
+
         self.tmpdir = None
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec='seconds')
@@ -120,13 +129,15 @@ class Edna2ProcTask(AbstractTask):
         self.imageNoStart = inData.get("imageNoStart",None)
         self.imageNoEnd = inData.get("imageNoEnd",None)
         self.masterFilePath = inData.get("masterFilePath",None)
+        self.waitForFiles = inData.get("waitForFiles",True)
+        self.doUploadIspyb = inData.get("doUploadIspyb",False)
+        self.reindex = False
+        self.reintegrate = False
         outData = {}
         self.resultFilePaths = []
 
-        logger.info("EDNA2 Auto Processing started")
-        logger.info(f"Running on {socket.gethostname()}")
         try:
-            logger.info(f"System load avg: {os.getloadavg()}")
+            logger.debug(f"System load avg: {os.getloadavg()}")
         except OSError:
             pass
 
@@ -139,100 +150,52 @@ class Edna2ProcTask(AbstractTask):
         else:
             logger.info("No unit cell supplied")
 
-        if self.onlineAutoProcessing:
-            if self.dataCollectionId is None:
-                logger.error("No dataCollectionId, exiting.")
+        # get masterfile name
+        if self.masterFilePath is None:
+            if self.dataCollectionId:
+                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
+                if self.masterFilePath is None or not self.masterFilePath.exists():
+                    logger.error("dataCollectionId could not return master file path, exiting.")
+                    self.setFailure()
+                    return
+
+            else:
+                logger.error("No dataCollectionId or masterfile, exiting.")
                 self.setFailure()
                 return 
-            try:
-                dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
-                ispybDataCollection = dict(dataCollectionWS3VO)
-                logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
-                self.imageDirectory = ispybDataCollection.get("imageDirectory")
-                if UtilsConfig.isEMBL():
-                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
-                elif UtilsConfig.isMAXIV():
-                    self.fileTemplate = ispybDataCollection["fileTemplate"]
-                else:
-                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%04d", "####")
-                self.imageNoStart = ispybDataCollection["startImageNumber"]
-                numImages = ispybDataCollection["numberOfImages"]
-                self.imageNoEnd = numImages - self.imageNoStart + 1
-                pathToStartImage = os.path.join(self.imageDirectory,
-                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
-                pathToEndImage = os.path.join(self.imageDirectory,
-                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
-            except:
-                logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
-                if self.masterFilePath is None:
-                    logger.error("No dataCollectionId or masterFilePath found, exiting")
-                    self.setFailure()
-                    return
-                self.masterFilePath = Path(self.masterFilePath)
-                self.imageDirectory = self.masterFilePath.parent
-                masterFileName = self.masterFilePath.name
-                try:
-                    self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
-                except:
-                    logger.error(f"File template not found: {masterFileName}")
-                    self.setFailure()
-                    return
-                numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
-                self.imageNoStart = inData.get("imageNoStart",1)
-                self.imageNoEnd = inData.get("imageNoEnd",numImages)
-                logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
-                pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
-                lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
-                pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
-        else:
-            if self.masterFilePath is None:
-                logger.error("No dataCollectionId or masterFilePath found, exiting")
-                self.setFailure()
-                return
-            self.masterFilePath = Path(self.masterFilePath)
-            self.imageDirectory = self.masterFilePath.parent
-            masterFileName = self.masterFilePath.name
-            try:
-                self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
-            except:
-                logger.error(f"File template not found: {masterFileName}")
-                self.setFailure()
-                return
-            numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
-            self.imageNoStart = inData.get("imageNoStart",1)
-            self.imageNoEnd = inData.get("imageNoEnd",numImages)
-            logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
-            pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
-            lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
-            pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
 
+        # now we have masterfile name, need number of images and first/last file
+        dataCollectionWS3VO = None
+        if self.imageNoStart is None or self.imageNoEnd is None:
+            if self.dataCollectionId:
+                try:
+                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
+                    self.imageNoStart = dataCollectionWS3VO.startImageNumber
+                    numImages = dataCollectionWS3VO.numberOfImages
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+                except:
+                    logger.error("Could not access number of images from ISPyB")
+                    self.imageNoStart = 1
+                    numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+            else:
+                self.imageNoStart = 1
+                numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                self.imageNoEnd = numImages - self.imageNoStart + 1
+        
         if self.imageNoEnd - self.imageNoStart < 8:
             #if self.imageNoEnd - self.imageNoStart < -1:
             logger.error("There are fewer than 8 images, aborting")
             self.setFailure()
             return
-        logger.info(f"dataCollectionId: {self.dataCollectionId}")
-
-        isH5 = False
-        if any(beamline in pathToStartImage for beamline in ["id23eh1", "id29"]):
-            minSizeFirst = 6000000
-            minSizeLast = 6000000
-        elif any(beamline in pathToStartImage for beamline in ["id23eh2", "id30a1"]):
-            minSizeFirst = 2000000
-            minSizeLast = 2000000
-        elif any(beamline in pathToStartImage for beamline in ["id30a3"]):
-            minSizeFirst = 100000
-            minSizeLast = 100000
-            isH5 = True
-        elif UtilsConfig.isMAXIV():
-            minSizeFirst = 100000
-            minSizeLast = 100000
-            isH5 = True
-        else:
-            minSizeFirst = 1000000
-            minSizeLast = 1000000        
         
-        listPrefix = self.fileTemplate.split("_")
+        dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(self.masterFilePath)
+        pathToStartImage = dataH5ImageList[0]
+        pathToEndImage = dataH5ImageList[-1]
+                
+        listPrefix = dataCollectionWS3VO.fileTemplate.split("_") if dataCollectionWS3VO else Path(self.masterFilePath).name.split("_")
+
+        #generate pyarch prefix
         if UtilsConfig.isALBA():
             self.pyarchPrefix = "ap_{0}_{1}".format("_".join(listPrefix[:-2]),
                                                        listPrefix[-2])
@@ -246,41 +209,38 @@ class Edna2ProcTask(AbstractTask):
             else:
                 self.pyarchPrefix = "ap_{0}_run".format(listPrefix[0])
 
-        if self.masterFilePath is None:
-            self.masterFilePath = os.path.join(self.imageDirectory,
-                    UtilsImage.eiger_template_to_master(self.fileTemplate))
 
+        if self.waitForFiles:
+            logger.info("Waiting for start image: {0}".format(pathToStartImage))
+            waitFileFirst = WaitFileTask(inData= {
+                "file":pathToStartImage,
+                "expectedSize": 100000
+            })
+            waitFileFirst.execute()
+            if waitFileFirst.outData["timedOut"]:
+                logger.warning("Timeout after {0:d} seconds waiting for the first image {1}!".format(waitFileFirst.outData["timeOut"], pathToStartImage))
+            
+            logger.info("Waiting for end image: {0}".format(pathToEndImage))
+            waitFileLast = WaitFileTask(inData= {
+                "file":pathToEndImage,
+                "expectedSize": 100000
+            })
+            waitFileLast.execute()
+            if waitFileLast.outData["timedOut"]:
+                logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
 
-
-        logger.info("Waiting for start image: {0}".format(pathToStartImage))
-        waitFileFirst = WaitFileTask(inData= {
-            "file":pathToStartImage,
-            "expectedSize": minSizeFirst
-        })
-        waitFileFirst.execute()
-        if waitFileFirst.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the first image {1}!".format(waitFileFirst.outData["timeOut"], pathToStartImage))
-        
-        logger.info("Waiting for end image: {0}".format(pathToEndImage))
-        waitFileLast = WaitFileTask(inData= {
-            "file":pathToEndImage,
-            "expectedSize": minSizeLast
-        })
-        waitFileLast.execute()
-        if waitFileLast.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
-
-        self.integrationId = None
-        self.programId = None
         
         #get integrationIDs and programIDs, set them to running
-        try: 
-            self.integrationId,self.programId = self.createIntegrationId(
-                                    "Creating integration ID", 
-                                    isAnom=self.anomalous)
-            logger.info(f"integrationID: {self.integrationId}, programId: {self.programId}")
-        except Exception as e:
-            logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
+        self.integrationId = None
+        self.programId = None
+        if self.doUploadIspyb:
+            try: 
+                self.integrationId,self.programId = self.createIntegrationId(
+                                        "Creating integration ID", 
+                                        isAnom=self.anomalous)
+                logger.info(f"integrationID: {self.integrationId}, programId: {self.programId}")
+            except Exception as e:
+                logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
         
         #set working directory, results directory, log file
         workingDirectory = self.getWorkingDirectory()
@@ -298,12 +258,6 @@ class Edna2ProcTask(AbstractTask):
             self.xdsIndexingInData = self.subWedgeAssembly.outData
         else:
             self.xdsIndexingInData = inData
-        self.numImages = self.imgNumHigh - self.imgNumLow + 1
-        logger.info(f"Number of images: {self.numImages}")
-        if self.numImages < 8:
-            logger.error("There are fewer than 8 images. Aborting.")
-            self.setFailure()
-            return
         
         self.xdsIndexingInData["unitCell"] = self.unitCell
         self.xdsIndexingInData["spaceGroupNumber"] = self.spaceGroupNumber
@@ -314,30 +268,59 @@ class Edna2ProcTask(AbstractTask):
 
         logger.info('XDS Indexing started')
 
-        self.logToIspyb(self.integrationId,
-                            'Indexing', 'Launched', 'XDS started')
+        if self.doUploadIspyb:
+            self.logToIspyb(self.integrationId,
+                                'Indexing', 'Launched', 'XDS started')
 
         self.indexing.execute()
         
         time1 = time.perf_counter()
         self.timeXdsIndexing = time1 - self.timeStart
+            
+        if self.indexing.isFailure() and self.unitCell is not None:
+            logger.info("Indexing Failed. Rerunning indexing with no unit cell and no space group...")
+            self.reindex = True
+            self.xdsIndexingInDataRound2 = self.xdsIndexingInData
+            self.xdsIndexingInDataRound2["unitCell"] = None
+            self.xdsIndexingInDataRound2["spaceGroupNumber"] = 0
+            self.indexingRound2 = XDSIndexing(inData=self.xdsIndexingInDataRound2, workingDirectorySuffix="round2")
+            logger.info("Starting reindexing")
+            self.indexingRound2.execute()
 
-        if self.indexing.isFailure():
-            logger.error("Error at indexing step. Stopping.")
-            self.logToIspyb(self.integrationId,
-                'Indexing',
-                'Failed',
-                'XDS failed after {0:.1f}s'.format(self.timeXdsIndexing))
+            time1 = time.perf_counter()
+            self.timeXdsIndexing = time1 - self.timeStart
+
+            if self.indexingRound2.isFailure():
+                logger.error("Rerunning indexing failed. Exiting")
+                if self.doUploadIspyb:
+                    self.logToIspyb(self.integrationId,
+                        'Indexing',
+                        'Failed',
+                        'XDS failed after {0:.1f}s'.format(self.timeXdsIndexing))
+                self.setFailure()
+                return
+            else:
+                self.indexing = self.indexingRound2
+        elif self.indexing.isFailure():
+            logger.error("Indexing Failed. Exiting")
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                    'Indexing',
+                    'Failed',
+                    'XDS failed after {0:.1f}s'.format(self.timeXdsIndexing))
+
             self.setFailure()
-            return 
-        else: 
-            self.logToIspyb(self.integrationId,
-                'Indexing',
-                'Successful',
-                'XDS finished after {0:.1f}s'.format(self.timeXdsIndexing))
+            return
+        else:
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                    'Indexing',
+                    'Successful',
+                    'XDS finished after {0:.1f}s'.format(self.timeXdsIndexing))
             logger.info(f"XDS indexing time took {self.timeXdsIndexing:0.1f} seconds")
             logger.info("Indexing successful. a= {cell_a}, b= {cell_b}, c= {cell_c}, al = {cell_alpha}, be = {cell_beta}, ga = {cell_gamma}" \
                         .format(**self.indexing.outData["idxref"]["unitCell"]))
+
 
         #Now set up integration
         self.integrationInData = self.indexing.outData
@@ -347,29 +330,101 @@ class Edna2ProcTask(AbstractTask):
         self.integration = XDSIntegration(inData=self.integrationInData, workingDirectorySuffix="init")
         logger.info('Integration started')
 
-        self.logToIspyb(self.integrationId,
-                            'Integration', 'Launched', 'XDS started')
+        if self.doUploadIspyb:
+            self.logToIspyb(self.integrationId,
+                                'Integration', 'Launched', 'XDS started')
 
         self.integration.execute()
 
         time2 = time.perf_counter()
         self.timeXdsIntegration = time2-time1
 
-        if self.integration.isFailure():
+        resCutoffFlag = False
+        if self.integration.isSuccess():
+            #calculate resolution cutoff. Reintegrate if no CC above 30%
+            completenessEntries = self.integration.outData.get('completenessEntries',None)
+            firstResCutoff = self.getResCutoff(completenessEntries)
+            if firstResCutoff is None:
+                resCutoffFlag = True
+
+        if (self.integration.isFailure() and self.unitCell is not None and not self.reindex) or (resCutoffFlag and self.unitCell is not None):
+            logger.info("First round of integration failed. Rerunning indexing and integration with no unit cell and no space group...")
+            self.reintegrate = True
+            self.xdsIndexingInDataReintRound2 = self.xdsIndexingInData
+            self.xdsIndexingInDataReintRound2["unitCell"] = None
+            self.xdsIndexingInDataReintRound2["spaceGroupNumber"] = 0
+            self.indexingReintRound2 = XDSIndexing(inData=self.xdsIndexingInDataReintRound2, workingDirectorySuffix="reInt_round2")
+            logger.info("Starting Reindexing")
+            self.indexingReintRound2.execute()
+
+            time1 = time.perf_counter()
+            self.timeXdsIndexing = time1 - self.timeStart
+
+            if self.indexingReintRound2.isFailure():
+                logger.error("Rerunning indexing failed. Exiting")
+                if self.doUploadIspyb:
+                    self.logToIspyb(self.integrationId,
+                        'Indexing',
+                        'Failed',
+                        'XDS failed after {0:.1f}s'.format(self.timeXdsIndexing))
+                self.setFailure()
+                return
+            else:
+                logger.info("Reindexing Successful.")
+                self.indexing = self.indexingReintRound2
+            #Now set up reintegration
+            self.reintegrationInData = self.indexing.outData
+            del self.reintegrationInData["workingDirectory"]
+            self.reintegrationInData["subWedge"] = self.indexing.inData["subWedge"]
+            self.reintegrationInData["onlineAutoProcessing"] = self.onlineAutoProcessing
+            self.reintegration = XDSIntegration(inData=self.reintegrationInData, workingDirectorySuffix="reInt_round2")
+            logger.info('Starting Reintegration')
+
+            self.reintegration.execute()
+
+            if self.reintegration.isFailure():
+                logger.error("Error at integration step. Stopping.")
+                if self.doUploadIspyb:
+                    self.logToIspyb(self.integrationId,
+                        'Integration',
+                        'Failed',
+                        'XDS failed after {0:.1f}s'.format(self.timeXdsIntegration))
+                self.setFailure()
+                return 
+            else:
+                logger.info("Reintegration Successful.")
+                self.integration = self.reintegration
+        elif self.integration.isFailure():
             logger.error("Error at integration step. Stopping.")
-            self.logToIspyb(self.integrationId,
-                'Integration',
-                'Failed',
-                'XDS failed after {0:.1f}s'.format(self.timeXdsIntegration))
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                    'Integration',
+                    'Failed',
+                    'XDS failed after {0:.1f}s'.format(self.timeXdsIntegration))
             self.setFailure()
             return 
-        else: 
-            self.logToIspyb(self.integrationId,
-                'Integration',
-                'Successful',
-                'XDS finished after {0:.1f}s'.format(self.timeXdsIntegration))
+        else:
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                    'Integration',
+                    'Successful',
+                    'XDS finished after {0:.1f}s'.format(self.timeXdsIntegration))
             logger.info(f"XDS integration time took {self.timeXdsIntegration:0.1f} seconds")
             logger.info("Integration Successful.")
+
+        logger.info("Starting first resolution cutoff...")
+        self.completenessEntries = self.integration.outData['completenessEntries']
+        self.firstResCutoff = self.getResCutoff(self.completenessEntries)
+        if self.firstResCutoff is None:
+            logger.error('No bins with CC1/2 greater than 30%')
+            logger.error("Something could be wrong, or the completeness could be too low!")
+            logger.error("bravais lattice/SG could be incorrect or something more insidious like")
+            logger.error("incorrect parameters in XDS.INP like distance, X beam, Y beam, etc.")
+            logger.error("Stopping")
+            self.setFailure()
+            return
+        logger.info(f"Resolution cutoff is {self.firstResCutoff}")
+
 
         #copy the XDS.INP file from the successful run into the results directory.
         xds_INP_result_path = self.resultsDirectory / f"{self.pyarchPrefix}_successful_XDS.INP"
@@ -388,21 +443,6 @@ class Edna2ProcTask(AbstractTask):
             logger.warning(e)
 
         self.resultFilePaths.extend([xds_INP_result_path,integrateLp_path,correctLp_path,integrateHkl_path,xdsAsciiHkl_path])
-
-        #calculate resolution cutoff
-
-        logger.info("Starting first resolution cutoff...")
-        self.completenessEntries = self.integration.outData['completenessEntries']
-        self.firstResCutoff = self.getResCutoff(self.completenessEntries)
-        if self.firstResCutoff is None:
-            logger.error('No bins with CC1/2 greater than 30%')
-            logger.error("Something could be wrong, or the completeness could be too low!")
-            logger.error("bravais lattice/SG could be incorrect or something more insidious like")
-            logger.error("incorrect parameters in XDS.INP like distance, X beam, Y beam, etc.")
-            logger.error("Stopping")
-            self.setFailure()
-            return
-        logger.info(f"Resolution cutoff is {self.firstResCutoff}")
 
         # run pointless 
         pointlessTaskinData = {
@@ -447,17 +487,19 @@ class Edna2ProcTask(AbstractTask):
         if self.xdsRerun.isFailure():
             logger.error('Rerun of CORRECT failed')
             self.setFailure()
-            self.logToIspyb(self.integrationId,
-                         'Scaling',
-                         'Failed',
-                         'Scaling failed after {0:.1}s'.format(self.timeRerunCorrect))
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                            'Scaling',
+                            'Failed',
+                            'Scaling failed after {0:.1}s'.format(self.timeRerunCorrect))
             return
         else:
             logger.info(f"Rerun of CORRECT finished.")
-            self.logToIspyb(self.integrationId,
-                         'Scaling',
-                         'Successful',
-                         'Scaling finished in {0:.1f}s'.format(self.timeRerunCorrect))
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                            'Scaling',
+                            'Successful',
+                            'Scaling finished in {0:.1f}s'.format(self.timeRerunCorrect))
 
         logger.info("Starting second resolution cutoff...")
         self.completenessEntries = self.xdsRerun.outData['completenessEntries']
@@ -471,17 +513,19 @@ class Edna2ProcTask(AbstractTask):
             logger.error("incorrect parameters in XDS.INP like distance, X beam, Y beam, etc.")
             logger.error("Stopping")
             self.setFailure()
-            self.logToIspyb(self.integrationId,
-                            'Scaling',
-                            'Failed',
-                            'resolution cutoffs failed')
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                                'Scaling',
+                                'Failed',
+                                'resolution cutoffs failed')
             self.setFailure()
             return
         logger.info(f"Resolution cutoff is {self.firstResCutoff}")
-        self.logToIspyb(self.integrationId,
-                        'Scaling',
-                        'Successful',
-                        'Resolution cutoffs finished')
+        if self.doUploadIspyb:
+            self.logToIspyb(self.integrationId,
+                            'Scaling',
+                            'Successful',
+                            'Resolution cutoffs finished')
 
         self.bins = [x["res"] for x in self.xdsRerun.outData["completenessEntries"] if x["include_res_based_on_cc"] is True]
 
@@ -555,17 +599,19 @@ class Edna2ProcTask(AbstractTask):
             if self.xdsRerun.isFailure():
                 logger.error('Rerun of CORRECT failed')
                 self.setFailure()
-                self.logToIspyb(self.integrationId,
-                            'Scaling',
-                            'Failed',
-                            'Scaling failed after {0:.1}s'.format(self.timeRerunCorrect))
+                if self.doUploadIspyb:
+                    self.logToIspyb(self.integrationId,
+                                'Scaling',
+                                'Failed',
+                                'Scaling failed after {0:.1}s'.format(self.timeRerunCorrect))
                 return
             else:
                 logger.info(f"Rerun of CORRECT finished.")
-                self.logToIspyb(self.integrationId,
-                            'Scaling',
-                            'Successful',
-                            'Scaling finished in {0:.1f}s'.format(self.timeRerunCorrect))
+                if self.doUploadIspyb:
+                    self.logToIspyb(self.integrationId,
+                                'Scaling',
+                                'Successful',
+                                'Scaling finished in {0:.1f}s'.format(self.timeRerunCorrect))
 
             logger.info("Starting third resolution cutoff...")
             self.completenessEntries = self.xdsRerun.outData['completenessEntries']
@@ -579,17 +625,19 @@ class Edna2ProcTask(AbstractTask):
                 logger.error("incorrect parameters in XDS.INP like distance, X beam, Y beam, etc.")
                 logger.error("Stopping")
                 self.setFailure()
-                self.logToIspyb(self.integrationId,
-                                'Scaling',
-                                'Failed',
-                                'resolution cutoffs failed')
+                if self.doUploadIspyb:
+                    self.logToIspyb(self.integrationId,
+                                    'Scaling',
+                                    'Failed',
+                                    'resolution cutoffs failed')
                 self.setFailure()
                 return
             logger.info(f"Resolution cutoff is {self.firstResCutoff}")
-            self.logToIspyb(self.integrationId,
-                            'Scaling',
-                            'Successful',
-                            'Resolution cutoffs finished')
+            if self.doUploadIspyb:
+                self.logToIspyb(self.integrationId,
+                                'Scaling',
+                                'Successful',
+                                'Resolution cutoffs finished')
 
             self.bins = [x["res"] for x in self.xdsRerunAnom.outData["completenessEntries"] if x["include_res_based_on_cc"] is True]
 
@@ -784,26 +832,6 @@ class Edna2ProcTask(AbstractTask):
         else:
             self.pyarchDirectory = self.storeDataOnPyarch(self.resultFilePaths)
 
-        # if inData.get("test",False):
-        #     self.tmpdir = tempfile.TemporaryDirectory() 
-        #     self.pyarchDirectory = Path(self.tmpdir.name)
-        # else:
-        #     reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
-        #     pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
-        #     self.pyarchDirectory = Path(pyarchDirectory)
-        #     try:
-        #         self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
-        #         logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
-        #         for file in self.resultsDirectory.iterdir():
-        #             pyarchFile = UtilsPath.createPyarchFilePath(file)
-        #             shutil.copy(file,pyarchFile)
-        #     except OSError as e:
-        #         logger.error(f"Error when creating pyarch_dir: {e}")
-        #         self.tmpdir = tempfile.TemporaryDirectory() 
-        #         self.pyarchDirectory = Path(self.tmpdir.name)
-
-
-
         # Let's get results into a container for ispyb
         self.autoProcResultsContainer = self.generateAutoProcScalingResultsContainer(
                 programId=self.programId, integrationId=self.integrationId, isAnom=self.anomalous)
@@ -812,25 +840,28 @@ class Edna2ProcTask(AbstractTask):
             json.dump(self.autoProcResultsContainer,fp, indent=2, default=lambda o:str(o))
 
         #now send it to ISPyB
-        logger.info("Sending data to ISPyB...")
-        self.ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=self.autoProcResultsContainer, workingDirectorySuffix='final')
-        self.ispybStoreAutoProcResults.execute()
-        if self.ispybStoreAutoProcResults.isFailure():
-            logger.error("ISPyB Store autoproc results failed.")
-            # self.setFailure()
-            # return
+        if self.doUploadIspyb:
+            logger.info("Sending data to ISPyB...")
+            self.ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=self.autoProcResultsContainer, workingDirectorySuffix='final')
+            self.ispybStoreAutoProcResults.execute()
+            if self.ispybStoreAutoProcResults.isFailure():
+                logger.error("ISPyB Store autoproc results failed.")
+                # self.setFailure()
+                # return
 
-        comments = ""
-        if self.anomalousFlag:
-            comments += "Strong anomalous signal detected. "
-        if self.phenixXTriageTask.outData["hasTwinning"] and self.phenixXTriageTask.outData["hasPseudotranslation"]:
-            comments += "Pseudotranslation and twinning detected by phenix.xtriage! "
-        elif self.phenixXTriageTask.outData["hasTwinning"]:
-            comments += "Twinning detected by phenix.xtriage! "
-        elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
-            comments += "Pseudotranslation detected by phenix.xtriage! "
-        if comments:
-            UtilsIspyb.updateDataCollectionGroupComments(self.dataCollectionId,comments)
+            comments = ""
+            if self.anomalousFlag:
+                comments += "Strong anomalous signal detected. "
+            if self.reindex or self.reintegrate:
+                comments += "Dataset could not be indexed with supplied unit cell/SG! "
+            if self.phenixXTriageTask.outData["hasTwinning"] and self.phenixXTriageTask.outData["hasPseudotranslation"]:
+                comments += "Pseudotranslation and twinning detected by phenix.xtriage! "
+            elif self.phenixXTriageTask.outData["hasTwinning"]:
+                comments += "Twinning detected by phenix.xtriage! "
+            elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
+                comments += "Pseudotranslation detected by phenix.xtriage! "
+            if comments:
+                UtilsIspyb.updateDataCollectionGroupComments(self.dataCollectionId,comments)
 
         outData = self.autoProcResultsContainer
 
@@ -991,6 +1022,8 @@ class Edna2ProcTask(AbstractTask):
         get resolution cutoff based on CORRECT.LP
         suggestion.
         """
+        if completeness_entries is None:
+            return None
         return min([x['res'] for x in completeness_entries if x['include_res_based_on_cc']], default=None)
 
     # Proxy since the API changed and we can now log to several ids

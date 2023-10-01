@@ -30,7 +30,7 @@ from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 
-from edna2.tasks.MAXIVAutoProcessingTask import MAXIVAutoProcessing
+from edna2.tasks.MAXIVAutoProcessingTask import MAXIVAutoProcessingTask
 
 logger = UtilsLogging.getLogger()
 
@@ -40,9 +40,9 @@ class MAXIVAutoProcessingTaskTest(unittest.TestCase):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_execute_MAXIVAutoProcessingTask(self):
-        referenceDataPath = self.dataPath / 'inDataMaxIVAutoProcessing.json'
+        referenceDataPath = self.dataPath / 'inDataMaxIVAutoProcessing_unitcell.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
-        maxivAutoProcessing = MAXIVAutoProcessing(inData=inData)
+        maxivAutoProcessing = MAXIVAutoProcessingTask(inData=inData)
         maxivAutoProcessing.execute()
         self.assertTrue(maxivAutoProcessing.isSuccess())
 
