@@ -174,7 +174,122 @@ def getSampleIdFromDataCollectionId(dataCollectionId,client=None):
         logger.error(f"Could not retrieve SampleId from datacollectionId {dataCollectionId}: {e}")
     return blSampleId
 
-    
+def getDataCollectionGroupId(dataCollectionId, client=None):
+    """get dataCollectionGroupId from dataCollectionId"""
+    dataCollectionGroupId = None
+    try:
+        if client is None:
+            client = getCollectionWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+            return dataCollectionGroupId
+        dataCollectionWS3VO = client.service.findDataCollection(dataCollectionId)
+        dataCollectionGroupId = dataCollectionWS3VO.dataCollectionGroupId
+    except Exception as e:
+        logger.error(
+            "ISPyB error for getDataCollectionGroupId: {0} trials left".format(
+                e
+            )
+        )
+    return dataCollectionGroupId
+
+def findDataCollectionWS3VO(dataCollectionId,client=None):
+    dataCollectionWS3VO = None
+    try:
+        if client is None:
+            client = getCollectionWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+            return dataCollectionWS3VO
+        dataCollectionWS3VO = client.service.findDataCollection(dataCollectionId)
+    except Exception as e:
+        logger.error(
+            "ISPyB error for getDataCollectionGroupId: {0} trials left".format(
+                e
+            )
+        )
+    return dataCollectionWS3VO
+
+def findDataCollectionGroupWS3VO(dataCollectionGroupId,client=None):
+    dataCollectionGroupWS3VO = None
+    try:
+        if client is None:
+            client = getCollectionWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+            return dataCollectionGroupWS3VO
+        dataCollectionGroupWS3VO = client.service.findDataCollectionGroup(dataCollectionGroupId)
+    except Exception as e:
+        logger.error(
+            "ISPyB error for getDataCollectionGroupId: {0} trials left".format(
+                e
+            )
+        )
+    return dataCollectionGroupWS3VO
+
+def storeOrUpdateDataCollection(dataCollectionWS3VO, client=None):
+    dataCollectionId = None
+    try:
+        if client is None:
+            client = getCollectionWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+            return dataCollectionId
+        dataCollectionId = client.service.storeOrUpdateDataCollection(dataCollectionWS3VO)
+    except Exception as e:
+        logger.error(
+            "ISPyB error for getDataCollectionGroupId: {0} trials left".format(
+                e
+            )
+        )
+    return dataCollectionId
+
+def storeOrUpdateDataCollectionGroup(dataCollectionGroupWS3VO, client=None):
+    dataCollectionGroupId = None
+    try:
+        if client is None:
+            client = getCollectionWebService()
+        if client is None:
+            logger.error(
+                    "No web service client available, cannot contact findDataAutoprocessing web service."
+                )
+            return dataCollectionGroupId
+        dataCollectionGroupId = client.service.storeOrUpdateDataCollectionGroup(dataCollectionGroupWS3VO)
+    except Exception as e:
+        logger.error(
+            "ISPyB error for getDataCollectionGroupId: {0} trials left".format(
+                e
+            )
+        )
+    return dataCollectionGroupId
+
+
+def updateDataCollectionGroupComments(dataCollectionId, comments):
+    client = getCollectionWebService()
+    iDataCollectionGroupId = None
+    dataCollectionGroupId = getDataCollectionGroupId(dataCollectionId, client=client)
+    dataCollectionGroupWS3VO = findDataCollectionGroupWS3VO(dataCollectionGroupId, client=client)
+    if not comments in str(dataCollectionGroupWS3VO.comments):
+        dataCollectionGroupWS3VO.comments = comments
+        iDataCollectionGroupId = storeOrUpdateDataCollectionGroup(dataCollectionGroupWS3VO, client=client)
+        dataCollectionWS3VO = findDataCollectionWS3VO(dataCollectionId, client=client)
+        if hasattr(dataCollectionWS3VO, "comments"):
+            if not comments in dataCollectionWS3VO.comments:
+                dataCollectionWS3VO.comments += " " + comments
+                dataCollectionId = storeOrUpdateDataCollection(dataCollectionWS3VO, client=client)
+        else:
+            dataCollectionWS3VO.comments = comments
+            dataCollectionId = storeOrUpdateDataCollection(dataCollectionWS3VO, client=client)
+    logger.debug(f"dataCollectionGroupId: {iDataCollectionGroupId}")
+
 
 
 
@@ -678,7 +793,7 @@ def getXDSInfo(dataCollectionId, client=None):
         )
     return dataCollectionWS3VO
 
-def getXDSMasterFilePath(dataCollectionId) -> Path:
+def getXDSMasterFilePath(dataCollectionId:int) -> Path:
 
     if dataCollectionId is None:
         logger.error(
@@ -700,5 +815,5 @@ def getXDSMasterFilePath(dataCollectionId) -> Path:
         return None
     
     imageDirectory = Path(imageDirectory)
-    fileTemplate = fileTemplate.replace("%06d","master")
-    return imageDirectory / fileTemplate
+    masterFile = fileTemplate.replace("%06d","master")
+    return imageDirectory / masterFile

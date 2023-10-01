@@ -59,7 +59,7 @@ class FastdpTask(AbstractTask):
 
     def setFailure(self):
         self._dictInOut["isFailure"] = True
-        if self.onlineAutoProcessing:
+        if self.doUploadIspyb:
             if self.integrationId is not None and self.programId is not None:
                 ISPyBStoreAutoProcResults.setIspybToFailed(
                     dataCollectionId=self.dataCollectionId,
@@ -77,27 +77,19 @@ class FastdpTask(AbstractTask):
             "properties":
             {
                 "dataCollectionId": {"type":["integer","null"]},
+                "onlineAutoProcessing": {"type":["boolean","null"]},
+                "waitForFiles": {"type":["boolean","null"]},
+                "doUploadIspyb": {"type":["boolean","null"]},
                 "masterFilePath": {"type":["string","null"]},
                 "spaceGroup": {"type":["integer","string"]},
                 "unitCell": {"type":["string","null"]},
+                "residues": {"type":["integer","null"]},
                 "anomalous": {"type":["boolean","null"]},
-                "workingDirectory": {"type":["string","null"]},
-                "onlineAutoProcessing": {"type":["boolean","null"]},
                 "imageNoStart": {"type":["integer","null"]},
                 "imageNoEnd": {"type":["integer","null"]},
-            },
-            "anyOf": [
-                {
-                    "required": [
-                        "dataCollectionId"
-                    ]
-                },
-                {
-                    "required": [
-                        "masterFilePath"
-                    ]
-                },         
-            ]
+                "workingDirectory": {"type":["string","null"]},
+                
+            }
         }
 
     def run(self, inData):
@@ -123,6 +115,9 @@ class FastdpTask(AbstractTask):
         self.imageNoStart = inData.get("imageNoStart",None)
         self.imageNoEnd = inData.get("imageNoEnd",None)
         self.masterFilePath = inData.get("masterFilePath",None)
+        self.doUploadIspyb = inData.get("doUploadIspyb",False)
+        self.waitForFiles = inData.get("waitForFiles",True)
+        self.integrationId, self.programId = None, None
         outData = {}
 
 
@@ -144,130 +139,52 @@ class FastdpTask(AbstractTask):
         else:
             logger.info("No unit cell supplied")
 
-        if self.onlineAutoProcessing:
-            if self.dataCollectionId is None:
-                logger.error("No dataCollectionId, exiting.")
+        # get masterfile name
+        if self.masterFilePath is None:
+            if self.dataCollectionId:
+                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
+                if self.masterFilePath is None or not self.masterFilePath.exists():
+                    logger.error("dataCollectionId could not return master file path, exiting.")
+                    self.setFailure()
+                    return
+
+            else:
+                logger.error("No dataCollectionId or masterfile, exiting.")
                 self.setFailure()
                 return 
-            try:
-                dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
-                ispybDataCollection = dict(dataCollectionWS3VO)
-                logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
-                self.imageDirectory = ispybDataCollection.get("imageDirectory")
-                if UtilsConfig.isEMBL():
-                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
-                elif UtilsConfig.isMAXIV():
-                    self.fileTemplate = ispybDataCollection["fileTemplate"]
-                else:
-                    self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%04d", "####")
-                self.imageNoStart = ispybDataCollection["startImageNumber"]
-                numImages = ispybDataCollection["numberOfImages"]
-                self.imageNoEnd = numImages - self.imageNoStart + 1
-                pathToStartImage = os.path.join(self.imageDirectory,
-                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoStart))
-                pathToEndImage = os.path.join(self.imageDirectory,
-                                                UtilsImage.eiger_template_to_image(self.fileTemplate, self.imageNoEnd))
-            except:
-                logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
-                if self.masterFilePath is None:
-                    logger.error("No dataCollectionId or masterFilePath found, exiting")
-                    self.setFailure()
-                    return
-                self.masterFilePath = Path(self.masterFilePath)
-                self.imageDirectory = self.masterFilePath.parent
-                masterFileName = self.masterFilePath.name
-                try:
-                    self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
-                except:
-                    logger.error(f"File template not found: {masterFileName}")
-                    self.setFailure()
-                    return
-                numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
-                self.imageNoStart = inData.get("imageNoStart",1)
-                self.imageNoEnd = inData.get("imageNoEnd",numImages)
-                logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
-                pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
-                lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
-                pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
-        else:
-            if self.masterFilePath is None:
-                logger.error("No dataCollectionId or masterFilePath found, exiting")
-                self.setFailure()
-                return
-            self.masterFilePath = Path(self.masterFilePath)
-            self.imageDirectory = self.masterFilePath.parent
-            masterFileName = self.masterFilePath.name
-            try:
-                self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
-            except:
-                logger.error(f"File template not found: {masterFileName}")
-                self.setFailure()
-                return
-            numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
-            self.imageNoStart = inData.get("imageNoStart",1)
-            self.imageNoEnd = inData.get("imageNoEnd",numImages)
-            logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
-            pathToStartImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{self.imageNoStart:06d}.h5")
-            lastFileNumber = int(math.ceil(self.imageNoEnd / 100.0))
-            pathToEndImage = self.imageDirectory / Path(self.fileTemplate + f"_data_{lastFileNumber:06d}.h5")
 
+        # now we have masterfile name, need number of images and first/last file
+        dataCollectionWS3VO = None
+        if self.imageNoStart is None or self.imageNoEnd is None:
+            if self.dataCollectionId:
+                try:
+                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
+                    self.imageNoStart = dataCollectionWS3VO.startImageNumber
+                    numImages = dataCollectionWS3VO.numberOfImages
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+                except:
+                    logger.error("Could not access number of images from ISPyB")
+                    self.imageNoStart = 1
+                    numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+            else:
+                self.imageNoStart = 1
+                numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                self.imageNoEnd = numImages - self.imageNoStart + 1
+        
         if self.imageNoEnd - self.imageNoStart < 8:
             #if self.imageNoEnd - self.imageNoStart < -1:
             logger.error("There are fewer than 8 images, aborting")
             self.setFailure()
             return
-    
-        #make results directory
-        self.resultsDirectory = self.getWorkingDirectory() / "results"
-        self.resultsDirectory.mkdir(exist_ok=True, parents=True, mode=0o755)
         
-        if any(beamline in str(pathToStartImage) for beamline in ["id23eh1", "id29"]):
-            minSizeFirst = 6000000
-            minSizeLast = 6000000
-        elif any(beamline in str(pathToStartImage) for beamline in ["id23eh2", "id30a1"]):
-            minSizeFirst = 2000000
-            minSizeLast = 2000000
-        elif any(beamline in str(pathToStartImage) for beamline in ["id30a3"]):
-            minSizeFirst = 100000
-            minSizeLast = 100000
-        elif UtilsConfig.isMAXIV():
-            minSizeFirst = 100000
-            minSizeLast = 100000
-        else:
-            minSizeFirst = 100000
-            minSizeLast = 100000        
+        dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(self.masterFilePath)
+        pathToStartImage = dataH5ImageList[0]
+        pathToEndImage = dataH5ImageList[-1]
+                
+        listPrefix = dataCollectionWS3VO.fileTemplate.split("_") if dataCollectionWS3VO else Path(self.masterFilePath).name.split("_")
 
-        logger.info("Waiting for start image: {0}".format(pathToStartImage))
-        waitFileFirst = WaitFileTask(inData= {
-            "file":pathToStartImage,
-            "expectedSize": minSizeFirst
-        })
-        waitFileFirst.execute()
-        if waitFileFirst.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the first image {1}!".format(waitFileFirst.outData["timeOut"], pathToStartImage))
-        
-        logger.info("Waiting for end image: {0}".format(pathToEndImage))
-        waitFileLast = WaitFileTask(inData= {
-            "file":pathToEndImage,
-            "expectedSize": minSizeLast
-        })
-        waitFileLast.execute()
-        if waitFileLast.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
-
-        self.timeStart = datetime.now().isoformat(timespec='seconds')
-
-        if self.onlineAutoProcessing:
-            #set ISPyB to running
-            self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
-                dataCollectionId=self.dataCollectionId,
-                processingCommandLine = self.processingCommandLine,
-                processingPrograms = self.processingPrograms,
-                isAnom = self.anomalous,
-                timeStart = self.timeStart)
-        
-        # Determine pyarch prefix
-        listPrefix = self.fileTemplate.split("_")
+        #generate pyarch prefix
         if UtilsConfig.isALBA():
             self.pyarchPrefix = "ap_{0}_{1}".format("_".join(listPrefix[:-2]),
                                                        listPrefix[-2])
@@ -281,9 +198,41 @@ class FastdpTask(AbstractTask):
             else:
                 self.pyarchPrefix = "ap_{0}_run".format(listPrefix[0])
 
-        if self.masterFilePath is None:
-            self.masterFilePath = os.path.join(self.imageDirectory,
-                    UtilsImage.eiger_template_to_master(self.fileTemplate))
+
+        if self.waitForFiles:
+            logger.info("Waiting for start image: {0}".format(pathToStartImage))
+            waitFileFirst = WaitFileTask(inData= {
+                "file":pathToStartImage,
+                "expectedSize": 100000
+            })
+            waitFileFirst.execute()
+            if waitFileFirst.outData["timedOut"]:
+                logger.warning("Timeout after {0:d} seconds waiting for the first image {1}!".format(waitFileFirst.outData["timeOut"], pathToStartImage))
+            
+            logger.info("Waiting for end image: {0}".format(pathToEndImage))
+            waitFileLast = WaitFileTask(inData= {
+                "file":pathToEndImage,
+                "expectedSize": 100000
+            })
+            waitFileLast.execute()
+            if waitFileLast.outData["timedOut"]:
+                logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
+
+        self.resultsDirectory = Path(self.getWorkingDirectory() / "results")
+        self.resultsDirectory.mkdir(parents=True, exist_ok=True)
+
+        self.timeStart = datetime.now().isoformat(timespec='seconds')
+
+        
+        if self.doUploadIspyb:
+            #set ISPyB to running
+            self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
+                dataCollectionId=self.dataCollectionId,
+                processingCommandLine = self.processingCommandLine,
+                processingPrograms = self.processingPrograms,
+                isAnom = self.anomalous,
+                timeStart = self.timeStart)
+        
 
         #set up command line
         fastdpSetup = UtilsConfig.get(self,"fastdpSetup", None)
@@ -344,25 +293,17 @@ class FastdpTask(AbstractTask):
         }
         fastDpJson = self.getWorkingDirectory() / "fast_dp.json"
 
-        #no fast_dp.json, task fails
-        if not fastDpJson.exists():
-            logger.error("fast_dp.json not found- error log below")
-            errorLog = self.getErrorLog()
-            logger.error(errorLog)
-            self.setFailure()
-            return
-
         # Add aimless.log if present
         pathToAimlessLog = self.fastDpResultFiles.get("aimlessLog")
         if pathToAimlessLog.exists():
             pyarchAimlessLog = self.pyarchPrefix + "_aimless.log"
-            shutil.copy(pathToAimlessLog, self.resultsDirectory /  pyarchAimlessLog)
+            shutil.copy(pathToAimlessLog, self.resultsDirectory / pyarchAimlessLog)
             self.aimlessData = AimlessTask.extractAimlessResults(pathToAimlessLog)
-            logger.debug(f"aimlessData = {self.aimlessData}")
+            # logger.debug(f"aimlessData = {self.aimlessData}")
         #extract ISa...
         correctLpResults = XDSTask.parseCorrectLp(inData={"correctLp":self.getWorkingDirectory() / "CORRECT.LP",
                                                           "gxParmXds":self.getWorkingDirectory() / "GXPARM.XDS" })
-        logger.debug(f"correctLpResults: {correctLpResults}")
+        # logger.debug(f"correctLpResults: {correctLpResults}")
         self.ISa = correctLpResults.get("ISa")
         logger.debug(f"Isa = {self.ISa}")
 
@@ -396,7 +337,7 @@ class FastdpTask(AbstractTask):
             self.pyarchDirectory = self.storeDataOnPyarch(resultFilePaths)
 
         autoProcResults = self.generateAutoProcResultsContainer(self.programId, self.integrationId, isAnom=self.anomalous)        
-        if self.onlineAutoProcessing:
+        if self.doUploadIspyb:
             with open(self.resultsDirectory / "fast_dp_ispyb.json","w") as fp:
                 json.dump(autoProcResults, fp, indent=2,default=lambda o:str(o))
             ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=autoProcResults, workingDirectorySuffix="uploadFinal")

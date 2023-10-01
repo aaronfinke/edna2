@@ -40,11 +40,14 @@ class AutoPROCTaskTest(unittest.TestCase):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_execute_FastdpTask(self):
-        referenceDataPath = self.dataPath / 'inDataAutoPROC.json'
+        referenceDataPath = self.dataPath / 'inDataAutoPROC_unitcell.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
         autoPROCTask = AutoPROCTask(inData=inData)
         autoPROCTask.execute()
+
+
         self.assertTrue(autoPROCTask.isSuccess())
+
 
 if __name__ == '__main__':
     unittest.main()

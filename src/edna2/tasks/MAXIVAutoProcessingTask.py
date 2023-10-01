@@ -41,6 +41,7 @@ from edna2.utils import UtilsImage
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
+from edna2.utils import UtilsCCTBX
 
 
 logger = UtilsLogging.getLogger()
@@ -70,21 +71,27 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "anomalous": {"type":["boolean","null"]},
                 "workingDirectory": {"type":["string","null"]},
                 "pdb": {"type":["string","null"]},
-                "test": {"type":["boolean","null"]}
+                "test": {"type":["boolean","null"]},
+                "waitForFiles": {"type":["boolean","null"]},
+                "doUploadIspyb": {"type":["boolean","null"]}
             }
         }
     
     def run(self, inData):
-        self.anomFlag = False
-
-        logger.info("EDNA2 Auto Processing started")
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory()/"MAXIVAutoProcessing.log")
+        logger.info("AutoPROC processing started")
+        if os.environ.get('SLURM_JOB_ID'):
+            logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
         logger.info(f"Running on {socket.gethostname()}")
 
+        self.anomFlag = False
         outData = {}
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
         self.tmpdir = None
+        self.imageNoStart = inData.get("imageNoStart", None)
+        self.imageNoEnd = inData.get("imageNoEnd", None)
 
         self.dataCollectionId = inData.get("dataCollectionId", None)
         self.masterFilePath = inData.get("masterFilePath", None)
@@ -93,99 +100,68 @@ class MAXIVAutoProcessingTask(AbstractTask):
         self.unitCell = inData.get("unitCell",None)
         self.residues = inData.get("residues",None)
         self.workingDirectory = inData.get("workingDirectory", self.getWorkingDirectory())
+        self.doUploadIspyb = inData.get("doUploadIspyb",True)
+        self.waitForFiles = inData.get("waitForFiles",True)
+
         self.pdb = inData.get("pdb",None)
         self.test = inData.get("test",False)
 
         self.proteinAcronym = "AUTOMATIC"
         self.sampleName = "DEFAULT"
 
-        logger.info("MAX IV Autoprocessing started")
-        logger.info(f"Running on {socket.gethostname()}")
         try:
-            logger.info(f"System load avg: {os.getloadavg()}")
+            logger.debug(f"System load avg: {os.getloadavg()}")
         except OSError:
             pass
 
+        #set up SG and unit cell
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
-        if self.spaceGroup != 0:
-            try:
-                spaceGroupInfo = sgtbx.space_group_info(self.spaceGroup).symbol_and_number()
-                self.spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
-                self.spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-                logger.info("Supplied space group is {}, number {}".format(self.spaceGroupString, self.spaceGroupNumber))
-            except:
-                logger.debug("Could not parse space group")
-                self.spaceGroupNumber = 0
-        else:
-            self.spaceGroupNumber = 0
-            self.spaceGroupString = ""            
-            logger.info("No space group supplied")
-
-        # need both SG and unit cell
-        if self.spaceGroup != 0 and self.unitCell is not None:
-            try:
-                unitCellList = [float(x) for x in self.unitCell.split(",")]
-                #if there are zeroes parsed in, need to deal with it
-                if 0.0 in unitCellList:
-                    raise Exception
-                self.unitCell = {
-                            "cell_a": unitCellList[0],
-                            "cell_b": unitCellList[1],
-                            "cell_c": unitCellList[2],
-                            "cell_alpha": unitCellList[3],
-                            "cell_beta": unitCellList[4],
-                            "cell_gamma": unitCellList[5]
-                            }
-                logger.info("Supplied unit cell is {cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**self.unitCell))
-            except:
-                logger.debug("could not parse unit cell")
-                self.unitCell = None
+        # set up unit cell
+        if self.unitCell is not None:
+            self.unitCell = UtilsCCTBX.parseUnitCell_str(self.unitCell)
         else:
             logger.info("No unit cell supplied")
 
-        if self.dataCollectionId is None:
-            logger.error("No dataCollectionId, exiting.")
-            self.setFailure()
-            return 
-        
-        try:
-            dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
-            ispybDataCollection = dict(dataCollectionWS3VO)
-            logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
-            self.imageDirectory = ispybDataCollection.get("imageDirectory")
-            if UtilsConfig.isEMBL():
-                self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
-            elif UtilsConfig.isMAXIV():
-                self.fileTemplate = ispybDataCollection["fileTemplate"]
-            else:
-                self.fileTemplate = ispybDataCollection["fileTemplate"].replace("%04d", "####")
-            self.imageNoStart = ispybDataCollection["startImageNumber"]
-            numImages = ispybDataCollection["numberOfImages"]
-            self.imageNoEnd = numImages - self.imageNoStart + 1
-            if self.masterFilePath is None:
+        # get masterfile name
+        if self.masterFilePath is None:
+            if self.dataCollectionId:
                 self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
+                if self.masterFilePath is None or not self.masterFilePath.exists():
+                    logger.error("dataCollectionId could not return master file path, exiting.")
+                    self.setFailure()
+                    return
 
-        except Exception as e:
-            logger.warning("Retrieval of data from ISPyB Failed, trying manually...")
-            logger.warning(e)
-            if self.masterFilePath is None:
-                logger.error("No dataCollectionId or masterFilePath found, exiting")
+            else:
+                logger.error("No dataCollectionId or masterfile, exiting.")
                 self.setFailure()
-                return
-            self.masterFilePath = Path(self.masterFilePath)
-            self.imageDirectory = self.masterFilePath.parent
-            masterFileName = self.masterFilePath.name
-            try:
-                self.fileTemplate = re.search(r"[A-Za-z0-9-_]+(?=_master\.h5)", masterFileName)[0]
-            except:
-                logger.error(f"File template not found: {masterFileName}")
-                self.setFailure()
-                return
-            numImages = UtilsImage.getNumberOfImages(masterFilePath=self.masterFilePath)
-            self.imageNoStart = inData.get("imageNoStart",1)
-            self.imageNoEnd = inData.get("imageNoEnd",numImages)
-            logger.debug(f"imageNoStart: {self.imageNoStart}, imageNoEnd: {self.imageNoEnd}")
+                return 
 
+        # now we have masterfile name, need number of images and first/last file
+        dataCollectionWS3VO = None
+        if self.imageNoStart is None or self.imageNoEnd is None:
+            if self.dataCollectionId:
+                try:
+                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
+                    self.imageNoStart = dataCollectionWS3VO.startImageNumber
+                    numImages = dataCollectionWS3VO.numberOfImages
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+                except:
+                    logger.error("Could not access number of images from ISPyB")
+                    self.imageNoStart = 1
+                    numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+            else:
+                self.imageNoStart = 1
+                numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                self.imageNoEnd = numImages - self.imageNoStart + 1
+        
+        if self.imageNoEnd - self.imageNoStart < 8:
+            #if self.imageNoEnd - self.imageNoStart < -1:
+            logger.error("There are fewer than 8 images, aborting")
+            self.setFailure()
+            return
+        
         imgQualityDozor = ControlPyDozor(inData={
             "dataCollectionId" : self.dataCollectionId,
             "masterFile" : self.masterFilePath,
@@ -199,24 +175,30 @@ class MAXIVAutoProcessingTask(AbstractTask):
         )
 
         edna2ProcTask = Edna2ProcTask(inData={
-            "onlineAutoProcessing": True,
+            "onlineAutoProcessing": False,
             "dataCollectionId": self.dataCollectionId,
+            "masterFilePath": self.masterFilePath,
             "unitCell": self.unitCell,
             "spaceGroup": self.spaceGroup,
             "imageNoStart": self.imageNoStart,
             "imageNoEnd": self.imageNoEnd,
-            "anomalous": False,
+            "anomalous": self.anomalous,
+            "waitForFiles": False,
+            "doUploadIspyb": True,
             "test": self.test
             }, workingDirectorySuffix="0")
 
         fastDpTask = FastdpTask(inData={
             "onlineAutoProcessing": True,
             "dataCollectionId": self.dataCollectionId,
+            "masterFilePath": self.masterFilePath,
             "unitCell": self.unitCell,
             "spaceGroup": self.spaceGroup,
             "masterFilePath":self.masterFilePath,
             "imageNoStart": self.imageNoStart,
             "imageNoEnd": self.imageNoEnd,
+            "waitForFiles": False,
+            "doUploadIspyb": True,
             "anomalous": False,
             "test": self.test
             }, workingDirectorySuffix="0")

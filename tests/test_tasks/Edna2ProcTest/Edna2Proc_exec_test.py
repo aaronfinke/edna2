@@ -43,11 +43,11 @@ class Edna2ProcExecTest(unittest.TestCase):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_execute_Edna2ProcTask(self):
-        referenceDataPath = self.dataPath / 'inDataEdna2Proc.json'
+        referenceDataPath = self.dataPath / 'inDataEdna2Proc_fail.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
         edna2proctask = Edna2ProcTask(inData=inData)
         edna2proctask.execute()
         self.assertTrue(edna2proctask.isSuccess())
-        
+
 if __name__ == '__main__':
     unittest.main()

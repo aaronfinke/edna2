@@ -35,7 +35,6 @@ import json
 import socket
 import traceback
 
-from cctbx import sgtbx
 from datetime import datetime
 
 from edna2.tasks.AbstractTask import AbstractTask
@@ -45,6 +44,7 @@ from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
 from edna2.utils import UtilsImage
+from edna2.utils import UtilsCCTBX
 
 
 logger = UtilsLogging.getLogger()
@@ -58,7 +58,7 @@ STRF_TEMPLATE = "%a %b %d %H:%M:%S %Y"
 class Xia2DialsTask(AbstractTask):
     def setFailure(self):
         self._dictInOut["isFailure"] = True
-        if self.dataCollectionId:
+        if self.doUploadIspyb:
             if self.integrationId is not None and self.programId is not None:
                 ISPyBStoreAutoProcResults.setIspybToFailed(
                     dataCollectionId=self.dataCollectionId,
@@ -75,7 +75,11 @@ class Xia2DialsTask(AbstractTask):
 
     def run(self, inData):
         UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory()/"EDNA_xia2DIALS.log")
-        logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
+        logger.info("Xia2DIALS processing started")
+        if os.environ.get('SLURM_JOB_ID'):
+            logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
+        logger.info(f"Running on {socket.gethostname()}")
+
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
@@ -85,8 +89,6 @@ class Xia2DialsTask(AbstractTask):
         self.setLogFileName(f"xia2DIALS_{self.startDateTimeFormatted}.log")
         self.dataCollectionId = inData.get("dataCollectionId", None)
         self.tmpdir = None
-        directory = None
-        template = None
         pathToStartImage = None
         pathToEndImage = None
 
@@ -96,193 +98,130 @@ class Xia2DialsTask(AbstractTask):
         self.lowResLimit = inData.get("lowResolutionLimit",None)
         self.highResLimit = inData.get("highResolutionLimit",None)
         self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
+        self.masterFilePath = inData.get("masterFilePath",None)
+        self.doUploadIspyb = inData.get("doUploadIspyb",False)
+        self.waitForFiles = inData.get("waitForFiles",True)
+        self.imageNoStart = inData.get("imageNoStart", None)
+        self.imageNoEnd = inData.get("imageNoEnd", None)
+        self.pyarchDirectory = None
         self.proteinAcronym = "AUTOMATIC"
         self.sampleName = "DEFAULT"
 
-        logger.info("Xia2DIALS processing started")
-        logger.info(f"Running on {socket.gethostname()}")
         try:
-            logger.info(f"System load avg: {os.getloadavg()}")
+            logger.debug(f"System load avg: {os.getloadavg()}")
         except OSError:
             pass
 
+        #set up SG and unit cell
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
-        if self.spaceGroup != 0:
-            try:
-                spaceGroupInfo = sgtbx.space_group_info(self.spaceGroup).symbol_and_number()
-                self.spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
-                self.spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-                logger.info("Supplied space group is {}, number {}".format(self.spaceGroupString, self.spaceGroupNumber))
-            except:
-                logger.debug("Could not parse space group")
-                self.spaceGroupNumber = 0
-        else:
-            self.spaceGroupNumber = 0
-            self.spaceGroupString = ""            
-            logger.info("No space group supplied")
-
-        # need both SG and unit cell
-        if self.spaceGroup != 0 and self.unitCell is not None:
-            try:
-                unitCellList = [float(x) for x in self.unitCell.split(",")]
-                #if there are zeroes parsed in, need to deal with it
-                if 0.0 in unitCellList:
-                    raise Exception
-                self.unitCell = {
-                            "cell_a": unitCellList[0],
-                            "cell_b": unitCellList[1],
-                            "cell_c": unitCellList[2],
-                            "cell_alpha": unitCellList[3],
-                            "cell_beta": unitCellList[4],
-                            "cell_gamma": unitCellList[5]
-                            }
-                logger.info("Supplied unit cell is {cell_a} {cell_b} {cell_c} {cell_alpha} {cell_beta} {cell_gamma}".format(**self.unitCell))
-            except:
-                logger.debug("could not parse unit cell")
-                self.unitCell = None
+        # set up unit cell
+        if self.unitCell is not None:
+            self.unitCell = UtilsCCTBX.parseUnitCell(self.unitCell)
         else:
             logger.info("No unit cell supplied")
 
+        # get masterfile name
+        if self.masterFilePath is None:
+            if self.dataCollectionId:
+                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
+                if self.masterFilePath is None or not self.masterFilePath.exists():
+                    logger.error("dataCollectionId could not return master file path, exiting.")
+                    self.setFailure()
+                    return
 
-        if self.dataCollectionId is not None:
-            self.integrationId = None
-            self.programId = None
-            dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
-            if dataCollectionWS3VO is not None:
-                ispybDataCollection = dict(dataCollectionWS3VO)
-                logger.debug("ispybDataCollection: {}".format(ispybDataCollection))
-                directory = ispybDataCollection.get("imageDirectory")
-                if UtilsConfig.isEMBL():
-                    template = ispybDataCollection["fileTemplate"].replace("%05d", "#" * 5)
-                elif UtilsConfig.isMAXIV():
-                    template = ispybDataCollection["fileTemplate"]
-                else:
-                    template = ispybDataCollection["fileTemplate"].replace("%04d", "####")
-                self.imageNoStart = inData.get("imageNoStart", ispybDataCollection["startImageNumber"])
-                numImages = ispybDataCollection["numberOfImages"]
-                self.imageNoEnd = inData.get("imageNoEnd", (numImages - self.imageNoStart + 1))  
-                pathToStartImage = os.path.join(directory, template % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, template % self.imageNoEnd)
             else:
-                directory = self.dataInput.dirN.value
-                template = self.dataInput.templateN.value
-                self.imageNoStart = self.dataInput.fromN.value
-                self.imageNoEnd = self.dataInput.toN.value
-                if UtilsConfig.isEMBL():
-                    fileTemplate = template.replace("#####", "%05d")
-                else:
-                    fileTemplate = template.replace("####", "%04d")
-
-                pathToStartImage = os.path.join(directory, fileTemplate % self.imageNoStart)
-                pathToEndImage = os.path.join(directory, fileTemplate % self.imageNoEnd)
-
-            # Determine pyarch prefix
-            if UtilsConfig.isALBA():
-                listPrefix = template.split("_")
-                self.pyarchPrefix = "di_{0}_{1}".format("_".join(listPrefix[:-2]),
-                                                        listPrefix[-2])
-            else:
-                listPrefix = template.split("_")
-                self.pyarchPrefix = "di_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
-
-            if self.imageNoEnd - self.imageNoStart < 8:
-                #if self.imageNoEnd - self.imageNoStart < -1:
-                logger.error("There are fewer than 8 images, aborting")
+                logger.error("No dataCollectionId or masterfile, exiting.")
                 self.setFailure()
-                return
-            
-            logger.info(f"Starting:ending image numbers: {self.imageNoStart}:{self.imageNoEnd}")
-            logger.info(f"dataCollectionId: {self.dataCollectionId}")
+                return 
 
-            proteinAcronym, sampleName = UtilsIspyb.getProteinAcronymAndSampleNameFromDataCollectionId(self.dataCollectionId)
-            if proteinAcronym is not None and sampleName is not None:
-                # only alphanumerics and underscores are allowed
-                proteinAcronym_corrected = re.sub(r"\W", '_', proteinAcronym)
-                sampleName_corrected = re.sub(r"\W", '_', sampleName)
-                self.proteinAcronym = proteinAcronym_corrected
-                self.sampleName = sampleName_corrected
-            logger.info(f"Protein Acronym:{self.proteinAcronym}, sample name:{self.sampleName}")
+        # now we have masterfile name, need number of images and first/last file
+        dataCollectionWS3VO = None
+        if self.imageNoStart is None or self.imageNoEnd is None:
+            if self.dataCollectionId:
+                try:
+                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
+                    self.imageNoStart = dataCollectionWS3VO.startImageNumber
+                    numImages = dataCollectionWS3VO.numberOfImages
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+                except:
+                    logger.error("Could not access number of images from ISPyB")
+                    self.imageNoStart = 1
+                    numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                    self.imageNoEnd = numImages - self.imageNoStart + 1
+            else:
+                self.imageNoStart = 1
+                numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+                self.imageNoEnd = numImages - self.imageNoStart + 1
+        
+        if self.imageNoEnd - self.imageNoStart < 8:
+            #if self.imageNoEnd - self.imageNoStart < -1:
+            logger.error("There are fewer than 8 images, aborting")
+            self.setFailure()
+            return
+        
+        dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(self.masterFilePath)
+        pathToStartImage = dataH5ImageList[0]
+        pathToEndImage = dataH5ImageList[-1]
+                
+        listPrefix = dataCollectionWS3VO.fileTemplate.split("_") if dataCollectionWS3VO else Path(self.masterFilePath).name.split("_")
+
+        #generate pyarch prefix
+        if UtilsConfig.isALBA():
+            self.pyarchPrefix = "ap_{0}_{1}".format("_".join(listPrefix[:-2]),
+                                                       listPrefix[-2])
+        elif UtilsConfig.isMAXIV():
+            self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
+        else:
+            if len(listPrefix) > 2:
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
+            elif len(listPrefix) > 1:
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[:-2], listPrefix[-2])
+            else:
+                self.pyarchPrefix = "ap_{0}_run".format(listPrefix[0])
+
+        proteinAcronym, sampleName = UtilsIspyb.getProteinAcronymAndSampleNameFromDataCollectionId(self.dataCollectionId)
+        if proteinAcronym is not None and sampleName is not None:
+            # only alphanumerics and underscores are allowed
+            proteinAcronym_corrected = re.sub(r"\W", '_', proteinAcronym)
+            sampleName_corrected = re.sub(r"\W", '_', sampleName)
+            self.proteinAcronym = proteinAcronym_corrected
+            self.sampleName = sampleName_corrected
+        else:
+            self.proteinAcronym = "AUTOMATIC"
+            self.sampleName = "DEFAULT"
+
+        logger.info(f"Protein Acronym:{self.proteinAcronym}, sample name:{self.sampleName}")
 
 
         #make results directory
         self.resultsDirectory = self.getWorkingDirectory() / "results"
         self.resultsDirectory.mkdir(exist_ok=True, parents=True, mode=0o755)
 
-        #make pyarch directory 
-        if inData.get("test",False):
-            self.tmpdir = tempfile.TemporaryDirectory() 
-            self.pyarchDirectory = Path(self.tmpdir.name)
-        else:
-            reg = re.compile(r"(?:/gpfs/offline1/visitors/biomax/|/data/visitors/biomax/)")
-            pyarchDirectory = re.sub(reg, "/data/staff/ispybstorage/visitors/biomax/", str(self.resultsDirectory))
-            self.pyarchDirectory = Path(pyarchDirectory)
-            try:
-                self.pyarchDirectory.mkdir(exist_ok=True,parents=True, mode=0o755)
-                logger.info(f"Created pyarch directory: {self.pyarchDirectory}")
-            except OSError as e:
-                logger.error(f"Error when creating pyarch_dir: {e}")
-                self.tmpdir = tempfile.TemporaryDirectory() 
-                self.pyarchDirectory = Path(self.tmpdir.name)
-        
-        isH5 = False
-        if any(beamline in pathToStartImage for beamline in ["id23eh1", "id29"]):
-            minSizeFirst = 6000000
-            minSizeLast = 6000000
-        elif any(beamline in pathToStartImage for beamline in ["id23eh2", "id30a1"]):
-            minSizeFirst = 2000000
-            minSizeLast = 2000000
-        elif any(beamline in pathToStartImage for beamline in ["id30a3"]):
-            minSizeFirst = 100000
-            minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            UtilsImage.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          UtilsImage.eiger_template_to_image(template, self.imageNoEnd))
-            isH5 = True
-        elif UtilsConfig.isMAXIV():
-            minSizeFirst = 100000
-            minSizeLast = 100000
-            pathToStartImage = os.path.join(directory,
-                                            UtilsImage.eiger_template_to_image(template, self.imageNoStart))
-            pathToEndImage = os.path.join(directory,
-                                          UtilsImage.eiger_template_to_image(template, self.imageNoEnd))
-            isH5 = True
-        else:
-            minSizeFirst = 1000000
-            minSizeLast = 1000000        
-
-        logger.info("Waiting for start image: {0}".format(pathToStartImage))
-        waitFileFirst = WaitFileTask(inData= {
-            "file":pathToStartImage,
-            "expectedSize": minSizeFirst
-        })
-        waitFileFirst.execute()
-        if waitFileFirst.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the first image {1}!".format(waitFileFirst.outData["timeOut"], pathToStartImage))
-        
-        logger.info("Waiting for end image: {0}".format(pathToEndImage))
-        waitFileLast = WaitFileTask(inData= {
-            "file":pathToEndImage,
-            "expectedSize": minSizeLast
-        })
-        waitFileLast.execute()
-        if waitFileLast.outData["timedOut"]:
-            logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
+        if self.waitForFiles:
+            logger.info("Waiting for start image: {0}".format(pathToStartImage))
+            waitFileFirst = WaitFileTask(inData= {
+                "file":pathToStartImage,
+                "expectedSize": 100000
+            })
+            waitFileFirst.execute()
+            if waitFileFirst.outData["timedOut"]:
+                logger.warning("Timeout after {0:d} seconds waiting for the first image {1}!".format(waitFileFirst.outData["timeOut"], pathToStartImage))
+            
+            logger.info("Waiting for end image: {0}".format(pathToEndImage))
+            waitFileLast = WaitFileTask(inData= {
+                "file":pathToEndImage,
+                "expectedSize": 100000
+            })
+            waitFileLast.execute()
+            if waitFileLast.outData["timedOut"]:
+                logger.warning("Timeout after {0:d} seconds waiting for the last image {1}!".format(waitFileLast.outData["timeOut"], pathToEndImage))
 
         self.timeStart = datetime.now().isoformat(timespec="seconds")
         
-
-        if isH5:
-            masterFilePath = os.path.join(directory,
-                                UtilsImage.eiger_template_to_master(template))
-        else:
-            logger.error("Only supporing HDF5 data at this time. Stopping.")
-            self.setFailure()
-            return
-
         xia2DIALSExecinData = {
             "onlineAutoProcessing": self.onlineAutoProcessing,
-            "masterFilePath" : masterFilePath,
+            "masterFilePath" : self.masterFilePath,
             "imageNoStart": self.imageNoStart,
             "imageNoEnd" : self.imageNoEnd,
             "proteinAcronym" : self.proteinAcronym,
@@ -302,24 +241,20 @@ class Xia2DialsTask(AbstractTask):
         except Exception as e:
             logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
         logger.info(f"integrationID: {self.integrationId}, programId: {self.programId}")
+        if self.doUploadIspyb:
+            self.logToIspyb(self.integrationId,
+                                'Indexing', 'Launched', 'Xia2 started')
 
-        self.logToIspyb(self.integrationId,
-                            'Indexing', 'Launched', 'Xia2 started')
-
-        # timeOut = inData.get("timeout",None)
-        # if timeOut is None:
-        #     timeOut = UtilsConfig.get(self,"timeOut",3600)
         xia2DIALSExec = Xia2DialsExecTask(inData=xia2DIALSExecinData, workingDirectorySuffix="0")
-        # xia2DIALSExec.setTimeout(timeOut)
         xia2DIALSExec.execute()
         if xia2DIALSExec.isFailure():
-            # if xia2DIALSExec["timeoutExit"] == True:
-            #     logger.error(f"Operation timed out after {timeOut} s.")
             self.setFailure()
             return
         self.timeEnd = datetime.now().isoformat(timespec="seconds")
-        self.logToIspyb(self.integrationId,
-            'Indexing', 'Successful', 'Xia2Dials finished')
+
+        if self.doUploadIspyb:
+            self.logToIspyb(self.integrationId,
+                'Indexing', 'Successful', 'Xia2Dials finished')
 
         xia2DIALSExecDir = Path(xia2DIALSExec.outData["workingDirectory"])
         logger.debug(f"Working directory is {xia2DIALSExecDir}")
@@ -341,32 +276,57 @@ class Xia2DialsTask(AbstractTask):
         if xia2Txt.exists():
             targetFile = self.resultsDirectory / f"{self.pyarchPrefix}_{xia2Txt.name}"
             UtilsPath.systemCopyFile(xia2Txt,targetFile)
-
-        for file in self.resultsDirectory.glob("*"):
-            targetFile = self.pyarchDirectory / file.name
-            UtilsPath.systemCopyFile(file,targetFile)
-
+        
+        outData = {}
 
         # run xia2.ispyb_json
+        logger.info("Running xia2.ispyb_json... ")
         xia2JsonIspybTask = Xia2JsonIspybTask(inData={"xia2DialsExecDir":str(xia2DIALSExecDir)}, workingDirectorySuffix="final")
         xia2JsonIspybTask.execute()
         xia2JsonFile = xia2JsonIspybTask.outData.get("ispyb_json",None)
-        outData = {}
 
-        if xia2JsonFile is not None:
-            logger.info("ispyb.json successfully created")
-            xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
-            outData = xia2AutoProcContainer
+        if xia2JsonFile is None:
+            logger.info("xia2.ispyb_json failed. Exiting")
+            return outData
+        
+        logger.info("ispyb.json successfully created")
 
-            if self.dataCollectionId is not None:
-                ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
-                ispybStoreAutoProcResults.execute()
+        resultFilePaths = list(self.resultsDirectory.iterdir())
+        if inData.get("test",False):
+            self.tmpdir = tempfile.TemporaryDirectory() 
+            self.pyarchDirectory = Path(self.tmpdir.name)
+        else:
+            self.pyarchDirectory = self.storeDataOnPyarch(resultFilePaths)
+
+        xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
+        outData = xia2AutoProcContainer
+
+
+        if self.doUploadIspyb:
+            ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
+            ispybStoreAutoProcResults.execute()
+            
 
         if inData.get("test",False):
             self.tmpdir.cleanup()
 
         return outData
 
+    def storeDataOnPyarch(resultFilePaths, pyarchDirectory=None):
+        #create paths on Pyarch
+        if pyarchDirectory is None:
+            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0]).parent
+            if not pyarchDirectory.exists():
+                pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
+        for resultFile in [f for f in resultFilePaths if f.exists()]:
+            resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
+            try:
+                logger.info(f"Copying {resultFile} to pyarch directory")
+                shutil.copy(resultFile,resultFilePyarchPath)
+            except Exception as e:
+                logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
+                logger.warning(e)
+        return pyarchDirectory
         
 
     def logToIspyb(self, integrationId, step, status, comments=""):
@@ -497,6 +457,11 @@ class Xia2DialsTask(AbstractTask):
 
 class Xia2DialsExecTask(AbstractTask):
     def run(self, inData):
+        logger.info("xia2DIALS Execution started")
+        if os.environ.get('SLURM_JOB_ID'):
+            logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
+        logger.info(f"Running on {socket.gethostname()}")
+
         outData = {}
         logger.debug(f"working directory is {self.getWorkingDirectory()}")
         self.onlineAutoProcessing = inData["onlineAutoProcessing"]
@@ -517,7 +482,6 @@ class Xia2DialsExecTask(AbstractTask):
         outData["workingDirectory"] = str(self.getWorkingDirectory())
 
         xia2DialsSetup = UtilsConfig.get("Xia2DialsTask","xia2DialsSetup", None)
-        logger.debug(f"xia2DialsSetup: {xia2DialsSetup}")
         xia2DialsExecutable = UtilsConfig.get("Xia2DialsTask","xia2DialsExecutable", "xia2")
         maxNoProcessors = UtilsConfig.get("Xia2DialsTask", "maxNoProcessors", os.cpu_count())
         xia2DialsFastMode = distutils.util.strtobool(UtilsConfig.get("Xia2DialsTask","xia2DialsFastMode", "false"))

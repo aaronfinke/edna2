@@ -748,7 +748,9 @@ class XDSIndexing(XDSTask):
         if errorList:
             # ignore this error
             insufficientIndexing = True if 'INSUFFICIENT PERCENTAGE (< 50%) OF INDEXED REFLECTIONS' in ' '.join(errorList) else False
-            if not insufficientIndexing:
+            if insufficientIndexing:
+                logger.warning("XDS stopped due to insufficient percentage of indexed reflections, but processing will continue")
+            else:
                 self.setFailure()
         # Work in progress!
         outData = self.parseXDSOutput(self.getWorkingDirectory())

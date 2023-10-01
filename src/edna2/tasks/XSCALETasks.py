@@ -83,13 +83,13 @@ class XSCALETask(AbstractTask):
     def generateXSCALE_INP(self, inData, isAnom, merge):
 
         friedels_law = False if isAnom else True
-        xdsAsciiPath = Path(inData["xdsAsciiPath_anom"]) if isAnom else Path(inData["xdsAsciiPath_noAnom"])
+        xdsAsciiPath = Path(inData["xdsAsciiPath"])
         Path(self.getWorkingDirectory() / xdsAsciiPath.name).symlink_to(xdsAsciiPath)
         bins = " ".join([str(x) for x in inData["bins"]])
         sgNumber = inData["sgNumber"]
         a,b,c,alpha,beta,gamma = inData["cell"].values()
         res = inData["res"]
-        output_file_name = f"{'' if merge else 'un'}merged_{'anom' if isAnom else 'noanom'}_XSCALE.hkl"
+        output_file_name = f"{'' if merge else 'un'}merged_XSCALE.hkl"
         
         listXSCALE_INP = [
             f"OUTPUT_FILE= {output_file_name}",
