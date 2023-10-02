@@ -123,8 +123,8 @@ class AutoPROCTask(AbstractTask):
         self.timeStart = time.perf_counter()
         self.startDateTime =  datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
-        self.processingPrograms="autoproc"
-        self.processingProgramsStaraniso = "autoproc_staraniso"
+        self.processingPrograms="autoPROC"
+        self.processingProgramsStaraniso = "autoPROC_staraniso"
         self.processingCommandLine = ""
         self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
         # self.setLogFileName(f"autoPROC_{self.startDateTimeFormatted}.log")
