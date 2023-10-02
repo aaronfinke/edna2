@@ -233,17 +233,14 @@ class Xia2DialsTask(AbstractTask):
             "highResLimit" : self.highResLimit,
             "anomalous" : self.anomalous
         }
-        try: 
-            self.integrationId,self.programId = createIntegrationId(
-                                    self, 
-                                    "Creating integration ID", 
-                                    isAnom=self.anomalous)
-        except Exception as e:
-            logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
-        logger.info(f"integrationID: {self.integrationId}, programId: {self.programId}")
         if self.doUploadIspyb:
-            self.logToIspyb(self.integrationId,
-                                'Indexing', 'Launched', 'Xia2 started')
+            self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
+                dataCollectionId=self.dataCollectionId,
+                processingCommandLine = self.processingCommandLine,
+                processingPrograms = self.processingPrograms,
+                isAnom = self.anomalous,
+                timeStart = self.timeStart)
+
 
         xia2DIALSExec = Xia2DialsExecTask(inData=xia2DIALSExecinData, workingDirectorySuffix="0")
         xia2DIALSExec.execute()
@@ -291,12 +288,12 @@ class Xia2DialsTask(AbstractTask):
         
         logger.info("ispyb.json successfully created")
 
-        resultFilePaths = list(self.resultsDirectory.iterdir())
+        self.resultFilePaths = list(self.resultsDirectory.iterdir())
         if inData.get("test",False):
             self.tmpdir = tempfile.TemporaryDirectory() 
             self.pyarchDirectory = Path(self.tmpdir.name)
         else:
-            self.pyarchDirectory = self.storeDataOnPyarch(resultFilePaths)
+            self.pyarchDirectory = self.storeDataOnPyarch()
 
         xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
         outData = xia2AutoProcContainer
@@ -312,13 +309,13 @@ class Xia2DialsTask(AbstractTask):
 
         return outData
 
-    def storeDataOnPyarch(resultFilePaths, pyarchDirectory=None):
+    def storeDataOnPyarch(self, pyarchDirectory=None):
         #create paths on Pyarch
         if pyarchDirectory is None:
-            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0]).parent
+            pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
-        for resultFile in [f for f in resultFilePaths if f.exists()]:
+        for resultFile in [f for f in self.resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
             try:
                 logger.info(f"Copying {resultFile} to pyarch directory")

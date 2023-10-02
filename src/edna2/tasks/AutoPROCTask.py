@@ -427,12 +427,12 @@ class AutoPROCTask(AbstractTask):
         with open(autoProcContainerStaranisoJson,'w') as fp:
             json.dump(autoProcContainerStaraniso,fp, indent=2, default=lambda o:str(o))
         
-        resultFilePaths = list(self.resultsDirectory.iterdir())
+        self.resultFilePaths = list(self.resultsDirectory.iterdir())
         if inData.get("test",False):
             self.tmpdir = tempfile.TemporaryDirectory() 
             self.pyarchDirectory = Path(self.tmpdir.name)
         else:
-            self.pyarchDirectory = self.storeDataOnPyarch(resultFilePaths)
+            self.pyarchDirectory = self.storeDataOnPyarch()
 
 
         if self.doUploadIspyb:
@@ -455,13 +455,13 @@ class AutoPROCTask(AbstractTask):
             self.tmpdir.cleanup()
         return outData
 
-    def storeDataOnPyarch(resultFilePaths, pyarchDirectory=None):
+    def storeDataOnPyarch(self, pyarchDirectory=None):
         #create paths on Pyarch
         if pyarchDirectory is None:
-            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0]).parent
+            pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
-        for resultFile in [f for f in resultFilePaths if f.exists()]:
+        for resultFile in [f for f in self.resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
             try:
                 logger.info(f"Copying {resultFile} to pyarch directory")

@@ -830,7 +830,7 @@ class Edna2ProcTask(AbstractTask):
             self.tmpdir = tempfile.TemporaryDirectory() 
             self.pyarchDirectory = Path(self.tmpdir.name)
         else:
-            self.pyarchDirectory = self.storeDataOnPyarch(self.resultFilePaths)
+            self.pyarchDirectory = self.storeDataOnPyarch()
 
         # Let's get results into a container for ispyb
         self.autoProcResultsContainer = self.generateAutoProcScalingResultsContainer(
@@ -872,14 +872,13 @@ class Edna2ProcTask(AbstractTask):
 
         return outData
         
-    @classmethod
-    def storeDataOnPyarch(cls,resultFilePaths, pyarchDirectory=None):
+    def storeDataOnPyarch(self, pyarchDirectory=None):
         #create paths on Pyarch
         if pyarchDirectory is None:
-            pyarchDirectory = UtilsPath.createPyarchFilePath(resultFilePaths[0]).parent
+            pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
-        for resultFile in [f for f in resultFilePaths if f.exists()]:
+        for resultFile in [f for f in self.resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
             try:
                 logger.info(f"Copying {resultFile} to pyarch directory")

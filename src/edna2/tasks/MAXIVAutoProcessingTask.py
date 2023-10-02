@@ -240,7 +240,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
             "spaceGroup": self.spaceGroup,
             "masterFilePath":self.masterFilePath,
             "anomalous": self.anomalous,
-            "test":self.test
+            "test":self.test,
+            "doUploadIspyb":self.doUploadIspyb,
+            "waitForFiles":self.waitForFiles
             }, workingDirectorySuffix="0")
         
 
@@ -251,7 +253,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
             "spaceGroup": self.spaceGroup,
             "masterFilePath":self.masterFilePath,
             "anomalous": self.anomalous,
-            "test":self.test
+            "test":self.test,
+            "doUploadIspyb":self.doUploadIspyb,
+            "waitForFiles":self.waitForFiles
             }, workingDirectorySuffix="0")
 
         autoPROCTask.start()
