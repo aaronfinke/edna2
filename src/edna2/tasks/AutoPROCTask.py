@@ -461,6 +461,7 @@ class AutoPROCTask(AbstractTask):
             pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
+                logger.debug(f"pyarchDirectory: {pyarchDirectory}")
         for resultFile in [f for f in self.resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
             try:

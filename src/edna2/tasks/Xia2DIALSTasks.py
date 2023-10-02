@@ -241,6 +241,9 @@ class Xia2DialsTask(AbstractTask):
                 isAnom = self.anomalous,
                 timeStart = self.timeStart)
 
+        if self.doUploadIspyb:
+            self.logToIspyb(self.integrationId,
+                'Indexing', 'Launched', 'Xia2Dials Launched')
 
         xia2DIALSExec = Xia2DialsExecTask(inData=xia2DIALSExecinData, workingDirectorySuffix="0")
         xia2DIALSExec.execute()
@@ -248,10 +251,6 @@ class Xia2DialsTask(AbstractTask):
             self.setFailure()
             return
         self.timeEnd = datetime.now().isoformat(timespec="seconds")
-
-        if self.doUploadIspyb:
-            self.logToIspyb(self.integrationId,
-                'Indexing', 'Successful', 'Xia2Dials finished')
 
         xia2DIALSExecDir = Path(xia2DIALSExec.outData["workingDirectory"])
         logger.debug(f"Working directory is {xia2DIALSExecDir}")
@@ -300,6 +299,11 @@ class Xia2DialsTask(AbstractTask):
 
 
         if self.doUploadIspyb:
+            self.logToIspyb(self.integrationId,
+                'Indexing', 'Successful', 'Xia2Dials finished')
+
+
+        if self.doUploadIspyb:
             ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal")
             ispybStoreAutoProcResults.execute()
             
@@ -315,6 +319,7 @@ class Xia2DialsTask(AbstractTask):
             pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
+                logger.debug(f"pyarchDirectory: {pyarchDirectory}")
         for resultFile in [f for f in self.resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
             try:
