@@ -80,7 +80,7 @@ def addLocalFileHandler(logger, logPath=Path.cwd()/"log.log"):
     logFileFormat = UtilsConfig.get("Logging", "log_file_format")
     if logFileFormat is None:
         logFileFormat = (
-            "%(asctime)s %(module)-25s %(levelname)-8s %(message)s"
+            "%(asctime)s %(levelname)-8s %(module)-25s %(message)s"
         )
     formatter = logging.Formatter(logFileFormat)
     fileHandler.setFormatter(formatter)
