@@ -386,8 +386,9 @@ class AutoPROCTask(AbstractTask):
                       (autoPROCTruncateUniqueStats,autoPROCTruncateUniqueStats_resultsDir),
                       (autoPROCTruncateUniqueTable1,autoPROCTruncateUniqueTable1_resultsDir)]:
             UtilsPath.systemCopyFile(files[0],files[1])
-            # pyarchFile = UtilsPath.createPyarchFilePath(files[1])
-            pyarchFile = files[1]
+        
+            pyarchFile = UtilsPath.createPyarchFilePath(files[1]) if self.doUploadIspyb else files[1]
+
             attachmentContainer = {
                 "file" : pyarchFile,
             }
@@ -400,8 +401,7 @@ class AutoPROCTask(AbstractTask):
                 autoProcAttachmentContainerList.append(attachmentContainer)
         
         for file in [autoPROCStaranisoAllCifGz, autoPROCTruncateAllCifGz, autoPROCXdsAsciiHklGz]:
-            # pyarchFile = UtilsPath.createPyarchFilePath(files[1])
-            pyarchFile = file
+            pyarchFile = UtilsPath.createPyarchFilePath(file) if self.doUploadIspyb else file
             attachmentContainer = {
                 "file" : pyarchFile,
             }
