@@ -92,6 +92,7 @@ class AbstractTask():  # noqa R0904
         self._persistInOutData = True
         self._oldDir = os.getcwd()
         self._slurmId = None
+        self._slurmHostname = None
         self._jobName = type(self).__name__
 
     def getSchemaUrl(self, schemaName):
@@ -251,6 +252,12 @@ class AbstractTask():  # noqa R0904
     
     def getSlurmId(self):
         return self._slurmId
+    
+    def getSlurmHostname(self):
+        return self._slurmHostname
+    
+    def setSlurmHostname(self,hostname):
+        self._slurmHostname = hostname
 
 
     def submitCommandLine(self, commandLine, ignoreErrors, partition=None, jobName="EDNA2"):
@@ -299,9 +306,21 @@ class AbstractTask():  # noqa R0904
         if "Submitted batch job" in line:
             self._slurmJobId = int(line.split()[-1])
         if self._slurmJobId:
-            logger.info(f"Job {jobName} submitted to slurm with ID {self._slurmJobId}")
             self.setSlurmLogFileName(f"{jobName}_{self._slurmJobId}.out")
             self.setSlurmErrorLogFileName(f"{jobName}_{self._slurmJobId}.err")
+            slurm_hostname = ""
+            try:
+                squeue = subprocess.run(["squeue","-j",str(self._slurmJobId)], capture_output=True)
+                slurm_hostname = squeue.stdout.decode('utf-8').strip('\n').split()[-1]
+                while slurm_hostname == "(None)":
+                    squeue = subprocess.run(["squeue","-j",str(self._slurmJobId)], capture_output=True)
+                    slurm_hostname = squeue.stdout.decode('utf-8').strip('\n').split()[-1]
+            except Exception as e:
+                logger.error(f"Failed to get slurm host: {e}")
+            if slurm_hostname:
+                self.setSlurmHostname(slurm_hostname)
+            logger.debug(f"Job {jobName} submitted to slurm on host {self._slurmHostname} with slurmJobId {self._slurmJobId}")
+
 
         stdout, stderr = pipes.communicate()
         # slurmLogPath = self._workingDirectory / (jobName + "_slurm.log")

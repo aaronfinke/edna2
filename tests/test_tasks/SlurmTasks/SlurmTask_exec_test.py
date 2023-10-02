@@ -28,6 +28,8 @@ logger = UtilsLogging.getLogger()
 
 
 class SlurmTaskExecTest(unittest.TestCase):
+    def setUp(self):
+        self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_runSlurmTestTask(self):
         inData = {"name":"ednaTest"}
