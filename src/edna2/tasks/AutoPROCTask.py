@@ -465,7 +465,7 @@ class AutoPROCTask(AbstractTask):
         for resultFile in [f for f in self.resultFilePaths if f.exists()]:
             resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
             try:
-                logger.info(f"Copying {resultFile} to pyarch directory")
+                logger.info(f"Copying {resultFile} to pyarch directory {resultFilePyarchPath}")
                 shutil.copy(resultFile,resultFilePyarchPath)
             except Exception as e:
                 logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
