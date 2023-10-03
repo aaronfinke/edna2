@@ -87,4 +87,5 @@ def parseUnitCell_str(unitCell: str):
     except:
         logger.debug("could not parse unit cell")
         unitCell = None
-    return "{cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}".format(**unitCell)
+        
+    return "{cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}".format(**unitCell) if unitCell else None
