@@ -515,10 +515,6 @@ class AutoPROCTask(AbstractTask):
 
         autoProcContainer["autoProcScaling"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcScaling"]
         autoProcContainer["autoProcScalingStatistics"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcScalingStatistics"]
-        # fix some entries in autoProcScalingStatistics
-        for shell in autoProcContainer["autoProcScalingStatistics"]:
-            shell["ccAno"] = shell.pop("ccAnomalous") * 100
-            shell["sigAno"] = shell.pop("DanoOverSigDano")
 
         autoProcContainer["autoProcIntegration"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcIntegrationContainer"]["AutoProcIntegration"]
         autoProcContainer["autoProcIntegration"]["autoProcProgramId"] = program_id
@@ -555,7 +551,7 @@ class AutoPROCTask(AbstractTask):
                 shell[k] = AutoPROCTask.convertStrToIntOrFloat(v)
 
                 # rMeas, rPim, and rMerge need to be multiplied by 100
-                if any(x for x in ["rMerge","rMeas","rPim"] if x in k):
+                if any(x for x in ["rMerge","rMeas","rPim", "ccAno"] if x in k):
                     shell[k] *= 100
             shell["rmerge"] = shell.pop("rMerge")
             shell["rmeasWithinIplusIminus"] = shell.pop("rMeasWithinIPlusIMinus")
@@ -563,6 +559,9 @@ class AutoPROCTask(AbstractTask):
             shell["rpimWithinIplusIminus"] = shell.pop("rPimWithinIPlusIMinus")
             shell["rpimAllIplusIminus"] = shell.pop("rPimAllIPlusIMinus")
             shell["meanIoverSigI"] = shell.pop("meanIOverSigI")
+            shell["ccAno"] = shell.pop("ccAnomalous")
+            shell["sigAno"] = shell.pop("DanoOverSigDano")
+
 
 
         return autoProcContainer
