@@ -973,6 +973,7 @@ class Edna2ProcTask(AbstractTask):
                 autoProcScalingStatisticsContainer["isa"] = xdsRerun.get("ISa", 0.0)
             # need to make a few adjustments for ISPyB...
             autoProcScalingStatisticsContainer["rmerge"] *= 100
+            autoProcScalingStatisticsContainer["ccAno"] *= 100
             autoProcScalingStatisticsContainer["rmeasWithinIplusIminus"] *= 100
             autoProcScalingStatisticsContainer["rmeasAllIplusIminus"] *= 100
             autoProcScalingStatisticsContainer["rpimWithinIplusIminus"] *= 100

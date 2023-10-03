@@ -421,7 +421,7 @@ class Xia2DialsTask(AbstractTask):
 
         for shell in autoProcContainer["autoProcScalingStatistics"]:
             shell["rmerge"] = shell.pop("rMerge") * 100
-            shell["ccAno"] = shell.pop("ccAnomalous")
+            shell["ccAno"] = shell.pop("ccAnomalous") * 100
             shell["meanIoverSigI"] = shell.pop("meanIOverSigI")
             shell["rmeasAllIplusIminus"] = shell.pop("rMeasAllIPlusIMinus") * 100
             shell["rmeasWithinIplusIminus"] = shell.pop("rMeasWithinIPlusIMinus") * 100

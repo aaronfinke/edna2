@@ -517,7 +517,7 @@ class AutoPROCTask(AbstractTask):
         autoProcContainer["autoProcScalingStatistics"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcScalingStatistics"]
         # fix some entries in autoProcScalingStatistics
         for shell in autoProcContainer["autoProcScalingStatistics"]:
-            shell["ccAno"] = shell.pop("ccAnomalous")
+            shell["ccAno"] = shell.pop("ccAnomalous") * 100
             shell["sigAno"] = shell.pop("DanoOverSigDano")
 
         autoProcContainer["autoProcIntegration"] = autoProcXMLContainer["AutoProcScalingContainer"]["AutoProcIntegrationContainer"]["AutoProcIntegration"]
