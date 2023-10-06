@@ -263,9 +263,13 @@ class MAXIVAutoProcessingTask(AbstractTask):
         doFastSADPhasing = False
         if self.anomalous and fastDpTask.isSuccess():
             mtzFile = None
-            for file in outData["fastDp"]["autoProcProgramAttachment"]:
-                if "fast_dp.mtz" in file['file']:
-                    mtzFile = file['file']
+            try:
+                for file in outData["fastDp"]["autoProcProgramAttachment"]:
+                    if "fast_dp.mtz" in file['file']:
+                        mtzFile = file['file']
+            except Exception as e:
+                logger.error(f"Error in FastDp outData: {e}")
+                mtzFile = None
             if mtzFile:
                 doFastSADPhasing = False
                 fastSADPhasingTask = FastSADPhasingTask(inData={
