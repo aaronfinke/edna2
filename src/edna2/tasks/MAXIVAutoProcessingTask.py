@@ -213,12 +213,14 @@ class MAXIVAutoProcessingTask(AbstractTask):
         fastDpTask.join()
         edna2ProcTask.join()
         
+        #set the logic for anomalous processing: if both fastdp and edna2proc say it's anomalous,
+        #then set it to anomalous. otherwise don't (unless one or the other fails)
         if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
                 "fastDp":fastDpTask.outData,
             }
-            if edna2ProcTask.outData.get("HighAnomSignal",False) or fastDpTask.outData.get("HighAnomSignal",False):
+            if edna2ProcTask.outData.get("HighAnomSignal",False) and fastDpTask.outData.get("HighAnomSignal",False):
                 self.anomalous = True
             else:
                 self.anomalous = False
