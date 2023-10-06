@@ -51,6 +51,8 @@ from edna2.tasks.FastdpTask import FastdpTask
 from edna2.tasks.AutoPROCTask import AutoPROCTask
 from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
 from edna2.tasks.ControlPyDozor import ControlPyDozor
+from edna2.tasks.FastepTask import FastSADPhasingTask
+
 
 class MAXIVAutoProcessingTask(AbstractTask):
     """
@@ -214,7 +216,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
         if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
-                "fastDp":fastDpTask.outData,
+                "fastDp":fastDpTask.outData["fast_dp_results"],
             }
             if edna2ProcTask.outData.get("HighAnomSignal",False) or fastDpTask.outData.get("HighAnomSignal",False):
                 self.anomalous = True
@@ -257,12 +259,32 @@ class MAXIVAutoProcessingTask(AbstractTask):
             "doUploadIspyb":self.doUploadIspyb,
             "waitForFiles":self.waitForFiles
             }, workingDirectorySuffix="0")
+        
+        doFastSADPhasing = False
+        if self.anomalous and fastDpTask.isSuccess():
+            mtzFile = None
+            for file in fastDpTask.outData["autoProcProgramAttachment"]:
+                if "fast_dp.mtz" in file['file']:
+                    mtzFile = file['file']
+            if mtzFile:
+                doFastSADPhasing = False
+                fastSADPhasingTask = FastSADPhasingTask(inData={
+                    "dataCollectionId": self.dataCollectionId,
+                    "mtzFile": mtzFile,
+                    "onlineAutoProcessing":True
+                })
+                logger.info("Starting Fast SAD Phasing...")
+                fastSADPhasingTask.start()
+            else:
+                logger.error("Could not get MTZ file for fast phasing.")
 
         autoPROCTask.start()
         xia2DialsTask.start()
 
         autoPROCTask.join()
         xia2DialsTask.join()
+        if doFastSADPhasing:
+            fastSADPhasingTask.join()
 
         if autoPROCTask.isSuccess():
             outData["autoPROCTask"] = autoPROCTask.outData
