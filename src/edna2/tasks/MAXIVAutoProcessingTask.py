@@ -216,7 +216,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
         if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
-                "fastDp":fastDpTask.outData["fast_dp_results"],
+                "fastDp":fastDpTask.outData,
             }
             if edna2ProcTask.outData.get("HighAnomSignal",False) or fastDpTask.outData.get("HighAnomSignal",False):
                 self.anomalous = True
@@ -263,7 +263,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
         doFastSADPhasing = False
         if self.anomalous and fastDpTask.isSuccess():
             mtzFile = None
-            for file in fastDpTask.outData["autoProcProgramAttachment"]:
+            for file in outData["fastDp"]["autoProcProgramAttachment"]:
                 if "fast_dp.mtz" in file['file']:
                     mtzFile = file['file']
             if mtzFile:

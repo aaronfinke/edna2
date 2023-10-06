@@ -346,7 +346,7 @@ class FastdpTask(AbstractTask):
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
         
-        outData["fast_dp_results"] = autoProcResults
+        outData = autoProcResults
         if self.if_anomalous_signal(pathToAimlessLog, threshold=1.0):
             logger.info("Significant anomalous signal for this dataset.")
             outData["HighAnomSignal"] = True
