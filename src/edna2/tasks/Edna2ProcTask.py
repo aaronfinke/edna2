@@ -462,6 +462,7 @@ class Edna2ProcTask(AbstractTask):
             "xdsInp" : self.integration.outData["xdsInp"],
             "spotXds": self.integration.inData["spotXds"],
             "gxParmXds" : self.integration.outData["gxParmXds"],
+            "xParmXds" : self.integration.outData["xParmXds"],
             "gainCbf": self.integration.inData["gainCbf"],
             "blankCbf":self.integration.inData["blankCbf"],
             "xCorrectionsCbf": self.integration.inData["xCorrectionsCbf"],
