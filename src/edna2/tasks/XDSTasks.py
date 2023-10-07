@@ -1086,6 +1086,7 @@ class XDSIntegration(XDSTask):
                 "correctLp": str(workingDirectory / "CORRECT.LP"),
                 "bkgpixCbf": str(workingDirectory / "BKGPIX.cbf"),
                 "gxParmXds":str(workingDirectory / "GXPARM.XDS"),
+                "xParmXds":str(workingDirectory / "XPARM.XDS")
             }
             correctLpData = XDSTask.parseCorrectLp(outData)
             outData["ISa"] = correctLpData["ISa"]
@@ -1146,20 +1147,35 @@ class XDSRerunCorrect(XDSTask):
         xdsExecutable = UtilsConfig.get(self, 'xdsExecutable',"xds_par")
         commandLine += xdsExecutable
         # Copy XPARM.XDS, GAIN.CBF file
-        # recycle GXPARM.XDS to XPARM.XDS
-        try:
-            shutil.copy(inData["gxParmXds"], Path(self.getWorkingDirectory() / 'XPARM.XDS'))
-            shutil.copy(inData["xdsInp"],self.getWorkingDirectory())
-            shutil.copy(inData["gainCbf"], self.getWorkingDirectory())
-            shutil.copy(inData["xCorrectionsCbf"], self.getWorkingDirectory())
-            shutil.copy(inData["yCorrectionsCbf"], self.getWorkingDirectory())
-            shutil.copy(inData["blankCbf"], self.getWorkingDirectory())
-            shutil.copy(inData["bkginitCbf"], self.getWorkingDirectory())
-            shutil.copy(inData["integrateHkl"], self.getWorkingDirectory())
-        except Exception as e:
-            logger.error(f"Error copying files to rerun CORRECT: {e}")
-            self.setFailure()
-            return
+
+        for file in [inData["xdsInp"],inData["gainCbf"],inData["xCorrectionsCbf"],inData["yCorrectionsCbf"],
+                    inData["blankCbf"],inData["bkginitCbf"],inData["integrateHkl"]]:
+            try:
+                shutil.copy(file, self.getWorkingDirectory())
+            except Exception as e:
+                logger.error(f"Error copying files to rerun CORRECT: {e}")
+                self.setFailure()
+                return
+        # recycle GXPARM.XDS to XPARM.XDS, if it exists
+        if inData.get("gxParmXds",None):
+            try:
+                shutil.copy(inData["gxParmXds"],self.getWorkingDirectory() / "XPARM.XDS")
+            except:
+                logger.error("Could not recyle GXPARM.XDS into XPARM.XDS")
+                try:
+                    shutil.copy(inData["xParmXds"],self.getWorkingDirectory())
+                except Exception as e:
+                    logger.error(f"Error copying files to rerun CORRECT: {e}")
+                    self.setFailure()
+                    return
+        else:
+            try:
+                shutil.copy(inData["xParmXds"],self.getWorkingDirectory())
+            except Exception as e:
+                logger.error(f"Error copying files to rerun CORRECT: {e}")
+                self.setFailure()
+                return
+     
 
         listXDS_INP = self.generateXDS_INP(inData)
         self.writeXDS_INP(listXDS_INP, self.getWorkingDirectory())
