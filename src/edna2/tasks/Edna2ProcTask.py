@@ -135,6 +135,8 @@ class Edna2ProcTask(AbstractTask):
         self.reintegrate = False
         outData = {}
         self.resultFilePaths = []
+        self.pseudoTranslation = False
+        self.twinning = False
 
         try:
             logger.debug(f"System load avg: {os.getloadavg()}")
@@ -849,21 +851,16 @@ class Edna2ProcTask(AbstractTask):
                 # self.setFailure()
                 # return
 
-            comments = ""
-            if self.anomalousFlag:
-                comments += "Strong anomalous signal detected. "
-            if self.reindex or self.reintegrate:
-                comments += "Dataset could not be indexed with supplied unit cell/SG! "
-            if self.phenixXTriageTask.outData["hasTwinning"] and self.phenixXTriageTask.outData["hasPseudotranslation"]:
-                comments += "Pseudotranslation and twinning detected by phenix.xtriage! "
-            elif self.phenixXTriageTask.outData["hasTwinning"]:
-                comments += "Twinning detected by phenix.xtriage! "
-            elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
-                comments += "Pseudotranslation detected by phenix.xtriage! "
-            if comments:
-                UtilsIspyb.updateDataCollectionGroupComments(self.dataCollectionId,comments)
+            if self.phenixXTriageTask.outData["hasTwinning"]:
+                self.twinning = True
+            if self.phenixXTriageTask.outData["hasPseudotranslation"]:
+                self.pseudoTranslation = True
 
         outData = self.autoProcResultsContainer
+        outData["anomalousFlag"] = self.anomalousFlag
+        outData["reindex"] = self.reindex or self.reintegrate
+        outData["twinning"] = self.twinning
+        outData["pseudotranslation"] = self.pseudoTranslation
 
         self.timeEnd = time.perf_counter()
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")

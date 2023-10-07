@@ -236,7 +236,23 @@ class MAXIVAutoProcessingTask(AbstractTask):
             self.anomalous = fastDpTask.outData.get("HighAnomSignal",False)
         else:
             self.anomalous = False
-         
+        
+        comments = ""
+        #add comments to ISPyB entry
+        if self.anomalous:
+            comments += "Strong anomalous signal detected. "
+        if edna2ProcTask.outData.get("reindex",False):
+            comments += "Data could not be processed by EDNA2Proc with supplied unit cell and space group! "
+        if edna2ProcTask.outData.get("twinning",False) and edna2ProcTask.outData.get("pseudotranslation",False):
+            comments += "Twinning and pseudotranslation detected by phenix.xtriage! "
+        elif edna2ProcTask.outData.get("twinning",False):
+            comments += "Twinning detected by phenix.xtriage! "
+        elif edna2ProcTask.outData.get("pseudotranslation",False):
+            comments += "Pseudotranslation detected by phenix.xtriage! "
+        if comments:
+            UtilsIspyb.updateDataCollectionGroupComments(self.dataCollectionId,comments)
+            
+
         autoPROCTask = AutoPROCTask(inData={
             "onlineAutoProcessing": True,
             "dataCollectionId": self.dataCollectionId,

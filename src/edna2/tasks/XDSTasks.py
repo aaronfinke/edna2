@@ -1156,8 +1156,8 @@ class XDSRerunCorrect(XDSTask):
             shutil.copy(inData["blankCbf"], self.getWorkingDirectory())
             shutil.copy(inData["bkginitCbf"], self.getWorkingDirectory())
             shutil.copy(inData["integrateHkl"], self.getWorkingDirectory())
-        except:
-            logger.error("Error copying files to rerun CORRECT.")
+        except Exception as e:
+            logger.error(f"Error copying files to rerun CORRECT: {e}")
             self.setFailure()
             return
 
