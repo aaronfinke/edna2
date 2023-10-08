@@ -351,7 +351,6 @@ class FastdpTask(AbstractTask):
             logger.info("Significant anomalous signal for this dataset.")
             outData["HighAnomSignal"] = True
         else:
-            logger.info("Insufficient anomalous signal for this dataset.")
             outData["HighAnomSignal"] = False
 
 

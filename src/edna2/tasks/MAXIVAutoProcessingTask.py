@@ -220,10 +220,8 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "edna2Proc":edna2ProcTask.outData,
                 "fastDp":fastDpTask.outData,
             }
-            if edna2ProcTask.outData.get("HighAnomSignal",False) and fastDpTask.outData.get("HighAnomSignal",False):
-                self.anomalous = True
-            else:
-                self.anomalous = False
+            self.anomalous = (edna2ProcTask.outData.get("HighAnomSignal",False) and 
+                              fastDpTask.outData.get("HighAnomSignal",False))
         elif edna2ProcTask.isSuccess():
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
