@@ -281,6 +281,7 @@ def updateDataCollectionGroupComments(dataCollectionId, comments):
         dataCollectionGroupWS3VO.comments = comments
         iDataCollectionGroupId = storeOrUpdateDataCollectionGroup(dataCollectionGroupWS3VO, client=client)
         dataCollectionWS3VO = findDataCollectionWS3VO(dataCollectionId, client=client)
+        logger.debug(f"Uploading comments to {dataCollectionId}: \"{comments}\"")
         if hasattr(dataCollectionWS3VO, "comments"):
             if not comments in dataCollectionWS3VO.comments:
                 dataCollectionWS3VO.comments += " " + comments

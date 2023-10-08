@@ -127,7 +127,6 @@ class Edna2ProcTask(AbstractTask):
         self.processingCommandLine = ""
         self.dataCollectionId = inData.get("dataCollectionId", None)
         self.anomalous = inData.get("anomalous", False)
-        self.anomalousFlag = False
         self.spaceGroup = inData.get("spaceGroup", 0)
         self.unitCell = inData.get("unitCell", None)
         self.onlineAutoProcessing = inData.get("onlineAutoProcessing", False)
@@ -683,15 +682,7 @@ class Edna2ProcTask(AbstractTask):
             self.aimlessTask.outData["aimlessLog"], threshold=1.0
         )
 
-        if highAnomSignalFound:
-            logger.info("Significant anomalous signal for this dataset.")
-            outData["HighAnomSignal"] = True
-        else:
-            logger.info("Insufficient anomalous signal for this dataset.")
-            outData["HighAnomSignal"] = False
-
         if highAnomSignalFound and not self.anomalous:
-            self.anomalousFlag = True
             logger.info(
                 "Rerunning CORRECT/AIMLESS with anomalous flags due to significant anomalous signal found."
             )
@@ -998,7 +989,8 @@ class Edna2ProcTask(AbstractTask):
 
         if inData.get("test", False):
             self.tmpdir = tempfile.TemporaryDirectory()
-            self.pyarchDirectory = Path(self.tmpdir.name)
+            pyarchDirectory = Path(self.tmpdir.name)
+            self.pyarchDirectory = self.storeDataOnPyarch(pyarchDirectory=pyarchDirectory)
         else:
             self.pyarchDirectory = self.storeDataOnPyarch()
 
@@ -1032,7 +1024,7 @@ class Edna2ProcTask(AbstractTask):
                 self.pseudoTranslation = True
 
         outData = self.autoProcResultsContainer
-        outData["anomalousFlag"] = self.anomalousFlag
+        outData["anomalous"] = self.anomalous
         outData["reindex"] = self.reindex or self.reintegrate
         outData["twinning"] = self.twinning
         outData["pseudotranslation"] = self.pseudoTranslation
@@ -1053,16 +1045,28 @@ class Edna2ProcTask(AbstractTask):
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
                 logger.debug(f"pyarchDirectory: {pyarchDirectory}")
-        for resultFile in [f for f in self.resultFilePaths if f.exists()]:
-            resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
-            try:
-                logger.info(f"Copying {resultFile} to pyarch directory")
-                shutil.copy(resultFile, resultFilePyarchPath)
-            except Exception as e:
-                logger.warning(
-                    f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
-                )
-                logger.warning(e)
+            for resultFile in [f for f in self.resultFilePaths if f.exists()]:
+                resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
+                try:
+                    logger.info(f"Copying {resultFile} to pyarch directory")
+                    shutil.copy(resultFile, resultFilePyarchPath)
+                except Exception as e:
+                    logger.warning(
+                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
+                    )
+                    logger.warning(e)
+        else:
+            for resultFile in [f for f in self.resultFilePaths if f.exists()]:
+                try:
+                    logger.info(f"Copying {resultFile} to pyarch directory")
+                    resultFilePyarchPath = pyarchDirectory / Path(resultFile).name
+                    shutil.copy(resultFile, resultFilePyarchPath)
+                except Exception as e:
+                    logger.warning(
+                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
+                    )
+                    logger.warning(e)
+                
         return pyarchDirectory
 
     def generateAutoProcScalingResultsContainer(self, programId, integrationId, isAnom):

@@ -215,25 +215,31 @@ class MAXIVAutoProcessingTask(AbstractTask):
         
         #set the logic for anomalous processing: if both fastdp and edna2proc say it's anomalous,
         #then set it to anomalous. otherwise don't (unless one or the other fails)
+        logger.debug("Checking for anomalous signal...")
+
         if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
+            logger.debug("EDNA2Proc and fastdp successful")
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
                 "fastDp":fastDpTask.outData,
             }
-            self.anomalous = (edna2ProcTask.outData.get("HighAnomSignal",False) and 
-                              fastDpTask.outData.get("HighAnomSignal",False))
+            self.anomalous = (edna2ProcTask.outData.get("anomalous",False) and 
+                              fastDpTask.outData.get("anomalous",False))
+            logger.debug(f"self.anomalous = {self.anomalous}")
         elif edna2ProcTask.isSuccess():
             outData = {
                 "edna2Proc":edna2ProcTask.outData,
             }
-            self.anomalous = edna2ProcTask.outData.get("HighAnomSignal",False)
+            self.anomalous = edna2ProcTask.outData.get("anomalous",False)
         elif fastDpTask.isSuccess():
             outData = {
                 "fastDp":fastDpTask.outData,
             }
-            self.anomalous = fastDpTask.outData.get("HighAnomSignal",False)
-        else:
-            self.anomalous = False
+            self.anomalous = fastDpTask.outData.get("anomalous",False)
+
+        if self.anomalous:
+            logger.debug("Anomalous flag switched on.")
+
         
         comments = ""
         #add comments to ISPyB entry
@@ -287,12 +293,13 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 logger.error(f"Error in FastDp outData: {e}")
                 mtzFile = None
             if mtzFile:
-                doFastSADPhasing = False
+                doFastSADPhasing = True
                 fastSADPhasingTask = FastSADPhasingTask(inData={
                     "dataCollectionId": self.dataCollectionId,
                     "mtzFile": mtzFile,
                     "onlineAutoProcessing":True
-                })
+                },
+                workingDirectorySuffix="0")
                 logger.info("Starting Fast SAD Phasing...")
                 fastSADPhasingTask.start()
             else:
