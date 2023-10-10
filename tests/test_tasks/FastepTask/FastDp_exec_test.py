@@ -30,7 +30,7 @@ from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 
-from edna2.tasks.FastepTask import FastSADPhasingTask
+from edna2.tasks.FastSADPhasingTask import FastSADPhasingTask
 
 logger = UtilsLogging.getLogger()
 

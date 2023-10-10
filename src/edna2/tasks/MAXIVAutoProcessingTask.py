@@ -51,7 +51,7 @@ from edna2.tasks.FastdpTask import FastdpTask
 from edna2.tasks.AutoPROCTask import AutoPROCTask
 from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
 from edna2.tasks.ControlPyDozor import ControlPyDozor
-from edna2.tasks.FastepTask import FastSADPhasingTask
+from edna2.tasks.FastSADPhasingTask import FastSADPhasingTask
 
 
 class MAXIVAutoProcessingTask(AbstractTask):
