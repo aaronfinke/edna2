@@ -42,9 +42,9 @@ from edna2.tasks.AbstractTask import AbstractTask
 from edna2.utils import UtilsPath
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
-from edna2.utils import UtilsIspyb
-from edna2.utils import UtilsCCTBX
-from edna2.utils import UtilsImage
+from iotbx import mtz
+from cctbx.miller import build_set
+from cctbx.crystal import symmetry as crystal_symmetry
 
 logger = UtilsLogging.getLogger()
 
@@ -78,7 +78,8 @@ class FastSADPhasingTask(AbstractTask):
                 "onlineAutoProcessing": {"type":["boolean","null"]},
                 "doUploadIspyb": {"type":["boolean","null"]},
                 "workingDirectory": {"type":["string","null"]},
-                "mtzFile": {"type":["string","null"]}
+                "fast_dpMtzFile": {"type":["string","null"]},
+                "checkDataFirst": {"type":["boolean","null"]},
             }
         }
 
@@ -93,9 +94,10 @@ class FastSADPhasingTask(AbstractTask):
         self.setLogFileName('fastEp.log')
         self.dataCollectionId = inData.get("dataCollectionId", None)
         self.onlineAutoProcessing = inData.get("onlineAutoProcessing",False)
-        self.mtzFile = inData.get("mtzFile",None)
+        self.mtzFile = inData.get("fast_dpMtzFile",None)
         self.doUploadIspyb = inData.get("doUploadIspyb",False)
         self.waitForFiles = inData.get("waitForFiles",True)
+        self.checkDataFirst = inData.get("checkDataFirst",False)
         self.integrationId, self.programId = None, None
         outData = {}
 
@@ -114,7 +116,14 @@ class FastSADPhasingTask(AbstractTask):
 
         self.timeStart = datetime.now().isoformat(timespec='seconds')
 
-        
+        if self.checkDataFirst:
+            checkData = self.checkForPhasingDataQuality(mtzFile=self.mtzFile)
+            if not checkData:
+                logger.error("Data quality insufficient for phasing. Exiting")
+                return
+            else:
+                logger.info("Data quality check passed.")
+
         if self.doUploadIspyb:
             #set ISPyB to running
             self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
@@ -140,7 +149,7 @@ class FastSADPhasingTask(AbstractTask):
         commandLine += " machines={0}".format(nmachine) if nmachine else ""
         #add flags, if present
 
-        logger.info("fastdp command is {}".format(commandLine))
+        logger.info("fast_ep command is {}".format(commandLine))
 
         if self.onlineAutoProcessing:
             returnCode = self.submitCommandLine(commandLine, partition=UtilsConfig.get(self,"slurm_partition",None),ignoreErrors=False,jobName="EDNA2_fastep")
@@ -167,7 +176,6 @@ class FastSADPhasingTask(AbstractTask):
             "shelxeOutput": self.getWorkingDirectory() / "sad.lst",
             "fastEpJson": self.getWorkingDirectory() / "fast_ep_data.json"
         }
-        fastEpJson = self.getWorkingDirectory() / "fast_dp.json"
 
         #copy to results directory
         for k,v in self.fastDpResultFiles.items():
@@ -183,7 +191,8 @@ class FastSADPhasingTask(AbstractTask):
 
         if inData.get("test",False):
             self.tmpdir = tempfile.TemporaryDirectory() 
-            self.pyarchDirectory = Path(self.tmpdir.name)
+            pyarchDirectory = Path(self.tmpdir.name)
+            self.pyarchDirectory = self.storeDataOnPyarch(pyarchDirectory=pyarchDirectory)
         else:
             self.pyarchDirectory = self.storeDataOnPyarch()
 
@@ -195,96 +204,105 @@ class FastSADPhasingTask(AbstractTask):
         #     ispybStoreAutoProcResults.execute()
             
         outData = self.fastDpResultFiles
+        try:
+            fastEpData = json.load(open(self.fastDpResultFiles["fastEpJson"],'r'))
+            for k,v in fastEpData.items():
+                outData[k] = v
+        except Exception as e:
+            logger.error(f"could not parse fast_ep json output:{e}")
+
         
         return outData
 
+    @staticmethod
+    def checkForPhasingDataQuality(mtzFile) -> bool:
+        '''Decide whether to run fast_ep or no based on the actual data based on
+        the following criteria:
 
-        
-    def generateAutoProcResultsContainer(self, programId, integrationId, isAnom):
-        autoProcResultsContainer = {
-            "dataCollectionId": self.dataCollectionId
-        }
+        completeness > 80% to dmin or 2.0 whichever the lower
+        dI / s(dI) > 1.0 if resolution lower than 2.0, > 0.8 if better than
+        1.5, smoothly varying in between.'''
+        m = mtz.object(mtzFile)
 
-        autoProcProgramContainer = {
-            "autoProcProgramId" : programId,
-            "processingCommandLine" : self.processingCommandLine,
-            "processingPrograms" : self.processingPrograms,
-            "processingStatus" : "SUCCESS",
-            "processingStartTime" : self.startDateTime,
-            "processingEndTime" : self.endDateTime,
-        }
-        autoProcResultsContainer["autoProcProgram"] = autoProcProgramContainer
+        mas = m.as_miller_arrays()
+        data = None
 
-        autoProcContainer = {
-            "autoProcProgramId" : programId,
-            "spaceGroup" : self.fastDpResults.get("spacegroup"),
-            "refinedCellA" : self.fastDpResults.get("unit_cell")[0],
-            "refinedCellB" : self.fastDpResults.get("unit_cell")[1],
-            "refinedCellC" : self.fastDpResults.get("unit_cell")[2],
-            "refinedCellAlpha" : self.fastDpResults.get("unit_cell")[3],
-            "refinedCellBeta" : self.fastDpResults.get("unit_cell")[4],
-            "refinedCellGamma" : self.fastDpResults.get("unit_cell")[5],
-        }
-        autoProcResultsContainer["autoProc"] = autoProcContainer
+        for ma in mas:
+            if not ma.anomalous_flag():
+                continue
+            data = ma
+            break
 
-        autoProcAttachmentContainerList = []
-        for file in self.pyarchDirectory.iterdir():
-            attachmentContainer = {
-                "file" : file,
-            }
-            autoProcAttachmentContainerList.append(attachmentContainer)
+        if not data:
+            logger.error("No anomalous data found.")
+            return False
 
-        autoProcResultsContainer["autoProcProgramAttachment"] = autoProcAttachmentContainerList
+        d_min, d_max = sorted(data.resolution_range())
 
-        autoProcScalingStatisticsContainer = self.fastDpJsonToISPyBScalingStatistics(self.fastDpResults, aimlessResults=self.aimlessData, isAnom=False)
-        autoProcResultsContainer["autoProcScalingStatistics"] = autoProcScalingStatisticsContainer
+        if d_min > 2.0:
+            logger.info(f"high resolution is > 2.0 Å")
+            differences = data.anomalous_differences()
+            signal_to_noise = sum(abs(differences.data())) / \
+                sum(differences.sigmas())
+            completeness = data.completeness()
 
-        if self.fastDpResultFiles["gxParmXds"].exists():
-            xdsRerun = XDSTask.parseCorrectLp(inData=self.fastDpResultFiles)
+            if completeness < 0.8:
+                logger.warning("Completeness of mtz is less than 0.8")
+                return False
+            if signal_to_noise < 1.0:
+                logger.warning("Overall S/N is less than 1")
+                return False
+            return True
 
-            autoProcIntegrationContainer = {
-                "autoProcIntegrationId" : integrationId,
-                "autoProcProgramId" : programId,
-                "startImageNumber" : self.imageNoStart,
-                "endImageNumber" : self.imageNoEnd,
-                "refinedDetectorDistance" : xdsRerun.get("refinedDiffractionParams").get("crystal_to_detector_distance"),
-                "refinedXbeam" : xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[0],
-                "refinedYbeam" : xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[1],
-                "rotationAxisX" : xdsRerun.get("gxparmData").get("rot")[0],
-                "rotationAxisY" : xdsRerun.get("gxparmData").get("rot")[1],
-                "rotationAxisZ" : xdsRerun.get("gxparmData").get("rot")[2],
-                "beamVectorX" : xdsRerun.get("gxparmData").get("beam")[0],
-                "beamVectorY" : xdsRerun.get("gxparmData").get("beam")[1],
-                "beamVectorZ" : xdsRerun.get("gxparmData").get("beam")[2],
-                "cellA" : xdsRerun.get("refinedDiffractionParams").get("cell_a"),
-                "cellB" : xdsRerun.get("refinedDiffractionParams").get("cell_b"),
-                "cellC" : xdsRerun.get("refinedDiffractionParams").get("cell_c"),
-                "cellAlpha" : xdsRerun.get("refinedDiffractionParams").get("cell_alpha"),
-                "cellBeta" : xdsRerun.get("refinedDiffractionParams").get("cell_beta"),
-                "cellGamma" : xdsRerun.get("refinedDiffractionParams").get("cell_gamma"),
-                "anomalous" : isAnom,
-                "dataCollectionId" : self.dataCollectionId,
-            }
-            autoProcResultsContainer["autoProcIntegration"] = autoProcIntegrationContainer
+        else:
+            logger.info(f"high resolution is < 2.0 Å")
+            data2 = data.resolution_filter(d_min = 2.0)
+            differences = data2.anomalous_differences()
+            signal_to_noise = sum(abs(differences.data())) / \
+                sum(differences.sigmas())
+            completeness = data2.completeness()
 
-
-        return autoProcResultsContainer
+            if completeness < 0.8:
+                logger.warning("Completeness of mtz is less than 0.8")
+                return False
+            if signal_to_noise < 0.8:
+                logger.warning("Overall S/N is less than 1")
+                return False
+            return True
 
     def storeDataOnPyarch(self, pyarchDirectory=None):
-        #create paths on Pyarch
+        # create paths on Pyarch
         if pyarchDirectory is None:
-            pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
+            pyarchDirectory = UtilsPath.createPyarchFilePath(
+                self.resultFilePaths[0]
+            ).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
                 logger.debug(f"pyarchDirectory: {pyarchDirectory}")
-        for resultFile in [f for f in self.resultFilePaths if f.exists()]:
-            resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
-            try:
-                logger.info(f"Copying {resultFile} to pyarch directory")
-                shutil.copy(resultFile,resultFilePyarchPath)
-            except Exception as e:
-                logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
-                logger.warning(e)
+            for resultFile in [f for f in self.resultFilePaths if f.exists()]:
+                resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
+                try:
+                    logger.info(f"Copying {resultFile} to pyarch directory")
+                    shutil.copy(resultFile, resultFilePyarchPath)
+                except Exception as e:
+                    logger.warning(
+                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
+                    )
+                    logger.warning(e)
+        else:
+            for resultFile in [f for f in self.resultFilePaths if f.exists()]:
+                try:
+                    logger.info(f"Copying {resultFile} to pyarch directory")
+                    resultFilePyarchPath = pyarchDirectory / Path(resultFile).name
+                    shutil.copy(resultFile, resultFilePyarchPath)
+                except Exception as e:
+                    logger.warning(
+                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
+                    )
+                    logger.warning(e)
+                
         return pyarchDirectory
+    
+
 
 

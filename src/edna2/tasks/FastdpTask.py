@@ -349,6 +349,7 @@ class FastdpTask(AbstractTask):
         
         outData = autoProcResults
         outData["anomalous"] = self.if_anomalous_signal(pathToAimlessLog, threshold=1.0)
+        outData["mtzFileForFastPhasing"] = str(pathToFastDpMtz)
         if outData["anomalous"]:
             logger.info("Significant anomalous signal found.")
 
