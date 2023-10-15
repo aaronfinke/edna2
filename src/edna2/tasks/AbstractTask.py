@@ -260,12 +260,11 @@ class AbstractTask():  # noqa R0904
         self._slurmHostname = hostname
 
 
-    def submitCommandLine(self, commandLine, ignoreErrors, partition=None, jobName="EDNA2"):
+    def submitCommandLine(self, commandLine, ignoreErrors, timeout=UtilsConfig.get("Slurm","time","01:00:00"), partition=None, jobName="EDNA2"):
         jobName = "EDNA2_" + self._jobName
         exclusive = UtilsConfig.get("Slurm","is_exclusive",False)
         nodes = UtilsConfig.get("Slurm","nodes",1)
         core = UtilsConfig.get("Slurm","cores",10)
-        time = UtilsConfig.get("Slurm","time","01:00:00")
         mem = UtilsConfig.get("Slurm","mem",4000)
         workingDir = str(self._workingDirectory)
         if workingDir.startswith("/mntdirect/_users"):
@@ -278,7 +277,7 @@ class AbstractTask():  # noqa R0904
         script += "#SBATCH --nodes={0}\n".format(nodes)
         # script += "#SBATCH --nodes=1\n"  # Necessary for not splitting jobs! See ATF-57
         script += "#SBATCH --cpus-per-task={0}\n".format(core) if not exclusive else ""
-        script += "#SBATCH --time={0}\n".format(time)
+        script += "#SBATCH --time={0}\n".format(timeout) if timeout else "0"
         script += "#SBATCH --chdir={0}\n".format(workingDir)
         script += f"#SBATCH --output={jobName}_%j.out\n"
         script += f"#SBATCH --error={jobName}_%j.err\n"
