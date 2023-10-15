@@ -48,3 +48,5 @@ class HelloWorldTaskExecTest(unittest.TestCase):
         self.assertTrue('results' in outData)
         self.assertTrue('Hello world' in outData['results'])
         logger.info('Results from HelloWorldTask: {0}'.format(outData['results']))
+if __name__ == "__main__":
+    unittest.main()

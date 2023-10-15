@@ -260,12 +260,13 @@ class AbstractTask():  # noqa R0904
         self._slurmHostname = hostname
 
 
-    def submitCommandLine(self, commandLine, ignoreErrors, partition=None, jobName="EDNA2"):
+    def submitCommandLine(self, commandLine, ignoreErrors, timeout=UtilsConfig.get("Slurm","time","01:00:00"), partition=None, jobName="EDNA2"):
         jobName = "EDNA2_" + self._jobName
         exclusive = UtilsConfig.get("Slurm","is_exclusive",False)
         nodes = UtilsConfig.get("Slurm","nodes",1)
-        core = UtilsConfig.get("Slurm","cores",10)
-        time = UtilsConfig.get("Slurm","time","01:00:00")
+        core = UtilsConfig.get("Slurm","cores",1)
+        
+        time = timeout
         mem = UtilsConfig.get("Slurm","mem",4000)
         workingDir = str(self._workingDirectory)
         if workingDir.startswith("/mntdirect/_users"):
