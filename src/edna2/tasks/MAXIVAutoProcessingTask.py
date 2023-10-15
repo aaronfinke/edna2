@@ -358,6 +358,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
             logger.info("Starting Fast SAD Phasing...")
             fastSADPhasingTask = FastSADPhasingTask(
                 inData={
+                    "test":self.test,
                     "dataCollectionId": self.dataCollectionId,
                     "fast_dpMtzFile": mtzFile,
                     "onlineAutoProcessing": True,

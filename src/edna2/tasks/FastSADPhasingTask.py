@@ -302,7 +302,7 @@ class FastSADPhasingTask(AbstractTask):
                     logger.warning(e)
                 
         return pyarchDirectory
-    
+
 
 
 
