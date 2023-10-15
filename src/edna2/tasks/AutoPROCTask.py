@@ -537,7 +537,8 @@ class AutoPROCTask(AbstractTask):
         self.resultFilePaths = list(self.resultsDirectory.iterdir())
         if inData.get("test", False):
             self.tmpdir = tempfile.TemporaryDirectory()
-            self.pyarchDirectory = Path(self.tmpdir.name)
+            pyarchDirectory = Path(self.tmpdir.name)
+            self.pyarchDirectory = self.storeDataOnPyarch(pyarchDirectory=pyarchDirectory)
         else:
             self.pyarchDirectory = self.storeDataOnPyarch()
 
@@ -569,6 +570,8 @@ class AutoPROCTask(AbstractTask):
 
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
+
+        logger.info("AutoPROC Completed.")
         return outData
 
     def storeDataOnPyarch(self, pyarchDirectory=None):
@@ -580,18 +583,28 @@ class AutoPROCTask(AbstractTask):
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
                 logger.debug(f"pyarchDirectory: {pyarchDirectory}")
-        for resultFile in [f for f in self.resultFilePaths if f.exists()]:
-            resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
-            try:
-                logger.info(
-                    f"Copying {resultFile} to pyarch directory {resultFilePyarchPath}"
-                )
-                shutil.copy(resultFile, resultFilePyarchPath)
-            except Exception as e:
-                logger.warning(
-                    f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
-                )
-                logger.warning(e)
+            for resultFile in [f for f in self.resultFilePaths if f.exists()]:
+                resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
+                try:
+                    logger.info(f"Copying {resultFile} to pyarch directory")
+                    shutil.copy(resultFile, resultFilePyarchPath)
+                except Exception as e:
+                    logger.warning(
+                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
+                    )
+                    logger.warning(e)
+        else:
+            for resultFile in [f for f in self.resultFilePaths if f.exists()]:
+                try:
+                    logger.info(f"Copying {resultFile} to pyarch directory")
+                    resultFilePyarchPath = pyarchDirectory / Path(resultFile).name
+                    shutil.copy(resultFile, resultFilePyarchPath)
+                except Exception as e:
+                    logger.warning(
+                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
+                    )
+                    logger.warning(e)
+                
         return pyarchDirectory
 
     @staticmethod

@@ -74,7 +74,7 @@ class XDSTask(AbstractTask):
         if self.onlineAutoProcessing:
             self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
         else:
-            self.runCommandLine(commandLine, listCommand=[])
+            self.runCommandLine(commandLine)
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
         # Work in progress!
@@ -740,7 +740,7 @@ class XDSIndexing(XDSTask):
             self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
             log = self.getSlurmLogFileName()
         else:
-            self.runCommandLine(commandLine, listCommand=[])
+            self.runCommandLine(commandLine)
             log = self.getLogFileName()
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
@@ -1043,7 +1043,7 @@ class XDSIntegration(XDSTask):
         if self.onlineAutoProcessing:
             self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
         else:
-            self.runCommandLine(commandLine, listCommand=[])
+            self.runCommandLine(commandLine)
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
         # xds succeeds if XDS_ASCII.HKL is generated
@@ -1185,7 +1185,7 @@ class XDSRerunCorrect(XDSTask):
         if self.onlineAutoProcessing:
             self.submitCommandLine(commandLine, jobName="EDNA2_XDS", partition=partition, ignoreErrors=False)
         else:
-            self.runCommandLine(commandLine, listCommand=[])
+            self.runCommandLine(commandLine)
         #check for errors
         errorList = self.checkLogForWarningAndErrors()
         # xds succeeds if XDS_ASCII.HKL is generated

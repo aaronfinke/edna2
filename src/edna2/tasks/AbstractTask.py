@@ -360,7 +360,7 @@ class AbstractTask():  # noqa R0904
         errorLogPath = self.getErrorLogPath()
         errorLogFileName = os.path.basename(errorLogPath)
         commandLine += " 1>{0} 2>{1}".format(logFileName, errorLogFileName)
-        if listCommand is not None:
+        if listCommand:
             commandLine += " << EOF-EDNA2\n"
             for command in listCommand:
                 commandLine += command + "\n"

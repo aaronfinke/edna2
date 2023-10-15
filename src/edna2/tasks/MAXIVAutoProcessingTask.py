@@ -42,6 +42,7 @@ from edna2.utils import UtilsCCTBX
 
 logger = UtilsLogging.getLogger()
 
+from edna2.tasks.WaitFileTask import WaitFileTask
 from edna2.tasks.Edna2ProcTask import Edna2ProcTask
 from edna2.tasks.FastdpTask import FastdpTask
 from edna2.tasks.AutoPROCTask import AutoPROCTask
@@ -170,6 +171,39 @@ class MAXIVAutoProcessingTask(AbstractTask):
             logger.error("There are fewer than 8 images, aborting")
             self.setFailure()
             return
+        
+        if self.waitForFiles:
+            dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(
+                self.masterFilePath
+            )
+            pathToStartImage = dataH5ImageList[0]
+            pathToEndImage = dataH5ImageList[-1]
+
+            logger.info("Waiting for start image: {0}".format(pathToStartImage))
+            waitFileFirst = WaitFileTask(
+                inData={"file": pathToStartImage, "expectedSize": 100000}
+            )
+            waitFileFirst.execute()
+            if waitFileFirst.outData["timedOut"]:
+                logger.warning(
+                    "Timeout after {0:d} seconds waiting for the first image {1}!".format(
+                        waitFileFirst.outData["timeOut"], pathToStartImage
+                    )
+                )
+
+            logger.info("Waiting for end image: {0}".format(pathToEndImage))
+            waitFileLast = WaitFileTask(
+                inData={"file": pathToEndImage, "expectedSize": 100000}
+            )
+            waitFileLast.execute()
+            if waitFileLast.outData["timedOut"]:
+                logger.warning(
+                    "Timeout after {0:d} seconds waiting for the last image {1}!".format(
+                        waitFileLast.outData["timeOut"], pathToEndImage
+                    )
+                )
+
+
 
         imgQualityDozor = ControlPyDozor(
             inData={
@@ -285,7 +319,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "anomalous": self.anomalous,
                 "test": self.test,
                 "doUploadIspyb": self.doUploadIspyb,
-                "waitForFiles": self.waitForFiles,
+                "waitForFiles": False,
             },
             workingDirectorySuffix="0",
         )
@@ -300,7 +334,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "anomalous": self.anomalous,
                 "test": self.test,
                 "doUploadIspyb": self.doUploadIspyb,
-                "waitForFiles": self.waitForFiles,
+                "waitForFiles": False,
             },
             workingDirectorySuffix="0",
         )

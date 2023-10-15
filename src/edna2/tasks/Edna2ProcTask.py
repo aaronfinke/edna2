@@ -1033,6 +1033,7 @@ class Edna2ProcTask(AbstractTask):
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
+        logger.info("EDNA2Proc Completed.")
 
         return outData
 

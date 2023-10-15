@@ -411,6 +411,8 @@ class FastdpTask(AbstractTask):
         outData["mtzFileForFastPhasing"] = str(pathToFastDpMtz)
         if outData["anomalous"]:
             logger.info("Significant anomalous signal found.")
+            
+        logger.info("fast_dp Completed.")
 
         return outData
 
@@ -525,7 +527,7 @@ class FastdpTask(AbstractTask):
                         f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
                     )
                     logger.warning(e)
-
+                
         return pyarchDirectory
 
     def fastDpJsonToISPyBScalingStatistics(
