@@ -30,30 +30,37 @@ from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 
-from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
+from edna2.tasks.Xia2DIALSTask import Xia2DialsTask
 
 logger = UtilsLogging.getLogger()
+import tracemalloc
 
 class Xia2DialsExecTest(unittest.TestCase):
 
     def setUp(self):
+        tracemalloc.start()
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
-        
-    def test_execute_Edna2ProcTask(self):
-        referenceDataPath = self.dataPath / 'inDataXia2Dials_problems.json'
-        problemIdFile = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
-        problemIdList = problemIdFile["dataCollectionIds"]
-        for problemId in problemIdList:
-            logger.info(f"*** NEW SAMPLE ***: dataCollectionid {problemId}")
-            xia2DialsTask = Xia2DialsTask(inData={
-                "dataCollectionId": problemId,
-                "test":True,
-                "timeOut": 3600
-            })
-            xia2DialsTask.execute()
-            logger.info(f"*** END OF SAMPLE ***: dataCollectionid {problemId}")
 
-        # self.assertTrue(xia2DialsTask.isSuccess())
+    def test_execute_Edna2ProcTask(self):
+        referenceDataPath = self.dataPath / 'inDataXia2Dials.json'
+        inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
+        inData["timeOut"] = 1800
+        xia2DialsTask = Xia2DialsTask(inData=inData)
+        xia2DialsTask.execute()
+        self.assertTrue(xia2DialsTask.isSuccess())
+        
+    # def test_execute_Edna2ProcTask(self):
+    #     referenceDataPath = self.dataPath / 'inDataXia2Dials_problems.json'
+    #     problemIdFile = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
+    #     problemIdList = problemIdFile["dataCollectionIds"]
+    #     for problemId in problemIdList:
+    #         xia2DialsTask = Xia2DialsTask(inData={
+    #             "dataCollectionId": problemId,
+    #             "test":True,
+    #             "timeOut": 1800
+    #         })
+    #         xia2DialsTask.execute()
+        # self.assertTrue(edna2proctask.isSuccess())
 
 if __name__ == '__main__':
     unittest.main()

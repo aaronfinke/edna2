@@ -46,7 +46,7 @@ from edna2.tasks.WaitFileTask import WaitFileTask
 from edna2.tasks.Edna2ProcTask import Edna2ProcTask
 from edna2.tasks.FastdpTask import FastdpTask
 from edna2.tasks.AutoPROCTask import AutoPROCTask
-from edna2.tasks.Xia2DIALSTasks import Xia2DialsTask
+from edna2.tasks.Xia2DIALSTask import Xia2DIALSTask
 from edna2.tasks.ControlPyDozor import ControlPyDozor
 from edna2.tasks.FastSADPhasingTask import FastSADPhasingTask
 
@@ -165,6 +165,13 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 self.imageNoStart = 1
                 numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
                 self.imageNoEnd = numImages - self.imageNoStart + 1
+        elif self.imageNoStart and self.imageNoEnd:
+            numImages = self.imageNoEnd - self.imageNoStart + 1
+        else:
+            self.imageNoStart = 1
+            numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
+            self.imageNoEnd = numImages - self.imageNoStart + 1
+
 
         if self.imageNoEnd - self.imageNoStart < 8:
             # if self.imageNoEnd - self.imageNoStart < -1:
@@ -324,7 +331,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
             workingDirectorySuffix="0",
         )
 
-        xia2DialsTask = Xia2DialsTask(
+        xia2DialsTask = Xia2DIALSTask(
             inData={
                 "onlineAutoProcessing": True,
                 "dataCollectionId": self.dataCollectionId,

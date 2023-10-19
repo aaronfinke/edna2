@@ -60,7 +60,7 @@ from edna2.tasks.WaitFileTask import WaitFileTask
 STRF_TEMPLATE = "%a %b %d %H:%M:%S %Y"
 
 
-class Xia2DialsTask(AbstractTask):
+class Xia2DIALSTask(AbstractTask):
     def setFailure(self):
         self._dictInOut["isFailure"] = True
         if self.doUploadIspyb:
@@ -89,7 +89,7 @@ class Xia2DialsTask(AbstractTask):
         self.timeStart = time.perf_counter()
         self.startDateTime = datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
-        self.processingPrograms = "xia2DIALS"
+        self.processingPrograms = "XIA2_DIALS"
         self.processingCommandLine = ""
 
         self.setLogFileName(f"xia2DIALS_{self.startDateTimeFormatted}.log")

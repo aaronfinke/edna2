@@ -538,7 +538,9 @@ class AutoPROCTask(AbstractTask):
         if inData.get("test", False):
             self.tmpdir = tempfile.TemporaryDirectory()
             pyarchDirectory = Path(self.tmpdir.name)
-            self.pyarchDirectory = self.storeDataOnPyarch(pyarchDirectory=pyarchDirectory)
+            self.pyarchDirectory = self.storeDataOnPyarch(
+                pyarchDirectory=pyarchDirectory
+            )
         else:
             self.pyarchDirectory = self.storeDataOnPyarch()
 
@@ -604,7 +606,7 @@ class AutoPROCTask(AbstractTask):
                         f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
                     )
                     logger.warning(e)
-                
+
         return pyarchDirectory
 
     @staticmethod
@@ -894,8 +896,8 @@ class AutoPROCExecTask(AbstractTask):
             returncode = self.submitCommandLine(
                 commandLine,
                 jobName="EDNA2_aP",
-                timeout=UtilsConfig.get("AutoPROCTask","slurm_timeout"),
-                partition=UtilsConfig.get("AutoPROCTask","slurm_partition"),
+                timeout=UtilsConfig.get("AutoPROCTask", "slurm_timeout"),
+                partition=UtilsConfig.get("AutoPROCTask", "slurm_partition"),
                 ignoreErrors=False,
             )
             outData["logFile"] = self.getSlurmLogPath()

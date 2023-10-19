@@ -100,7 +100,7 @@ class FastdpTask(AbstractTask):
         self.timeStart = time.perf_counter()
         self.tmpdir = None
         self.startDateTime = datetime.now().isoformat(timespec="seconds")
-        self.processingPrograms = "fast_dp"
+        self.processingPrograms = "fastdp"
         self.processingCommandLine = ""
         self.lowRes = 50
         self.setLogFileName("fastDp.log")
