@@ -393,6 +393,6 @@ class MAXIVAutoProcessingTask(AbstractTask):
             outData["xia2DialsTask"] = xia2DialsTask.outData
 
         self.timeEnd = time.perf_counter()
-        logger.info(f"MAXIVAutoProcessingTask Completed. Time to completion: {self.timeEnd-self.timeStart}")
+        logger.info(f"MAXIVAutoProcessingTask Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
 
         return outData

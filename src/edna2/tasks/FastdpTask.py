@@ -245,7 +245,7 @@ class FastdpTask(AbstractTask):
         self.resultsDirectory = Path(self.getWorkingDirectory() / "results")
         self.resultsDirectory.mkdir(parents=True, exist_ok=True)
 
-        self.timeStart = datetime.now().isoformat(timespec="seconds")
+        self.timeStart_formatted = datetime.now().isoformat(timespec="seconds")
 
         if self.doUploadIspyb:
             # set ISPyB to running
@@ -257,7 +257,7 @@ class FastdpTask(AbstractTask):
                 processingCommandLine=self.processingCommandLine,
                 processingPrograms=self.processingPrograms,
                 isAnom=self.anomalous,
-                timeStart=self.timeStart,
+                timeStart=self.timeStart_formatted,
             )
 
         # set up command line
@@ -412,7 +412,8 @@ class FastdpTask(AbstractTask):
         if outData["anomalous"]:
             logger.info("Significant anomalous signal found.")
             
-        logger.info("fast_dp Completed.")
+        self.timeEnd = time.perf_counter()
+        logger.info(f"FastdpTask Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
 
         return outData
 

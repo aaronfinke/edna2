@@ -572,8 +572,8 @@ class AutoPROCTask(AbstractTask):
 
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
-
-        logger.info("AutoPROC Completed.")
+        self.timeEnd = time.perf_counter()
+        logger.info(f"AutoPROC Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
         return outData
 
     def storeDataOnPyarch(self, pyarchDirectory=None):
