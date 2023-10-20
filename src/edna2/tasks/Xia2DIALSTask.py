@@ -362,6 +362,7 @@ class Xia2DIALSTask(AbstractTask):
             self.tmpdir.cleanup()
         self.timeEnd = time.perf_counter()
         logger.info(f"Xia2DIALS Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
+        outData["processTime"] = self.timeEnd-self.timeStart
 
         return outData
 

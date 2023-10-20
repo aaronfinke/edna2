@@ -574,6 +574,8 @@ class AutoPROCTask(AbstractTask):
             self.tmpdir.cleanup()
         self.timeEnd = time.perf_counter()
         logger.info(f"AutoPROC Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
+        outData["processTime"] = self.timeEnd-self.timeStart
+
         return outData
 
     def storeDataOnPyarch(self, pyarchDirectory=None):

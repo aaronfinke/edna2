@@ -394,5 +394,5 @@ class MAXIVAutoProcessingTask(AbstractTask):
 
         self.timeEnd = time.perf_counter()
         logger.info(f"MAXIVAutoProcessingTask Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
-
+        outData["processTime"] = self.timeEnd-self.timeStart
         return outData

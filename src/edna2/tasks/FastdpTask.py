@@ -414,7 +414,7 @@ class FastdpTask(AbstractTask):
             
         self.timeEnd = time.perf_counter()
         logger.info(f"FastdpTask Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
-
+        outData["processTime"] = self.timeEnd-self.timeStart
         return outData
 
     def generateAutoProcResultsContainer(self, programId, integrationId, isAnom):
