@@ -344,19 +344,19 @@ class Xia2DIALSTask(AbstractTask):
         else:
             self.pyarchDirectory = self.storeDataOnPyarch()
 
-        xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
-        outData = xia2AutoProcContainer
-
         if self.doUploadIspyb:
+            xia2AutoProcContainer = self.loadAndFixJsonOutput(xia2JsonFile)
             self.logToIspyb(
                 self.integrationId, "Indexing", "Successful", "Xia2Dials finished"
             )
-
-        if self.doUploadIspyb:
             ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(
                 inData=xia2AutoProcContainer, workingDirectorySuffix="uploadFinal"
             )
             ispybStoreAutoProcResults.execute()
+            outData = xia2AutoProcContainer
+
+        else: 
+            outData = xia2JsonFile
 
         if inData.get("test", False):
             self.tmpdir.cleanup()
