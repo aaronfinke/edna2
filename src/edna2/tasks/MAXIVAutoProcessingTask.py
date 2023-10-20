@@ -47,7 +47,7 @@ from edna2.tasks.Edna2ProcTask import Edna2ProcTask
 from edna2.tasks.FastdpTask import FastdpTask
 from edna2.tasks.AutoPROCTask import AutoPROCTask
 from edna2.tasks.Xia2DIALSTask import Xia2DIALSTask
-from edna2.tasks.ControlPyDozor import ControlPyDozor
+# from edna2.tasks.ControlPyDozor import ControlPyDozor
 from edna2.tasks.FastSADPhasingTask import FastSADPhasingTask
 
 
@@ -63,6 +63,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
             "properties": {
                 "dataCollectionId": {"type": ["integer", "null"]},
                 "masterFilePath": {"type": ["string", "null"]},
+                "imageNoStart" :  {"type": ["integer", "null"]},
+                "imageNoEnd" :  {"type": ["integer", "null"]},
+                "numImages" :  {"type": ["integer", "null"]},
                 "spaceGroup": {"type": ["integer", "string"]},
                 "unitCell": {"type": ["string", "null"]},
                 "residues": {"type": ["integer", "null"]},
@@ -76,6 +79,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
         }
 
     def run(self, inData):
+        self.timeStart = time.perf_counter()
         UtilsLogging.addLocalFileHandler(
             logger, self.getWorkingDirectory() / "MAXIVAutoProcessing.log"
         )
@@ -86,13 +90,12 @@ class MAXIVAutoProcessingTask(AbstractTask):
 
         self.anomFlag = False
         outData = {}
-        self.timeStart = time.perf_counter()
         self.startDateTime = datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
         self.tmpdir = None
         self.imageNoStart = inData.get("imageNoStart", None)
         self.imageNoEnd = inData.get("imageNoEnd", None)
-
+        self.numImages = inData.get("numImages", None)
         self.dataCollectionId = inData.get("dataCollectionId", None)
         self.masterFilePath = inData.get("masterFilePath", None)
         self.anomalous = inData.get("anomalous", False)
@@ -173,7 +176,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
             self.imageNoEnd = numImages - self.imageNoStart + 1
 
 
-        if self.imageNoEnd - self.imageNoStart < 8:
+        if numImages < 8:
             # if self.imageNoEnd - self.imageNoStart < -1:
             logger.error("There are fewer than 8 images, aborting")
             self.setFailure()
@@ -212,19 +215,19 @@ class MAXIVAutoProcessingTask(AbstractTask):
 
 
 
-        imgQualityDozor = ControlPyDozor(
-            inData={
-                "dataCollectionId": self.dataCollectionId,
-                "masterFile": self.masterFilePath,
-                "startNo": self.imageNoStart,
-                "batchSize": numImages,
-                "directory": str(self.getWorkingDirectory() / "ControlPyDozor_0"),
-                "doISPyBUpload": True,
-                "doSubmit": True,
-                "returnSpotList": False,
-            },
-            workingDirectorySuffix="0",
-        )
+        # imgQualityDozor = ControlPyDozor(
+        #     inData={
+        #         "dataCollectionId": self.dataCollectionId,
+        #         "masterFile": self.masterFilePath,
+        #         "startNo": self.imageNoStart,
+        #         "batchSize": numImages,
+        #         "directory": str(self.getWorkingDirectory() / "ControlPyDozor_0"),
+        #         "doISPyBUpload": True,
+        #         "doSubmit": True,
+        #         "returnSpotList": False,
+        #     },
+        #     workingDirectorySuffix="0",
+        # )
 
         edna2ProcTask = Edna2ProcTask(
             inData={
@@ -261,11 +264,11 @@ class MAXIVAutoProcessingTask(AbstractTask):
             workingDirectorySuffix="0",
         )
 
-        imgQualityDozor.start()
+        # imgQualityDozor.start()
         edna2ProcTask.start()
         fastDpTask.start()
 
-        imgQualityDozor.join()
+        # imgQualityDozor.join()
         fastDpTask.join()
         edna2ProcTask.join()
 
@@ -388,5 +391,8 @@ class MAXIVAutoProcessingTask(AbstractTask):
 
         if xia2DialsTask.isSuccess():
             outData["xia2DialsTask"] = xia2DialsTask.outData
+
+        self.timeEnd = time.perf_counter()
+        logger.info(f"MAXIVAutoProcessingTask Completed. Time to completion: {self.timeEnd-self.timeStart}")
 
         return outData

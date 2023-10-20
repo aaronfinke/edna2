@@ -273,7 +273,8 @@ class AbstractTask():  # noqa R0904
         script += '#SBATCH --job-name="{0}"\n'.format(jobName)
         script += "#SBATCH --partition={0}\n".format(partition) if partition else ""
         script += "#SBATCH --exclusive\n" if exclusive else ""
-        script += "#SBATCH --mem={0}\n".format(mem) if not exclusive else ""
+        script += "#SBATCH --mem="
+        script += "0\n" if exclusive else "{0}\n".format(mem) 
         script += "#SBATCH --nodes={0}\n".format(nodes)
         # script += "#SBATCH --nodes=1\n"  # Necessary for not splitting jobs! See ATF-57
         script += "#SBATCH --cpus-per-task={0}\n".format(core) if not exclusive else ""
