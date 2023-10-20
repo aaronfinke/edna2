@@ -254,7 +254,6 @@ class Xia2DIALSTask(AbstractTask):
                     )
                 )
 
-        self.timeStart = datetime.now().isoformat(timespec="seconds")
 
         xia2DIALSExecinData = {
             "onlineAutoProcessing": self.onlineAutoProcessing,
@@ -279,7 +278,7 @@ class Xia2DIALSTask(AbstractTask):
                 processingCommandLine=self.processingCommandLine,
                 processingPrograms=self.processingPrograms,
                 isAnom=self.anomalous,
-                timeStart=self.timeStart,
+                timeStart=self.startDateTime,
             )
 
         if self.doUploadIspyb:
@@ -294,7 +293,7 @@ class Xia2DIALSTask(AbstractTask):
         if xia2DIALSExec.isFailure():
             self.setFailure()
             return
-        self.timeEnd = datetime.now().isoformat(timespec="seconds")
+        self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
         xia2DIALSExecDir = Path(xia2DIALSExec.outData["workingDirectory"])
         logger.debug(f"Working directory is {xia2DIALSExecDir}")
@@ -442,8 +441,8 @@ class Xia2DIALSTask(AbstractTask):
         autoProcContainer["autoProcProgram"]["processingCommandLine"] = ""
         autoProcContainer["autoProcProgram"]["processingStatus"] = "SUCCESS"
         autoProcContainer["autoProcProgram"]["processingPrograms"] = "xia2DIALS"
-        autoProcContainer["autoProcProgram"]["processingStartTime"] = self.timeStart
-        autoProcContainer["autoProcProgram"]["processingEndTime"] = self.timeEnd
+        autoProcContainer["autoProcProgram"]["processingStartTime"] = self.startDateTime
+        autoProcContainer["autoProcProgram"]["processingEndTime"] = self.endDateTime
 
         autoProcContainer["autoProc"] = jsonFile["AutoProc"]
         autoProcContainer["autoProc"]["autoProcProgramId"] = self.programId

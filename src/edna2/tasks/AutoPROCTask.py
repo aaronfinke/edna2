@@ -276,7 +276,6 @@ class AutoPROCTask(AbstractTask):
                     )
                 )
 
-        self.timeStart = datetime.now().isoformat(timespec="seconds")
 
         if self.doUploadIspyb:
             # set ISPyB to running
@@ -288,7 +287,7 @@ class AutoPROCTask(AbstractTask):
                 processingCommandLine=self.processingCommandLine,
                 processingPrograms=self.processingPrograms,
                 isAnom=self.anomalous,
-                timeStart=self.timeStart,
+                timeStart=self.startDateTime,
             )
             (
                 self.integrationIdStaraniso,
@@ -298,7 +297,7 @@ class AutoPROCTask(AbstractTask):
                 processingCommandLine=self.processingCommandLine,
                 processingPrograms=self.processingProgramsStaraniso,
                 isAnom=self.anomalous,
-                timeStart=self.timeStart,
+                timeStart=self.startDateTime,
             )
 
         autoPROCExecinData = {
