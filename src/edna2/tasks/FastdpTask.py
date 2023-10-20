@@ -319,7 +319,7 @@ class FastdpTask(AbstractTask):
                 return
         else:
             try:
-                self.runCommandLine(commandLine, listCommand=[])
+                self.runCommandLine(commandLine)
             except RuntimeError:
                 self.setFailure()
                 return

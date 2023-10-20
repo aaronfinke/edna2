@@ -248,7 +248,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
 
         fastDpTask = FastdpTask(
             inData={
-                "onlineAutoProcessing": True,
+                "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
                 "masterFilePath": self.masterFilePath,
                 "unitCell": self.unitCell,
