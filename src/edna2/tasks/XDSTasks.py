@@ -770,6 +770,9 @@ class XDSIndexing(XDSTask):
         # )
         list_xds_inp = XDSTask.generateXDS_INP(inData)
         list_xds_inp.insert(0, "JOB= XYCORR INIT COLSPOT IDXREF")
+        list_xds_inp.insert(1,"CLUSTER_NODES= {0}".format(
+                UtilsConfig.get("XDSTask", "CLUSTER_NODES_COLSPOT")
+            ))
         dict_image_links = self.generateImageLinks(inData, self.getWorkingDirectory())
         list_xds_inp.append(
             "NAME_TEMPLATE_OF_DATA_FRAMES= {0}".format(dict_image_links["template"])
@@ -1071,6 +1074,10 @@ class XDSIntegration(XDSTask):
                 dictImageLinks["dataRange"][0], dictImageLinks["dataRange"][1]
             )
         )
+        listXDS_INP.insert(1,"CLUSTER_NODES= {0}".format(
+                UtilsConfig.get("XDSTask", "CLUSTER_NODES_INTEGRATE")
+        ))
+
         return listXDS_INP
 
     @staticmethod

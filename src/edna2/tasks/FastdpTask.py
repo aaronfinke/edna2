@@ -315,12 +315,14 @@ class FastdpTask(AbstractTask):
                 jobName="EDNA2_fastdp",
             )
             if returnCode != 0:
+                logger.error("Error in running fastdp!")
                 self.setFailure()
                 return
         else:
             try:
                 self.runCommandLine(commandLine)
             except RuntimeError:
+                logger.error("Error in running fastdp!")
                 self.setFailure()
                 return
 
