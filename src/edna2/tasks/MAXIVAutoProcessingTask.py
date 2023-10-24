@@ -296,6 +296,8 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "fastDp": fastDpTask.outData,
             }
             self.anomalous = fastDpTask.outData.get("anomalous", False)
+        else:
+            self.anomalous = False
 
         if self.anomalous:
             logger.debug("Anomalous flag switched on.")
