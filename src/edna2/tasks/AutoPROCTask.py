@@ -1021,6 +1021,7 @@ class AutoPROCExecTask(AbstractTask):
             )
             outData["logFile"] = self.getSlurmLogPath()
             if returncode != 0:
+                self.fixGroupPermissions()
                 self.setFailure()
                 return
         else:
@@ -1028,7 +1029,22 @@ class AutoPROCExecTask(AbstractTask):
                 self.runCommandLine(commandLine, listCommand=[])
                 outData["logFile"] = self.getLogPath()
             except RuntimeError:
+                self.fixGroupPermissions()
                 self.setFailure()
                 return
-
+        self.fixGroupPermissions()
         return outData
+    
+    def fixGroupPermissions(self):
+        """fix group permissions for some autoPROC
+        output files."""
+        logger.info("Checking permissions for autoPROC files:")
+        groupName = self.getWorkingDirectory().group()
+        for file in self.getWorkingDirectory().rglob('*'):
+            if file.group() != groupName and not file.is_symlink():
+                try:
+                    shutil.chown(file, group=groupName)
+                    logger.debug(f"File {file.name} group owner changed to {groupName}")
+                except Exception as e:
+                    logger.debug(f"File {file.name} group owner could not be changed: {e}")
+
