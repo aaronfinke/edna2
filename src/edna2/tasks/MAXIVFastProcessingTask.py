@@ -217,7 +217,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": self.masterFilePath,
+                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "imageNoStart": self.imageNoStart,
@@ -226,6 +226,7 @@ class MAXIVFastProcessingTask(AbstractTask):
                 "waitForFiles": False,
                 "doUploadIspyb": True,
                 "test": self.test,
+                "timeOut":1800
             },
             workingDirectorySuffix="0",
         )
@@ -234,7 +235,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": self.masterFilePath,
+                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "masterFilePath": self.masterFilePath,
@@ -244,6 +245,7 @@ class MAXIVFastProcessingTask(AbstractTask):
                 "doUploadIspyb": True,
                 "anomalous": False,
                 "test": self.test,
+                "timeOut": 1800
             },
             workingDirectorySuffix="0",
         )
