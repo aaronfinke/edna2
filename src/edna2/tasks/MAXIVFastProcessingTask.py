@@ -396,7 +396,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             #SBATCH -t 02:00:00
             #SBATCH --mem=0
             #SBATCH --partition=fujitsu
-            #SBATCH -J "EDNA2_aP"
+            #SBATCH -J "EDNA2_x2d"
             #SBATCH --output EDNA2job_%j.out
             #SBATCH --chdir {self.getWorkingDirectory()}
             source /mxn/groups/sw/mxsw/env_setup/edna2_proc.sh
@@ -407,7 +407,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             x2DinpuString = xia2DIALSSlurm.encode('ascii')
             out = subprocess.run("sbatch", input=x2DinpuString, cwd=self.getWorkingDirectory(), capture_output=True)
             x2DJobId = out.stdout.decode('ascii').strip('\n').split()[-1]
-            logger.info(f"AutoPROCJob submitted to Slurm with jobId {x2DJobId}")
+            logger.info(f"Xia2DIALS submitted to Slurm with jobId {x2DJobId}")
 
 
         return outData
