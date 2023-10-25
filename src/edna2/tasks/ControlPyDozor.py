@@ -189,7 +189,7 @@ class ControlPyDozor(AbstractTask):
 
     def __init__(self, inData, workingDirectorySuffix=None):
         AbstractTask.__init__(self, inData, workingDirectorySuffix=workingDirectorySuffix)
-        #self.directory = inData.get('masterFile',"")
+        self.directory = inData.get('masterFile',"")
         self.hasOverlap = False
         self.overlap = 0.0
         self.dataCollection = None
