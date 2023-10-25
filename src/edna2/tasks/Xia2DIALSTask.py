@@ -218,10 +218,17 @@ class Xia2DIALSTask(AbstractTask):
         )
         if proteinAcronym is not None and sampleName is not None:
             # only alphanumerics and underscores are allowed
-            proteinAcronym_corrected = re.sub(r"\W", "_", proteinAcronym)
-            sampleName_corrected = re.sub(r"\W", "_", sampleName)
-            self.proteinAcronym = proteinAcronym_corrected
-            self.sampleName = sampleName_corrected
+            try:
+                proteinAcronym = re.sub(r"\W", "_", proteinAcronym)
+                proteinAcronym = re.sub(r"^([_0-9])",r"x\1", proteinAcronym)
+                sampleName = re.sub(r"\W", "_", sampleName)
+                sampleName = re.sub(r"^([_0-9])",r"x\1", sampleName)
+                self.proteinAcronym = proteinAcronym
+                self.sampleName = sampleName
+            except Exception as e:
+                logger.error(f"Error parsing proteinAcronym and sampleName: {e}")
+                self.proteinAcronym = "AUTOMATIC"
+                self.sampleName = "DEFAULT"
         else:
             self.proteinAcronym = "AUTOMATIC"
             self.sampleName = "DEFAULT"
