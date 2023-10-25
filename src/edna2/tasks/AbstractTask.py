@@ -79,7 +79,7 @@ class AbstractTask():  # noqa R0904
         self._dictInOut["inData"] = json.dumps(inData, default=str)
         self._dictInOut["outData"] = json.dumps({})
         self._dictInOut["isFailure"] = False
-        self._dictInOut["timeOut"] = None
+        self._dictInOut["timeOut"] = self.setTimeOut()
         self._dictInOut["timeoutExit"] = False
         self._process = EDNA2Process(target=self.executeRun, args=())
         self._workingDirectorySuffix = workingDirectorySuffix
@@ -170,13 +170,23 @@ class AbstractTask():  # noqa R0904
             with open(str(self._workingDirectory / jsonName), "w") as f:
                 f.write(json.dumps(outData, default=str, indent=4))
     
-    def setTimeout(self,timeOut):
+    def setTimeOut(self,timeOut=None):
+        inData = self.getInData()
         if timeOut is not None:
             timeOut = float(timeOut)
-        self._dictInOut["timeOut"] = timeOut
+            logger.debug(f'timeOut set to {timeOut}')
+        elif inData.get('timeOut'):
+            timeOut = float(inData.get('timeOut'))
+            logger.debug(f'timeOut set to {timeOut} from json')
+        elif UtilsConfig.get(self,'timeOut'):
+            timeout = UtilsConfig.get(self,'timeOut')
+            logger.debug(f'timeOut set to {timeOut} from config')
+        return timeOut
 
-    def getTimeout(self):
-        return self._dictInOut.get("timeOut", None)
+    def getTimeOut(self):
+        return self._dictInOut.get("timeOut")
+    
+    timeOut = property(getTimeOut,setTimeOut)
 
     def getLogPath(self):
         if self._logFileName is None:
@@ -410,7 +420,7 @@ class AbstractTask():  # noqa R0904
         self._process.start()
 
     def join(self):
-        timeOut = self.getTimeout()
+        timeOut = self.getTimeOut()
         if timeOut is not None:
             logger.debug(f"timeout for {self.__class__.__name__}: {timeOut}")
         self._process.join(timeout=timeOut)
