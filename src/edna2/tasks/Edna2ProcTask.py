@@ -891,6 +891,9 @@ class Edna2ProcTask(AbstractTask):
         logger.info("Start ccp4/truncate...")
         self.truncate = TruncateTask(inData=truncateData)
         self.truncate.execute()
+        if self.truncate.isFailure():
+            logger.error("Error running truncate. As this is a rare occurrence, it usually means")
+            logger.error("something is seriously wrong with the data. Stopping here.")
 
         uniqueifyData = {
             "inputFile": self.truncate.outData["truncateOutputMtz"],
@@ -913,6 +916,10 @@ class Edna2ProcTask(AbstractTask):
 
         self.phenixXTriageTask.join()
         self.uniqueify.join()
+        if self.uniqueify.isFailure():
+            logger.error("Error running uniqueify. As this is a rare occurrence, it usually means")
+            logger.error("something is seriously wrong with the data. Stopping here.")
+
 
         truncateLog = self.resultsDirectory / f"{self.pyarchPrefix}_truncate.log"
         uniqueMtz = self.resultsDirectory / f"{self.pyarchPrefix}_truncate.mtz"
@@ -925,20 +932,20 @@ class Edna2ProcTask(AbstractTask):
         UtilsPath.systemCopyFile(
             Path(self.phenixXTriageTask.outData["logPath"]), phenixXTriageTaskLog
         )
+        if self.phenixXTriageTask.isSuccess():
+            logger.info("Phenix.xtriage finished.")
 
-        logger.info("Phenix.xtriage finished.")
-
-        if (
-            self.phenixXTriageTask.outData["hasTwinning"]
-            and self.phenixXTriageTask.outData["hasPseudotranslation"]
-        ):
-            logger.warning("Pseudotranslation and twinning detected by phenix.xtriage!")
-        elif self.phenixXTriageTask.outData["hasTwinning"]:
-            logger.warning("Twinning detected by phenix.xtriage!")
-        elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
-            logger.warning("Pseudotranslation detected by phenix.xtriage!")
-        else:
-            logger.info("No twinning or pseudotranslation detected by phenix.xtriage.")
+            if (
+                self.phenixXTriageTask.outData["hasTwinning"]
+                and self.phenixXTriageTask.outData["hasPseudotranslation"]
+            ):
+                logger.warning("Pseudotranslation and twinning detected by phenix.xtriage!")
+            elif self.phenixXTriageTask.outData["hasTwinning"]:
+                logger.warning("Twinning detected by phenix.xtriage!")
+            elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
+                logger.warning("Pseudotranslation detected by phenix.xtriage!")
+            else:
+                logger.info("No twinning or pseudotranslation detected by phenix.xtriage.")
 
         self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
@@ -967,11 +974,11 @@ class Edna2ProcTask(AbstractTask):
                 logger.error("ISPyB Store autoproc results failed.")
                 # self.setFailure()
                 # return
-
-            if self.phenixXTriageTask.outData["hasTwinning"]:
-                self.twinning = True
-            if self.phenixXTriageTask.outData["hasPseudotranslation"]:
-                self.pseudoTranslation = True
+            if self.phenixXTriageTask.isSuccess():
+                if self.phenixXTriageTask.outData.get("hasTwinning"):
+                    self.twinning = True
+                if self.phenixXTriageTask.outData.get("hasPseudotranslation"):
+                    self.pseudoTranslation = True
 
         outData = self.autoProcResultsContainer
         outData["anomalous"] = self.anomalous
