@@ -83,7 +83,7 @@ class MAXIVFastProcessingTask(AbstractTask):
         UtilsLogging.addLocalFileHandler(
             logger, self.getWorkingDirectory() / "MAXIVAutoProcessing.log"
         )
-        logger.info("AutoPROC processing started")
+        logger.info("MAX IV Autoprocessing started")
         if os.environ.get("SLURM_JOB_ID"):
             logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
         logger.info(f"Running on {socket.gethostname()}")
@@ -191,7 +191,7 @@ class MAXIVFastProcessingTask(AbstractTask):
 
             logger.info("Waiting for start image: {0}".format(pathToStartImage))
             waitFileFirst = WaitFileTask(
-                inData={"file": pathToStartImage, "expectedSize": 100000},
+                inData={"file": pathToStartImage, "expectedSize": 5_000_000},
                 workingDirectorySuffix='firstImage'
             )
             waitFileFirst.execute()
@@ -204,7 +204,7 @@ class MAXIVFastProcessingTask(AbstractTask):
 
             logger.info("Waiting for end image: {0}".format(pathToEndImage))
             waitFileLast = WaitFileTask(
-                inData={"file": pathToEndImage, "expectedSize": 100000},
+                inData={"file": pathToEndImage, "expectedSize": 5_000_000},
                 workingDirectorySuffix='lastImage'
             )
             waitFileLast.execute()

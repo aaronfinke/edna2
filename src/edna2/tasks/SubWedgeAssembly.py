@@ -65,7 +65,7 @@ class SubWedgeAssembly(AbstractTask):
         input_read_image_header = {
             "imagePath": list_image_path
         }
-        read_image_header = ReadImageHeader(inData=input_read_image_header, workingDirectorySuffix='0')
+        read_image_header = ReadImageHeader(inData=input_read_image_header)
         read_image_header.execute()
         if read_image_header.isSuccess():
             list_subwedge = read_image_header.outData["subWedge"]
