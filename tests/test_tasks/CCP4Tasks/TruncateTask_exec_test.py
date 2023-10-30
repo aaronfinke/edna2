@@ -21,33 +21,35 @@
 
 __authors__ = ["O. Svensson"]
 __license__ = "MIT"
-__date__ = "23/01/2023"
+__date__ = "21/04/2019"
 
-import os
 import unittest
-
-import tracemalloc
 
 from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
-from edna2.utils import UtilsLogging
 
-from edna2.tasks.Edna2ProcTask import Edna2ProcTask
+from edna2.tasks.CCP4Tasks import TruncateTask
+
+from edna2.utils import UtilsLogging
 
 logger = UtilsLogging.getLogger()
 
-class Edna2ProcExecTest(unittest.TestCase):
+
+class TruncateTasksExecTest(unittest.TestCase):
 
     def setUp(self):
-        tracemalloc.start()
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
-    def test_execute_Edna2ProcTask(self):
-        referenceDataPath = self.dataPath / 'inDataEdna2Proc.json'
-        inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
-        edna2proctask = Edna2ProcTask(inData=inData)
-        edna2proctask.execute()
-        self.assertTrue(edna2proctask.isSuccess())
-
+    @unittest.skipIf(UtilsConfig.getSite() == 'Default',
+                     'Cannot run pointless test with default config')
+    def test_execute_PointlessTask(self):
+        referenceDataPath = self.dataPath / 'inDataTruncateTask.json'
+        tmpDir = UtilsTest.createTestTmpDirectory('TruncateTask')
+        inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath,
+                                                    tmpDir=tmpDir)
+        task = TruncateTask(inData=inData)
+        task.execute()
+        self.assertTrue(task.isSuccess())
+        
 if __name__ == '__main__':
     unittest.main()
