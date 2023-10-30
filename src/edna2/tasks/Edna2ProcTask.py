@@ -294,7 +294,7 @@ class Edna2ProcTask(AbstractTask):
             ) = self.generateImageListFromH5Master_fast(
                 masterFilePath=self.masterFilePath
             )
-            self.subWedgeAssembly = SubWedgeAssembly(inData=self.imageList)
+            self.subWedgeAssembly = SubWedgeAssembly(inData=self.imageList, workingDirectorySuffix='0')
             self.subWedgeAssembly.execute()
             self.xdsIndexingInData = self.subWedgeAssembly.outData
         else:
@@ -865,13 +865,14 @@ class Edna2ProcTask(AbstractTask):
         self.xscaleTask_unmerge.start()
 
         logger.info("Start phenix.xtriage run...")
-        self.phenixXTriageTaskData = {"input_file": aimlessUnmergedMtzPath}
-        self.phenixXTriageTask = PhenixXTriageTask(inData=self.phenixXTriageTaskData)
+        self.phenixXTriageTaskData = {
+            "input_file": aimlessUnmergedMtzPath,
+            "workingDirectory": self.getWorkingDirectory()
+        }
+        self.phenixXTriageTask = PhenixXTriageTask(inData=self.phenixXTriageTaskData, workingDirectorySuffix="final")
         self.phenixXTriageTask.start()
 
         # now run truncate/unique
-        truncateData = {}
-        truncateData["inputFile"] = aimlessMergedMtzPath
         tempFile = tempfile.NamedTemporaryFile(
             suffix=".mtz",
             prefix="tmp2-",
@@ -880,16 +881,16 @@ class Edna2ProcTask(AbstractTask):
         )
         truncateOut = tempFile.name
         tempFile.close()
-        truncateData["outputFile"] = truncateOut
-        truncateData["nres"] = self.inData.get("nres")
-        truncateData["isAnom"] = self.anomalous
-        truncateData["res"] = self.resCutoff
-        truncateData["outputFile"] = truncateOut
-
         os.chmod(truncateOut, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
+        shutil.chown(truncateOut, group = self.getWorkingDirectory().group())
 
         logger.info("Start ccp4/truncate...")
-        self.truncate = TruncateTask(inData=truncateData)
+        self.truncate = TruncateTask(inData= {
+            "inputFile" : aimlessMergedMtzPath,
+            "outputFile" : truncateOut,
+            "isAnom" : self.anomalous,
+            "res" : self.resCutoff,
+        }, workingDirectorySuffix="final")
         self.truncate.execute()
         if self.truncate.isFailure():
             logger.error("Error running truncate. As this is a rare occurrence, it usually means")
@@ -899,7 +900,7 @@ class Edna2ProcTask(AbstractTask):
             "inputFile": self.truncate.outData["truncateOutputMtz"],
             "outputFile": "truncate_unique.mtz",
         }
-        self.uniqueify = UniqueifyTask(inData=uniqueifyData)
+        self.uniqueify = UniqueifyTask(inData=uniqueifyData,  workingDirectorySuffix="final")
 
         self.uniqueify.start()
         

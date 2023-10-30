@@ -1,0 +1,6 @@
+{
+    "inputFile": "/home/aarfin/data_staff/edna2/tests/test_tasks/CCP4Tasks/data/ep__aimless.mtz",
+    "outputFile": "ep__truncate.mtz",
+    "isAnom": false,
+    "res":3.5
+}

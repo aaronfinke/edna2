@@ -191,7 +191,8 @@ class MAXIVFastProcessingTask(AbstractTask):
 
             logger.info("Waiting for start image: {0}".format(pathToStartImage))
             waitFileFirst = WaitFileTask(
-                inData={"file": pathToStartImage, "expectedSize": 100000}
+                inData={"file": pathToStartImage, "expectedSize": 100000},
+                workingDirectorySuffix='firstImage'
             )
             waitFileFirst.execute()
             if waitFileFirst.outData["timedOut"]:
@@ -203,7 +204,8 @@ class MAXIVFastProcessingTask(AbstractTask):
 
             logger.info("Waiting for end image: {0}".format(pathToEndImage))
             waitFileLast = WaitFileTask(
-                inData={"file": pathToEndImage, "expectedSize": 100000}
+                inData={"file": pathToEndImage, "expectedSize": 100000},
+                workingDirectorySuffix='lastImage'
             )
             waitFileLast.execute()
             if waitFileLast.outData["timedOut"]:
