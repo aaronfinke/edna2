@@ -17,4 +17,4 @@ dist/*.egg
 *.err
 build
 config/local_aaron.ini
-.vscode/
+.vscode
