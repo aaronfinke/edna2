@@ -90,7 +90,7 @@ if taskName is None:
 elif inData is None and inDataFile is not None:
     with open(inDataFile) as fd:
         inData = fd.read()
-else:
+elif inData is None and inDataFile is None:
     print("Error - no indata provided!")
     parser.print_help()
     sys.exit(1)
