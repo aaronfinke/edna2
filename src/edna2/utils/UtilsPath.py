@@ -204,6 +204,7 @@ def createPyarchFilePath(filePath):
 def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
     """Wait for the file to appear on disk."""
     file_path = pathlib.Path(file)
+    file_size = None
     final_size = None
     has_timed_out = False
     should_continue = True
@@ -227,6 +228,10 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
         #     if file_size > expectedSize:
         #         should_continue = False
         # final_size = file_size
+    else:
+        file_size = 0
+        file_mtime = 0
+        time.sleep(0.1)
     if should_continue:
         logger.info("Waiting for file %s" % file_path)
         #
