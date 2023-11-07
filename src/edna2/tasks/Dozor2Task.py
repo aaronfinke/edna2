@@ -25,7 +25,7 @@ __updated__ = "2023-11-03"
 
 import os
 import time
-import textwrap
+import socket
 from pathlib import Path
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -93,9 +93,14 @@ class Dozor2Task(AbstractTask):  # pylint: disable=too-many-instance-attributes
 
     def run(self, inData):
         time_start = time.perf_counter()
+        logger.info("Dozor spotfinding started")
+        if os.environ.get("SLURM_JOB_ID"):
+            logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
+        logger.info(f"Running on {socket.gethostname()}")
+        omega = None
         outData = {}
         self.masterFilePath = inData.get("masterFilePath")
-        self.dataCollectionId = inData.get("dataCollectionId")
+        self.dataCollectionId = inData.get("dataCollectionId", 0)
 
         dozorInData = self.getInDataSchema()["properties"]
         for k, v in dozorInData.items():
@@ -105,7 +110,7 @@ class Dozor2Task(AbstractTask):  # pylint: disable=too-many-instance-attributes
         if self.dataCollectionId and not self.masterFilePath:
             self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
         if self.masterFilePath and Path(self.masterFilePath).exists():
-            dozorMasterFileInData = self.parseDozorInDataFromMasterFile(
+            dozorMasterFileInData, omega = self.parseDozorInDataFromMasterFile(
                 self.masterFilePath
             )
             for k, v in dozorMasterFileInData.items():
@@ -126,11 +131,30 @@ class Dozor2Task(AbstractTask):  # pylint: disable=too-many-instance-attributes
         cmd += "dozor dozor.dat"
 
         self.runCommandLine(cmd)
-
+        time_dozor = time.perf_counter()
+        logger.info(f"Dozor finished. Process Time: {time_dozor - time_start} s")
         dozorLogFile = self.getLogPath()
 
         dozor_df = self.parseDozorLogFile(dozorLogFile)
+        if omega is None:
+            starting_angle = dozorInData["starting_angle"]
+            oscillation_range = dozorInData["oscillation_range"]
+            number_images = dozorInData["number_images"]
+            omega = [
+                (x * oscillation_range) + starting_angle
+                for x in range(0, number_images)
+            ]
+        dozor_df["angle"] = omega
 
+        self.saveDozorDataFrame(
+            dozor_df, self.getWorkingDirectory(), self.dataCollectionId
+        )
+        self.generateDozorPlot(
+            dozor_df,
+            self.masterFilePath,
+            self.getWorkingDirectory(),
+            self.dataCollectionId,
+        )
         time_end = time.perf_counter()
         logger.info(f"Process Time: {time_end - time_start} s")
         return outData
@@ -165,7 +189,8 @@ class Dozor2Task(AbstractTask):  # pylint: disable=too-many-instance-attributes
             "ix_min": 0,
             "iy_min": 0,
         }
-        return dozorInData
+        omega = imageHeader["omega"]
+        return dozorInData, omega
 
     @staticmethod
     def generateDozorInputFileData(dozorInData):
@@ -222,10 +247,19 @@ class Dozor2Task(AbstractTask):  # pylint: disable=too-many-instance-attributes
         return df
 
     @staticmethod
-    def generateDozorPlot(df, masterFile):
+    def saveDozorDataFrame(df, workingDirectory, dataCollectionId):
+        try:
+            df.to_csv(workingDirectory / f"dozor_{dataCollectionId:06d}.csv")
+        except Exception as e:
+            logger.error(f"Couldn't save CSV file: {e}")
+
+    @staticmethod
+    def generateDozorPlot(df, masterFile, workingDirectory, dataCollectionId=0):
+        df["DozorScore"] = df["DozorScore"] * 10
         fig, ax1 = plt.subplots(figsize=(7, 5), layout="constrained")
         fig.suptitle(masterFile, fontsize=8)
         ax2 = ax1.twinx()
+        ax2.invert_yaxis()
         ax3 = ax1.twiny()
         nf1 = df.plot.scatter(
             x="NImage",
@@ -256,12 +290,31 @@ class Dozor2Task(AbstractTask):  # pylint: disable=too-many-instance-attributes
         )
         ax3.scatter(df["angle"], df["DozorScore"], s=0)
 
-        low_resolution = max(df["Resolution"])
-        high_resolution = min(df["Resolution"])
+        minResolution = max(df["Resolution"])
+        maxResolution = min(df["Resolution"])
+        maxImageNumber = max(df["NImage"])
+        minImageNumber = min(df["NImage"])
+        minAngle = min(df["angle"])
+        maxAngle = max(df["angle"])
+        maxDozorValue = max(df["DozorScore"])
+        minDozorValue = min(df["DozorScore"])
 
-        ax2.set_ylim([1, 4])
-        ax1.set_xlim([0, 1800])
-        ax2.invert_yaxis()
+        if maxDozorValue < 0.001 and minDozorValue < 0.001:
+            maxDozorValue = 0.5
+            minDozorValue = -0.5
+
+        if maxResolution is None or maxResolution > 0.8:
+            maxResolution = 0.8
+        else:
+            maxResolution = int(maxResolution * 10.0) / 10.0
+
+        if minResolution is None or minResolution < 4.5:
+            minResolution = 4.5
+        else:
+            minResolution = int(minResolution * 10.0) / 10.0 + 1
+
+        ax2.set_ylim(minResolution, maxResolution)
+        ax1.set_xlim(minImageNumber, maxImageNumber)
         ax1.set_ylabel("Number of Spots/Dozor Score(*10)", fontsize=12)
         ax2.set_ylabel("Resolution (Å)", fontsize=12)
         ax3.set_xlabel("Angle (degrees)", fontsize=12, labelpad=8)
@@ -286,3 +339,7 @@ class Dozor2Task(AbstractTask):  # pylint: disable=too-many-instance-attributes
             loc="outside lower center",
             frameon=False,
         )
+        try:
+            plt.savefig(workingDirectory / f"dozor_{dataCollectionId:06d}.png")
+        except Exception as e:
+            logger.error(f"Couldn't save png file: {e}")

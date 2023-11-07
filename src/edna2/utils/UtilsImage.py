@@ -278,9 +278,7 @@ def getImageMetadataFromH5MasterFile(masterFilePath):
                 "beam_center_x": f["entry"]["instrument"]["detector"]["beam_center_x"][()],
                 "beam_center_y": f["entry"]["instrument"]["detector"]["beam_center_y"][()],
                 "count_time": f["entry"]["instrument"]["detector"]["count_time"][()],
-                "detector_distance": f["entry"]["instrument"]["detector"][
-                    "detector_distance"
-                ][()],
+                "detector_distance": f["entry"]["instrument"]["detector"]["detector_distance"][()],
                 "translation": list(
                     f["entry"]["instrument"]["detector"]["geometry"]["translation"][
                         "distances"
@@ -305,6 +303,7 @@ def getImageMetadataFromH5MasterFile(masterFilePath):
                     "detectorSpecific"
                 ]["data_collection_date"][()].decode("utf-8"),
                 "data": list(f["entry"]["data"]),
+                "omega" : f['/entry/sample/goniometer/omega'][()],
                 "num_images": len(f['/entry/sample/goniometer/omega'][()])
             }
     except Exception as e:
