@@ -124,13 +124,13 @@ class FastSADPhasingTask(AbstractTask):
             else:
                 logger.info("Data quality check passed.")
 
-        if self.doUploadIspyb:
-            #set ISPyB to running
-            self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
-                dataCollectionId=self.dataCollectionId,
-                processingCommandLine = self.processingCommandLine,
-                processingPrograms = self.processingPrograms,
-                timeStart = self.timeStart)
+        # if self.doUploadIspyb:
+        #     #set ISPyB to running
+        #     self.integrationId, self.programId = ISPyBStoreAutoProcResults.setIspybToRunning(
+        #         dataCollectionId=self.dataCollectionId,
+        #         processingCommandLine = self.processingCommandLine,
+        #         processingPrograms = self.processingPrograms,
+        #         timeStart = self.timeStart)
         
 
         #set up command line

@@ -63,9 +63,9 @@ class MAXIVFastProcessingTask(AbstractTask):
             "properties": {
                 "dataCollectionId": {"type": ["integer", "null"]},
                 "masterFilePath": {"type": ["string", "null"]},
-                "imageNoStart" :  {"type": ["integer", "null"]},
-                "imageNoEnd" :  {"type": ["integer", "null"]},
-                "numImages" :  {"type": ["integer", "null"]},
+                "imageNoStart": {"type": ["integer", "null"]},
+                "imageNoEnd": {"type": ["integer", "null"]},
+                "numImages": {"type": ["integer", "null"]},
                 "spaceGroup": {"type": ["integer", "string"]},
                 "unitCell": {"type": ["string", "null"]},
                 "residues": {"type": ["integer", "null"]},
@@ -175,13 +175,12 @@ class MAXIVFastProcessingTask(AbstractTask):
             numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
             self.imageNoEnd = numImages - self.imageNoStart + 1
 
-
         if numImages < 8:
             # if self.imageNoEnd - self.imageNoStart < -1:
             logger.error("There are fewer than 8 images, aborting")
             self.setFailure()
             return
-        
+
         if self.waitForFiles:
             dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(
                 self.masterFilePath
@@ -192,7 +191,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             logger.info("Waiting for start image: {0}".format(pathToStartImage))
             waitFileFirst = WaitFileTask(
                 inData={"file": pathToStartImage, "expectedSize": 5_000_000},
-                workingDirectorySuffix='firstImage'
+                workingDirectorySuffix="firstImage",
             )
             waitFileFirst.execute()
             if waitFileFirst.outData["timedOut"]:
@@ -205,7 +204,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             logger.info("Waiting for end image: {0}".format(pathToEndImage))
             waitFileLast = WaitFileTask(
                 inData={"file": pathToEndImage, "expectedSize": 5_000_000},
-                workingDirectorySuffix='lastImage'
+                workingDirectorySuffix="lastImage",
             )
             waitFileLast.execute()
             if waitFileLast.outData["timedOut"]:
@@ -219,7 +218,9 @@ class MAXIVFastProcessingTask(AbstractTask):
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+                "masterFilePath": str(self.masterFilePath)
+                if self.masterFilePath
+                else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "imageNoStart": self.imageNoStart,
@@ -228,7 +229,7 @@ class MAXIVFastProcessingTask(AbstractTask):
                 "waitForFiles": False,
                 "doUploadIspyb": True,
                 "test": self.test,
-                "timeOut":1800
+                "timeOut": 1800,
             },
             workingDirectorySuffix="0",
         )
@@ -237,7 +238,9 @@ class MAXIVFastProcessingTask(AbstractTask):
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+                "masterFilePath": str(self.masterFilePath)
+                if self.masterFilePath
+                else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "masterFilePath": self.masterFilePath,
@@ -247,7 +250,7 @@ class MAXIVFastProcessingTask(AbstractTask):
                 "doUploadIspyb": True,
                 "anomalous": False,
                 "test": self.test,
-                "timeOut": 1800
+                "timeOut": 1800,
             },
             workingDirectorySuffix="0",
         )
@@ -305,30 +308,30 @@ class MAXIVFastProcessingTask(AbstractTask):
                 )
 
         autoPROCTaskinData = {
-                "onlineAutoProcessing": False,
-                "workingDirectory":str(self.getWorkingDirectory()),
-                "dataCollectionId": self.dataCollectionId,
-                "unitCell": self.unitCell,
-                "spaceGroup": self.spaceGroup,
-                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
-                "anomalous": self.anomalous,
-                "test": self.test,
-                "doUploadIspyb": self.doUploadIspyb,
-                "waitForFiles": False,
-            }
+            "onlineAutoProcessing": False,
+            "workingDirectory": str(self.getWorkingDirectory()),
+            "dataCollectionId": self.dataCollectionId,
+            "unitCell": self.unitCell,
+            "spaceGroup": self.spaceGroup,
+            "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+            "anomalous": self.anomalous,
+            "test": self.test,
+            "doUploadIspyb": self.doUploadIspyb,
+            "waitForFiles": False,
+        }
 
-        xia2DialsTaskinData={
-                "onlineAutoProcessing": False,
-                "workingDirectory":str(self.getWorkingDirectory()),
-                "dataCollectionId": self.dataCollectionId,
-                "unitCell": self.unitCell,
-                "spaceGroup": self.spaceGroup,
-                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
-                "anomalous": self.anomalous,
-                "test": self.test,
-                "doUploadIspyb": self.doUploadIspyb,
-                "waitForFiles": False,
-            }
+        xia2DialsTaskinData = {
+            "onlineAutoProcessing": False,
+            "workingDirectory": str(self.getWorkingDirectory()),
+            "dataCollectionId": self.dataCollectionId,
+            "unitCell": self.unitCell,
+            "spaceGroup": self.spaceGroup,
+            "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+            "anomalous": self.anomalous,
+            "test": self.test,
+            "doUploadIspyb": self.doUploadIspyb,
+            "waitForFiles": False,
+        }
 
         doFastSADPhasing = False
         if self.anomalous and fastDpTask.isSuccess():
@@ -349,18 +352,19 @@ class MAXIVFastProcessingTask(AbstractTask):
             logger.info("Starting Fast SAD Phasing...")
             fastSADPhasingTask = FastSADPhasingTask(
                 inData={
-                    "test":self.test,
+                    "test": self.test,
                     "dataCollectionId": self.dataCollectionId,
                     "fast_dpMtzFile": mtzFile,
-                    "onlineAutoProcessing": True,
+                    "onlineAutoProcessing": False,
                     "checkDataFirst": False,
                 },
                 workingDirectorySuffix="0",
             )
-        
+            fastSADPhasingTask.start()
+
         autoProcSlurminDataJson = self.getWorkingDirectory() / "inDataAutoPROC.json"
         try:
-            with open(autoProcSlurminDataJson,"w+") as fp:
+            with open(autoProcSlurminDataJson, "w+") as fp:
                 json.dump(autoPROCTaskinData, fp, indent=4)
         except Exception as e:
             logger.error(f"generating autoPROC json failed: {e}")
@@ -379,15 +383,19 @@ class MAXIVFastProcessingTask(AbstractTask):
             """
             autoProcSlurm = dedent(autoProcSlurm)
 
-            aPinputstring = autoProcSlurm.encode('ascii')
-            out = subprocess.run("sbatch", input=aPinputstring, cwd=self.getWorkingDirectory(), capture_output=True)
-            aPJobId =  out.stdout.decode('ascii').strip('\n').split()[-1]
+            aPinputstring = autoProcSlurm.encode("ascii")
+            out = subprocess.run(
+                "sbatch",
+                input=aPinputstring,
+                cwd=self.getWorkingDirectory(),
+                capture_output=True,
+            )
+            aPJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
             logger.info(f"AutoPROCJob submitted to Slurm with jobId {aPJobId}")
-
 
         xia2DialsSlurminDataJson = self.getWorkingDirectory() / "inDataXia2.json"
         try:
-            with open(xia2DialsSlurminDataJson,"w+") as fp:
+            with open(xia2DialsSlurminDataJson, "w+") as fp:
                 json.dump(xia2DialsTaskinData, fp, indent=4)
         except Exception as e:
             logger.error(f"generating Xia2 json failed: {e}")
@@ -406,10 +414,21 @@ class MAXIVFastProcessingTask(AbstractTask):
             """
             xia2DIALSSlurm = dedent(xia2DIALSSlurm)
 
-            x2DinpuString = xia2DIALSSlurm.encode('ascii')
-            out = subprocess.run("sbatch", input=x2DinpuString, cwd=self.getWorkingDirectory(), capture_output=True)
-            x2DJobId = out.stdout.decode('ascii').strip('\n').split()[-1]
+            x2DinpuString = xia2DIALSSlurm.encode("ascii")
+            out = subprocess.run(
+                "sbatch",
+                input=x2DinpuString,
+                cwd=self.getWorkingDirectory(),
+                capture_output=True,
+            )
+            x2DJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
             logger.info(f"Xia2DIALS submitted to Slurm with jobId {x2DJobId}")
 
+        if doFastSADPhasing:
+            fastSADPhasingTask.join()
+            if fastSADPhasingTask.isSuccess():
+                logger.info("fast SAD phasing completed.")
+            else:
+                logger.error("Fast SAD phasing failed.")
 
         return outData
