@@ -319,7 +319,13 @@ class TruncateTask(AbstractTask):
 
         self.setLogFileName('truncate.log')
         logger.debug("Running ccp4/truncate...")
-        self.runCommandLine(commandLine, listCommand=listCommand)
+        try:
+            self.runCommandLine(commandLine, listCommand=listCommand)
+        except:
+            logger.error("Error running Truncate! Check the log file.")
+            outData["truncateLogPath"] = self.getWorkingDirectory() / self.getLogFileName()
+            self.setFailure()
+            return outData
 
         outData["truncateOutputMtz"] = self.outputFile
         outData["truncateLogPath"] = self.getWorkingDirectory() / self.getLogFileName()
@@ -346,8 +352,13 @@ class UniqueifyTask(AbstractTask):
         commandLine += '{0} {1}'.format(self.inputFile, self.outputFile)
 
         logger.debug("Running ccp4/uniqueify...")
+        try:
+            self.runCommandLine(commandLine)
+        except:
+            logger.error("Error running Unique! Check the logfile.")
+            self.setFailure()
+            return outData
 
-        self.runCommandLine(commandLine)
         outData["uniqueifyOutputMtz"] = self.outputFile
         self.isSuccess = Path(self.outputFile).exists()
 

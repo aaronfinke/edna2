@@ -33,6 +33,8 @@ import pathlib
 import tempfile
 import shutil
 import hashlib
+import string
+import random
 
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
@@ -40,6 +42,8 @@ from edna2.utils import UtilsLogging
 logger = UtilsLogging.getLogger()
 
 DEFAULT_TIMEOUT = 120  # s
+STRING_CHARACTERS = string.ascii_lowercase + string.digits + "_"
+STRING_LENGTH = 8
 
 
 def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
@@ -49,11 +53,17 @@ def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
     parentDirectory = pathlib.Path(parentDirectory)
     if workingDirectorySuffix is None:
         # Create unique directory
-        workingDirectory = tempfile.mkdtemp(
-            prefix=task.__class__.__name__ + "_", dir=parentDirectory
+        # workingDirectory = tempfile.mkdtemp(
+        #     prefix=task.__class__.__name__ + "_", dir=parentDirectory
+        # )
+
+        # os.chmod(workingDirectory, 0o755)
+        # workingDirectory = pathlib.Path(workingDirectory)
+        workingDirectory = makeRandomDirectoryPath(
+            prefix=task.__class__.__name__, dir=parentDirectory
         )
-        os.chmod(workingDirectory, 0o755)
-        workingDirectory = pathlib.Path(workingDirectory)
+        workingDirectory.mkdir(mode=0o775, parents=True, exist_ok=False)
+
     else:
         # Here we assume that the user knows what he is doing and there's no
         # race condition for creating the working directory!
@@ -76,6 +86,22 @@ def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
     return workingDirectory
 
 
+def makeRandomDirectoryPath(prefix, dir):
+    "returns a random directory path that does not exist yet"
+    randomString = "".join(
+        random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH)
+    )
+    dirPath = prefix + "_" + randomString
+    returnPath = pathlib.Path(dir) / dirPath
+    while returnPath.exists():
+        randomString = "".join(
+            random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH)
+        )
+        dirPath = prefix + "_" + randomString
+        returnPath = pathlib.Path(dir) / dirPath
+    return returnPath
+
+
 def createPyarchFilePath(filePath):
     """
     This method translates from an ESRF "visitor" path to a "pyarch" path:
@@ -86,16 +112,22 @@ def createPyarchFilePath(filePath):
         filePath = pathlib.Path(filePath)
     listOfDirectories = list(filePath.parts)
     if UtilsConfig.isMAXIV():
-        #NOTE: Temporary fix that should already be in the branch. This is just a temporary
+        # NOTE: Temporary fix that should already be in the branch. This is just a temporary
         # patch to avoid checking out the branch in the current state.
-        if 'visitors' in filePath.parts:
-            index = filePath.parts.index('visitors')
-        elif 'proprietary' in filePath.parts:
-            index = filePath.parts.index('proprietary')
+        if "visitors" in filePath.parts:
+            index = filePath.parts.index("visitors")
+        elif "proprietary" in filePath.parts:
+            index = filePath.parts.index("proprietary")
         else:
-            logger.error("The /data/ directory should contain either visitors/ or proprietary/\n")
-            assert False, "Unexpected filesystem dirs" #Don't continue if filesystem is not setup right.
-        return pathlib.Path('/data/staff/ispybstorage').joinpath(*filePath.parts[index:])
+            logger.error(
+                "The /data/ directory should contain either visitors/ or proprietary/\n"
+            )
+            assert (
+                False
+            ), "Unexpected filesystem dirs"  # Don't continue if filesystem is not setup right.
+        return pathlib.Path("/data/staff/ispybstorage").joinpath(
+            *filePath.parts[index:]
+        )
 
     if UtilsConfig.isEMBL():
         if "p13" in listOfDirectories[0:3] or "P13" in listOfDirectories[0:3]:
@@ -132,6 +164,7 @@ def createPyarchFilePath(filePath):
         year = fifthDirectory[0:4]
         proposal = None
         beamline = None
+        listOfRemainingDirectories = listOfDirectories
         if dataDirectory == "data" and secondDirectory == "gz":
             if thirdDirectory == "visitor":
                 proposal = fourthDirectory
@@ -169,9 +202,9 @@ def createPyarchFilePath(filePath):
 
 
 def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
-    """Wait for the file to appear on disk.
-    """
+    """Wait for the file to appear on disk."""
     file_path = pathlib.Path(file)
+    file_size = None
     final_size = None
     has_timed_out = False
     should_continue = True
@@ -188,12 +221,17 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
     # Check if file is there
     if file_path.exists():
         file_size = file_path.stat().st_size
-        fileHash_old = get_md5Hash(file_path)
+        file_mtime = file_path.stat().st_mtime
+        time.sleep(0.1)
         # if expectedSize is not None:
         #     # Check size
         #     if file_size > expectedSize:
         #         should_continue = False
         # final_size = file_size
+    else:
+        file_size = 0
+        file_mtime = 0
+        time.sleep(0.1)
     if should_continue:
         logger.info("Waiting for file %s" % file_path)
         #
@@ -210,26 +248,32 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
             # Check if time out
             if time_elapsed > timeOut:
                 has_timed_out = True
-                str_warning = "Timeout while waiting for file %s" % file_path
+                str_warning = f"Timeout while waiting for file {file_path}"
                 logger.warning(str_warning)
             else:
                 # Check if file is there
                 if file_path.exists():
-                    fileHash = get_md5Hash(file_path)
-                    file_size = file_path.stat().st_size
+                    file_size_new = file_path.stat().st_size
+                    file_mtime_new = file_path.stat().st_mtime
                     if expectedSize is not None:
                         # Check that it has right size
-                        if file_size > expectedSize and fileHash == fileHash_old:
+                        if (
+                            file_size > expectedSize
+                            and file_size_new == file_size
+                            and file_mtime_new == file_mtime
+                        ):
                             should_continue = False
                     else:
-                        if fileHash == fileHash_old:
+                        if file_size_new == file_size and file_mtime_new == file_mtime:
                             should_continue = False
                     final_size = file_size
-                    fileHash_old = fileHash
+                    file_size = file_size_new
+                    file_mtime == file_mtime_new
             if should_continue:
                 # Sleep 1 s
                 time.sleep(1)
     return has_timed_out, final_size
+
 
 def get_md5Hash(file):
     file_path = pathlib.Path(file)
@@ -237,13 +281,16 @@ def get_md5Hash(file):
         return None
     with open(file_path, "rb") as fp:
         md5Hash = hashlib.md5()
-        while chunk := fp.read(8192):
+        chunk = fp.read(65536)
+        while len(chunk) > 0:
             md5Hash.update(chunk)
+            chunk = fp.read(65536)
     hexHash = md5Hash.hexdigest()
     return hexHash
 
+
 def stripDataDirectoryPrefix(data_directory):
-    """ Removes any paths before /data/..., e.g. /gpfs/easy/data/..."""
+    """Removes any paths before /data/..., e.g. /gpfs/easy/data/..."""
     list_paths = str(data_directory).split(os.sep)
     if "data" in list_paths:
         while list_paths[1] != "data":
@@ -253,11 +300,12 @@ def stripDataDirectoryPrefix(data_directory):
         new_data_directory = data_directory
     return pathlib.Path(new_data_directory)
 
+
 def systemCopyFile(fp_in, fp_out):
     """Uses shutil.copy2 to copy files."""
     try:
         logger.debug(f"Copying {fp_in} to {fp_out}...")
-        fout = shutil.copy2(fp_in,fp_out)
+        fout = shutil.copy2(fp_in, fp_out)
     except Exception as e:
         logger.error(f"Copying {fp_in} to {fp_out} failed: {e}.")
         fout = None

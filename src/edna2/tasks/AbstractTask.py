@@ -79,7 +79,7 @@ class AbstractTask():  # noqa R0904
         self._dictInOut["inData"] = json.dumps(inData, default=str)
         self._dictInOut["outData"] = json.dumps({})
         self._dictInOut["isFailure"] = False
-        self._dictInOut["timeOut"] = None
+        self._dictInOut["timeOut"] = self.setTimeOut()
         self._dictInOut["timeoutExit"] = False
         self._process = EDNA2Process(target=self.executeRun, args=())
         self._workingDirectorySuffix = workingDirectorySuffix
@@ -170,13 +170,23 @@ class AbstractTask():  # noqa R0904
             with open(str(self._workingDirectory / jsonName), "w") as f:
                 f.write(json.dumps(outData, default=str, indent=4))
     
-    def setTimeout(self,timeOut):
+    def setTimeOut(self,timeOut=None):
+        inData = self.getInData()
         if timeOut is not None:
             timeOut = float(timeOut)
-        self._dictInOut["timeOut"] = timeOut
+            logger.debug(f'timeOut set to {timeOut}')
+        elif inData.get('timeOut'):
+            timeOut = float(inData.get('timeOut'))
+            logger.debug(f'timeOut set to {timeOut} from json')
+        elif UtilsConfig.get(self,'timeOut'):
+            timeout = UtilsConfig.get(self,'timeOut')
+            logger.debug(f'timeOut set to {timeOut} from config')
+        return timeOut
 
-    def getTimeout(self):
-        return self._dictInOut.get("timeOut", None)
+    def getTimeOut(self):
+        return self._dictInOut.get("timeOut")
+    
+    timeOut = property(getTimeOut,setTimeOut)
 
     def getLogPath(self):
         if self._logFileName is None:
@@ -264,9 +274,7 @@ class AbstractTask():  # noqa R0904
         jobName = "EDNA2_" + self._jobName
         exclusive = UtilsConfig.get("Slurm","is_exclusive",False)
         nodes = UtilsConfig.get("Slurm","nodes",1)
-        core = UtilsConfig.get("Slurm","cores",1)
-        
-        time = timeout
+        core = UtilsConfig.get("Slurm","cores",10)
         mem = UtilsConfig.get("Slurm","mem",4000)
         workingDir = str(self._workingDirectory)
         if workingDir.startswith("/mntdirect/_users"):
@@ -275,11 +283,12 @@ class AbstractTask():  # noqa R0904
         script += '#SBATCH --job-name="{0}"\n'.format(jobName)
         script += "#SBATCH --partition={0}\n".format(partition) if partition else ""
         script += "#SBATCH --exclusive\n" if exclusive else ""
-        script += "#SBATCH --mem={0}\n".format(mem) if not exclusive else ""
+        script += "#SBATCH --mem="
+        script += "0\n" if exclusive else "{0}\n".format(mem) 
         script += "#SBATCH --nodes={0}\n".format(nodes)
         # script += "#SBATCH --nodes=1\n"  # Necessary for not splitting jobs! See ATF-57
         script += "#SBATCH --cpus-per-task={0}\n".format(core) if not exclusive else ""
-        script += "#SBATCH --time={0}\n".format(time)
+        script += "#SBATCH --time={0}\n".format(timeout) if timeout else "0"
         script += "#SBATCH --chdir={0}\n".format(workingDir)
         script += f"#SBATCH --output={jobName}_%j.out\n"
         script += f"#SBATCH --error={jobName}_%j.err\n"
@@ -362,7 +371,7 @@ class AbstractTask():  # noqa R0904
         errorLogPath = self.getErrorLogPath()
         errorLogFileName = os.path.basename(errorLogPath)
         commandLine += " 1>{0} 2>{1}".format(logFileName, errorLogFileName)
-        if listCommand is not None:
+        if listCommand:
             commandLine += " << EOF-EDNA2\n"
             for command in listCommand:
                 commandLine += command + "\n"
@@ -411,7 +420,7 @@ class AbstractTask():  # noqa R0904
         self._process.start()
 
     def join(self):
-        timeOut = self.getTimeout()
+        timeOut = self.getTimeOut()
         if timeOut is not None:
             logger.debug(f"timeout for {self.__class__.__name__}: {timeOut}")
         self._process.join(timeout=timeOut)

@@ -23,6 +23,7 @@ __authors__ = ["A. Finke"]
 __license__ = "MIT"
 __date__ = "20/01/2023"
 
+import json
 import os
 import socket
 import time
@@ -38,6 +39,8 @@ from edna2.utils import UtilsImage
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
 from edna2.utils import UtilsCCTBX
+from textwrap import dedent
+import subprocess
 
 
 logger = UtilsLogging.getLogger()
@@ -45,13 +48,10 @@ logger = UtilsLogging.getLogger()
 from edna2.tasks.WaitFileTask import WaitFileTask
 from edna2.tasks.Edna2ProcTask import Edna2ProcTask
 from edna2.tasks.FastdpTask import FastdpTask
-from edna2.tasks.AutoPROCTask import AutoPROCTask
-from edna2.tasks.Xia2DIALSTask import Xia2DIALSTask
-# from edna2.tasks.ControlPyDozor import ControlPyDozor
 from edna2.tasks.FastSADPhasingTask import FastSADPhasingTask
 
 
-class MAXIVAutoProcessingTask(AbstractTask):
+class MAXIVFastProcessingTask(AbstractTask):
     """
     Runs four autoprocessing pipelines.
     """
@@ -63,9 +63,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
             "properties": {
                 "dataCollectionId": {"type": ["integer", "null"]},
                 "masterFilePath": {"type": ["string", "null"]},
-                "imageNoStart" :  {"type": ["integer", "null"]},
-                "imageNoEnd" :  {"type": ["integer", "null"]},
-                "numImages" :  {"type": ["integer", "null"]},
+                "imageNoStart": {"type": ["integer", "null"]},
+                "imageNoEnd": {"type": ["integer", "null"]},
+                "numImages": {"type": ["integer", "null"]},
                 "spaceGroup": {"type": ["integer", "string"]},
                 "unitCell": {"type": ["string", "null"]},
                 "residues": {"type": ["integer", "null"]},
@@ -83,7 +83,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
         UtilsLogging.addLocalFileHandler(
             logger, self.getWorkingDirectory() / "MAXIVAutoProcessing.log"
         )
-        logger.info("AutoPROC processing started")
+        logger.info("MAX IV Autoprocessing started")
         if os.environ.get("SLURM_JOB_ID"):
             logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
         logger.info(f"Running on {socket.gethostname()}")
@@ -175,13 +175,12 @@ class MAXIVAutoProcessingTask(AbstractTask):
             numImages = UtilsImage.getNumberOfImages(self.masterFilePath)
             self.imageNoEnd = numImages - self.imageNoStart + 1
 
-
         if numImages < 8:
             # if self.imageNoEnd - self.imageNoStart < -1:
             logger.error("There are fewer than 8 images, aborting")
             self.setFailure()
             return
-        
+
         if self.waitForFiles:
             dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(
                 self.masterFilePath
@@ -191,7 +190,8 @@ class MAXIVAutoProcessingTask(AbstractTask):
 
             logger.info("Waiting for start image: {0}".format(pathToStartImage))
             waitFileFirst = WaitFileTask(
-                inData={"file": pathToStartImage, "expectedSize": 100000}
+                inData={"file": pathToStartImage, "expectedSize": 5_000_000},
+                workingDirectorySuffix="firstImage",
             )
             waitFileFirst.execute()
             if waitFileFirst.outData["timedOut"]:
@@ -203,7 +203,8 @@ class MAXIVAutoProcessingTask(AbstractTask):
 
             logger.info("Waiting for end image: {0}".format(pathToEndImage))
             waitFileLast = WaitFileTask(
-                inData={"file": pathToEndImage, "expectedSize": 100000}
+                inData={"file": pathToEndImage, "expectedSize": 5_000_000},
+                workingDirectorySuffix="lastImage",
             )
             waitFileLast.execute()
             if waitFileLast.outData["timedOut"]:
@@ -213,27 +214,13 @@ class MAXIVAutoProcessingTask(AbstractTask):
                     )
                 )
 
-
-
-        # imgQualityDozor = ControlPyDozor(
-        #     inData={
-        #         "dataCollectionId": self.dataCollectionId,
-        #         "masterFile": self.masterFilePath,
-        #         "startNo": self.imageNoStart,
-        #         "batchSize": numImages,
-        #         "directory": str(self.getWorkingDirectory() / "ControlPyDozor_0"),
-        #         "doISPyBUpload": True,
-        #         "doSubmit": True,
-        #         "returnSpotList": False,
-        #     },
-        #     workingDirectorySuffix="0",
-        # )
-
         edna2ProcTask = Edna2ProcTask(
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": self.masterFilePath,
+                "masterFilePath": str(self.masterFilePath)
+                if self.masterFilePath
+                else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "imageNoStart": self.imageNoStart,
@@ -242,6 +229,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "waitForFiles": False,
                 "doUploadIspyb": True,
                 "test": self.test,
+                "timeOut": 1800,
             },
             workingDirectorySuffix="0",
         )
@@ -250,7 +238,9 @@ class MAXIVAutoProcessingTask(AbstractTask):
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": self.masterFilePath,
+                "masterFilePath": str(self.masterFilePath)
+                if self.masterFilePath
+                else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "masterFilePath": self.masterFilePath,
@@ -260,6 +250,7 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "doUploadIspyb": True,
                 "anomalous": False,
                 "test": self.test,
+                "timeOut": 1800,
             },
             workingDirectorySuffix="0",
         )
@@ -296,8 +287,6 @@ class MAXIVAutoProcessingTask(AbstractTask):
                 "fastDp": fastDpTask.outData,
             }
             self.anomalous = fastDpTask.outData.get("anomalous", False)
-        else:
-            self.anomalous = False
 
         if self.anomalous:
             logger.debug("Anomalous flag switched on.")
@@ -306,50 +295,43 @@ class MAXIVAutoProcessingTask(AbstractTask):
         # add comments to ISPyB entry
         if self.anomalous:
             comments += "Strong anomalous signal detected. "
-        if edna2ProcTask.outData.get("reindex", False):
-            comments += "Data could not be processed by EDNA2Proc with supplied unit cell and space group! "
-        if edna2ProcTask.outData.get("twinning", False) and edna2ProcTask.outData.get(
-            "pseudotranslation", False
-        ):
-            comments += "Twinning and pseudotranslation detected by phenix.xtriage! "
-        elif edna2ProcTask.outData.get("twinning", False):
-            comments += "Twinning detected by phenix.xtriage! "
-        elif edna2ProcTask.outData.get("pseudotranslation", False):
-            comments += "Pseudotranslation detected by phenix.xtriage! "
-        if comments:
-            UtilsIspyb.updateDataCollectionGroupComments(
-                self.dataCollectionId, comments
-            )
+        if edna2ProcTask.isSuccess():
+            if edna2ProcTask.outData.get("reindex", False):
+                comments += "Data could not be processed by EDNA2Proc with supplied unit cell and space group! "
+            if edna2ProcTask.outData.get("twinning", False):
+                comments += "Twinning detected by phenix.xtriage! "
+            if edna2ProcTask.outData.get("pseudotranslation", False):
+                comments += "Pseudotranslation detected by phenix.xtriage! "
+            if comments:
+                UtilsIspyb.updateDataCollectionGroupComments(
+                    self.dataCollectionId, comments
+                )
 
-        autoPROCTask = AutoPROCTask(
-            inData={
-                "onlineAutoProcessing": True,
-                "dataCollectionId": self.dataCollectionId,
-                "unitCell": self.unitCell,
-                "spaceGroup": self.spaceGroup,
-                "masterFilePath": self.masterFilePath,
-                "anomalous": self.anomalous,
-                "test": self.test,
-                "doUploadIspyb": self.doUploadIspyb,
-                "waitForFiles": False,
-            },
-            workingDirectorySuffix="0",
-        )
+        autoPROCTaskinData = {
+            "onlineAutoProcessing": False,
+            "workingDirectory": str(self.getWorkingDirectory()),
+            "dataCollectionId": self.dataCollectionId,
+            "unitCell": self.unitCell,
+            "spaceGroup": self.spaceGroup,
+            "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+            "anomalous": self.anomalous,
+            "test": self.test,
+            "doUploadIspyb": self.doUploadIspyb,
+            "waitForFiles": False,
+        }
 
-        xia2DialsTask = Xia2DIALSTask(
-            inData={
-                "onlineAutoProcessing": True,
-                "dataCollectionId": self.dataCollectionId,
-                "unitCell": self.unitCell,
-                "spaceGroup": self.spaceGroup,
-                "masterFilePath": self.masterFilePath,
-                "anomalous": self.anomalous,
-                "test": self.test,
-                "doUploadIspyb": self.doUploadIspyb,
-                "waitForFiles": False,
-            },
-            workingDirectorySuffix="0",
-        )
+        xia2DialsTaskinData = {
+            "onlineAutoProcessing": False,
+            "workingDirectory": str(self.getWorkingDirectory()),
+            "dataCollectionId": self.dataCollectionId,
+            "unitCell": self.unitCell,
+            "spaceGroup": self.spaceGroup,
+            "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+            "anomalous": self.anomalous,
+            "test": self.test,
+            "doUploadIspyb": self.doUploadIspyb,
+            "waitForFiles": False,
+        }
 
         doFastSADPhasing = False
         if self.anomalous and fastDpTask.isSuccess():
@@ -370,31 +352,83 @@ class MAXIVAutoProcessingTask(AbstractTask):
             logger.info("Starting Fast SAD Phasing...")
             fastSADPhasingTask = FastSADPhasingTask(
                 inData={
-                    "test":self.test,
+                    "test": self.test,
                     "dataCollectionId": self.dataCollectionId,
                     "fast_dpMtzFile": mtzFile,
-                    "onlineAutoProcessing": True,
+                    "onlineAutoProcessing": False,
                     "checkDataFirst": False,
                 },
                 workingDirectorySuffix="0",
             )
             fastSADPhasingTask.start()
 
-        autoPROCTask.start()
-        xia2DialsTask.start()
+        autoProcSlurminDataJson = self.getWorkingDirectory() / "inDataAutoPROC.json"
+        try:
+            with open(autoProcSlurminDataJson, "w+") as fp:
+                json.dump(autoPROCTaskinData, fp, indent=4)
+        except Exception as e:
+            logger.error(f"generating autoPROC json failed: {e}")
+        if autoProcSlurminDataJson.is_file():
+            autoProcSlurm = f"""\
+            #!/bin/bash
+            #SBATCH --exclusive
+            #SBATCH -t 02:00:00
+            #SBATCH --mem=0
+            #SBATCH --partition=fujitsu
+            #SBATCH -J "EDNA2_aP"
+            #SBATCH --output EDNA2job_%j.out
+            #SBATCH --chdir {self.getWorkingDirectory()}
+            source /mxn/groups/sw/mxsw/env_setup/edna2_proc.sh
+            run_edna2.py --inDataFile {autoProcSlurminDataJson} AutoPROCTask
+            """
+            autoProcSlurm = dedent(autoProcSlurm)
 
-        autoPROCTask.join()
-        xia2DialsTask.join()
+            aPinputstring = autoProcSlurm.encode("ascii")
+            out = subprocess.run(
+                "sbatch",
+                input=aPinputstring,
+                cwd=self.getWorkingDirectory(),
+                capture_output=True,
+            )
+            aPJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
+            logger.info(f"AutoPROCJob submitted to Slurm with jobId {aPJobId}")
+
+        xia2DialsSlurminDataJson = self.getWorkingDirectory() / "inDataXia2.json"
+        try:
+            with open(xia2DialsSlurminDataJson, "w+") as fp:
+                json.dump(xia2DialsTaskinData, fp, indent=4)
+        except Exception as e:
+            logger.error(f"generating Xia2 json failed: {e}")
+        if xia2DialsSlurminDataJson.is_file():
+            xia2DIALSSlurm = f"""\
+            #!/bin/bash
+            #SBATCH --exclusive
+            #SBATCH -t 02:00:00
+            #SBATCH --mem=0
+            #SBATCH --partition=fujitsu
+            #SBATCH -J "EDNA2_x2d"
+            #SBATCH --output EDNA2job_%j.out
+            #SBATCH --chdir {self.getWorkingDirectory()}
+            source /mxn/groups/sw/mxsw/env_setup/edna2_proc.sh
+            run_edna2.py --inDataFile {xia2DialsSlurminDataJson} Xia2DIALSTask
+            """
+            xia2DIALSSlurm = dedent(xia2DIALSSlurm)
+
+            x2DinpuString = xia2DIALSSlurm.encode("ascii")
+            out = subprocess.run(
+                "sbatch",
+                input=x2DinpuString,
+                cwd=self.getWorkingDirectory(),
+                capture_output=True,
+            )
+            x2DJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
+            logger.info(f"Xia2DIALS submitted to Slurm with jobId {x2DJobId}")
+
         if doFastSADPhasing:
             fastSADPhasingTask.join()
+            if fastSADPhasingTask.isSuccess():
+                logger.info("fast SAD phasing completed.")
+            else:
+                logger.error("Fast SAD phasing failed.")
 
-        if autoPROCTask.isSuccess():
-            outData["autoPROCTask"] = autoPROCTask.outData
-
-        if xia2DialsTask.isSuccess():
-            outData["xia2DialsTask"] = xia2DialsTask.outData
-
-        self.timeEnd = time.perf_counter()
-        logger.info(f"MAXIVAutoProcessingTask Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
-        outData["processTime"] = self.timeEnd-self.timeStart
         return outData

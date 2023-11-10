@@ -294,7 +294,7 @@ class Edna2ProcTask(AbstractTask):
             ) = self.generateImageListFromH5Master_fast(
                 masterFilePath=self.masterFilePath
             )
-            self.subWedgeAssembly = SubWedgeAssembly(inData=self.imageList)
+            self.subWedgeAssembly = SubWedgeAssembly(inData=self.imageList, workingDirectorySuffix='0')
             self.subWedgeAssembly.execute()
             self.xdsIndexingInData = self.subWedgeAssembly.outData
         else:
@@ -519,17 +519,13 @@ class Edna2ProcTask(AbstractTask):
         correctLp_path = self.resultsDirectory / f"{self.pyarchPrefix}_CORRECT.LP"
         integrateHkl_path = self.resultsDirectory / f"{self.pyarchPrefix}_INTEGRATE.HKL"
         xdsAsciiHkl_path = self.resultsDirectory / f"{self.pyarchPrefix}_XDS_ASCII.HKL"
-        try:
-            shutil.copy(
-                Path(self.integration.outData["integrateHkl"]), integrateHkl_path
-            )
-            shutil.copy(Path(self.integration.outData["xdsInp"]), xds_INP_result_path)
-            shutil.copy(Path(self.integration.outData["integrateLp"]), integrateLp_path)
-            shutil.copy(Path(self.integration.outData["correctLp"]), correctLp_path)
-            shutil.copy(Path(self.integration.outData["xdsAsciiHkl"]), xdsAsciiHkl_path)
-        except Exception as e:
-            logger.warning("Couldn't copy file to result directory")
-            logger.warning(e)
+        UtilsPath.systemCopyFile(
+            Path(self.integration.outData["integrateHkl"]), integrateHkl_path
+        )
+        UtilsPath.systemCopyFile(Path(self.integration.outData["xdsInp"]), xds_INP_result_path)
+        UtilsPath.systemCopyFile(Path(self.integration.outData["integrateLp"]), integrateLp_path)
+        UtilsPath.systemCopyFile(Path(self.integration.outData["correctLp"]), correctLp_path)
+        UtilsPath.systemCopyFile(Path(self.integration.outData["xdsAsciiHkl"]), xdsAsciiHkl_path)
 
         self.resultFilePaths.extend(
             [
@@ -763,7 +759,7 @@ class Edna2ProcTask(AbstractTask):
                     )
                 self.setFailure()
                 return
-            logger.info(f"Resolution cutoff is {self.firstResCutoff}")
+            logger.info(f"Resolution cutoff is {self.resCutoff}")
             if self.doUploadIspyb:
                 self.logToIspyb(
                     self.integrationId,
@@ -818,14 +814,10 @@ class Edna2ProcTask(AbstractTask):
         )
         self.resultFilePaths.append(pointlessUnmergedMtzPath)
 
-        try:
-            shutil.copy(
-                Path(self.pointlessTaskRerun.outData["pointlessUnmergedMtz"]),
-                pointlessUnmergedMtzPath,
-            )
-        except Exception as e:
-            logger.warning("Couldn't copy file to result directory")
-            logger.warning(e)
+        UtilsPath.systemCopyFile(
+            Path(self.pointlessTaskRerun.outData["pointlessUnmergedMtz"]),
+            pointlessUnmergedMtzPath,
+        )
 
         aimlessMergedMtzPath = (
             self.resultsDirectory / f"{self.pyarchPrefix}_aimless.mtz"
@@ -839,93 +831,48 @@ class Edna2ProcTask(AbstractTask):
             [aimlessMergedMtzPath, aimlessUnmergedMtzPath, aimlessLogPath]
         )
 
-        try:
-            shutil.copy(
-                Path(self.aimlessTask.outData["aimlessMergedMtz"]), aimlessMergedMtzPath
-            )
-            shutil.copy(
-                Path(self.aimlessTask.outData["aimlessUnmergedMtz"]),
-                aimlessUnmergedMtzPath,
-            )
-            shutil.copy(Path(self.aimlessTask.outData["aimlessLog"]), aimlessLogPath)
-        except Exception as e:
-            logger.warning("Couldn't copy file to result directory")
-            logger.warning(e)
+        UtilsPath.systemCopyFile(
+            Path(self.aimlessTask.outData["aimlessMergedMtz"]), aimlessMergedMtzPath
+        )
+        UtilsPath.systemCopyFile(
+            Path(self.aimlessTask.outData["aimlessUnmergedMtz"]),
+            aimlessUnmergedMtzPath,
+        )
+        UtilsPath.systemCopyFile(Path(self.aimlessTask.outData["aimlessLog"]), aimlessLogPath)
 
-        # self.timeXscaleStart = time.perf_counter()
-        # self.xscaleTaskData = {
-        #     "xdsAsciiPath": self.xdsRerun.outData["xdsAsciiHkl"],
-        #     "bins" : self.bins,
-        #     "sgNumber": self.pointlessTask.outData["sgnumber"],
-        #     "cell" : self.pointlessTask.outData["cell"],
-        # }
+        self.timeXscaleStart = time.perf_counter()
+        self.xscaleTaskData = {
+            "xdsAsciiPath": self.xdsRerun.outData["xdsAsciiHkl"],
+            "bins" : self.bins,
+            "sgNumber": self.pointlessTask.outData["sgnumber"],
+            "cell" : self.pointlessTask.outData["cell"],
+            "onlineAutoProcessing": self.onlineAutoProcessing,
+            "isAnom" : self.anomalous,
+            "res" : self.resCutoff
+        }
+        logger.info("Start XSCALE run...")
+        self.xscaleTaskData_merge = self.xscaleTaskData
+        self.xscaleTaskData_merge['merge'] = True
 
-        # self.xscaleTaskData_merge = self.xscaleTaskData
-        # self.xscaleTaskData_merge['isAnom'] = self.anomalous
-        # self.xscaleTaskData_merge['merge'] = True
-        # self.xscaleTaskData_merge['res'] = self.resCutoff
-        # self.xscaleTaskData_merge['onlineAutoProcessing'] = self.onlineAutoProcessing
+        self.xscaleTask_merge = XSCALETask(inData=self.xscaleTaskData_merge, workingDirectorySuffix="merged")
 
-        # self.xscaleTask_merge = XSCALETask(inData=self.xscaleTaskData_merge, workingDirectorySuffix="merged")
+        self.xscaleTaskData_unmerge = self.xscaleTaskData
+        self.xscaleTaskData_unmerge['merge'] = False
 
-        # self.xscaleTaskData_unmerge = self.xscaleTaskData
-        # self.xscaleTaskData_unmerge['isAnom'] = self.anomalous
-        # self.xscaleTaskData_unmerge['merge'] = False
-        # self.xscaleTaskData_unmerge['res'] = self.resCutoff
-        # self.xscaleTaskData_unmerge['onlineAutoProcessing'] = self.onlineAutoProcessing
+        self.xscaleTask_unmerge = XSCALETask(inData=self.xscaleTaskData_unmerge, workingDirectorySuffix="unmerged")
 
-        # self.xscaleTask_unmerge = XSCALETask(inData=self.xscaleTaskData_unmerge, workingDirectorySuffix="unmerged")
-
-        # logger.info("Starting XSCALE merging...")
-        # self.logToIspyb(self.integrationId,
-        #              'Scaling', 'Launched', 'Start of XSCALE')
-
-        # self.xscaleTask_merge.start()
-        # self.xscaleTask_unmerge.start()
-
-        # self.xscaleTask_merge.join()
-        # self.xscaleTask_unmerge.join()
-
-        # time4 = time.perf_counter()
-        # self.timeXscale = time4-time3
-
-        # for task in [self.xscaleTask_merge,self.xscaleTask_unmerge]:
-        #     if task.isFailure():
-        #         logger.error("XSCALE generation failed")
-        #         self.logToIspyb(self.integrationId,
-        #                  'Scaling',
-        #                  'Failed',
-        #                  'XSCALE failed after {0:.1f}s'.format(self.timeXscale))
-        #         self.setFailure()
-        #         return
-
-        # logger.info("XSCALE generation finished.")
-        # self.logToIspyb(self.integrationId,
-        #         'Scaling',
-        #         'Successful',
-        #         'XSCALE finished in {0:.1f}s'.format(self.timeXscale))
-
-        # xscaleTask_mergeLPFile = self.resultsDirectory / "ep__merged_XSCALE.LP"
-        # xscaleTask_unmergeLPFile = self.resultsDirectory / "ep__unmerged_XSCALE.LP"
-        # self.resultFilePaths.extend([xscaleTask_mergeLPFile,
-        #                              xscaleTask_unmergeLPFile])
-        # try:
-        #     shutil.copy(self.xscaleTask_merge.outData["xscaleLp"], xscaleTask_mergeLPFile)
-        #     shutil.copy(self.xscaleTask_unmerge.outData["xscaleLp"], xscaleTask_unmergeLPFile)
-        # except Exception as e:
-        #     logger.warning("Couldn't copy file to result directory")
-        #     logger.warning(e)
-
-        # logger.debug(f"XSCALE output: {self.xscaleTask_merge.outData}")
+        self.xscaleTask_merge.start()
+        self.xscaleTask_unmerge.start()
 
         logger.info("Start phenix.xtriage run...")
-        self.phenixXTriageTaskData = {"input_file": aimlessUnmergedMtzPath}
-        self.phenixXTriageTask = PhenixXTriageTask(inData=self.phenixXTriageTaskData)
+        self.phenixXTriageTaskData = {
+            "input_file": aimlessUnmergedMtzPath,
+            "workingDirectory": self.getWorkingDirectory()
+        }
+        self.phenixXTriageTask = PhenixXTriageTask(inData=self.phenixXTriageTaskData, workingDirectorySuffix="final")
         self.phenixXTriageTask.start()
 
         # now run truncate/unique
-        truncateData = {}
-        truncateData["inputFile"] = aimlessMergedMtzPath
         tempFile = tempfile.NamedTemporaryFile(
             suffix=".mtz",
             prefix="tmp2-",
@@ -934,26 +881,46 @@ class Edna2ProcTask(AbstractTask):
         )
         truncateOut = tempFile.name
         tempFile.close()
-        truncateData["outputFile"] = truncateOut
-        truncateData["nres"] = self.inData.get("nres")
-        truncateData["isAnom"] = self.anomalous
-        truncateData["res"] = self.resCutoff
-        truncateData["outputFile"] = truncateOut
-
         os.chmod(truncateOut, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
+        shutil.chown(truncateOut, group = self.getWorkingDirectory().group())
 
         logger.info("Start ccp4/truncate...")
-        self.truncate = TruncateTask(inData=truncateData)
+        self.truncate = TruncateTask(inData= {
+            "inputFile" : aimlessMergedMtzPath,
+            "outputFile" : truncateOut,
+            "isAnom" : self.anomalous,
+            "res" : self.resCutoff,
+        }, workingDirectorySuffix="final")
         self.truncate.execute()
+        if self.truncate.isFailure():
+            logger.error("Error running truncate. As this is a rare occurrence, it usually means")
+            logger.error("something is seriously wrong with the data. Stopping here.")
 
         uniqueifyData = {
             "inputFile": self.truncate.outData["truncateOutputMtz"],
             "outputFile": "truncate_unique.mtz",
         }
-        self.uniqueify = UniqueifyTask(inData=uniqueifyData)
+        self.uniqueify = UniqueifyTask(inData=uniqueifyData,  workingDirectorySuffix="final")
 
-        self.uniqueify.execute()
+        self.uniqueify.start()
+        
+        self.xscaleTask_merge.join()
+        self.xscaleTask_unmerge.join()
+        logger.info("XSCALE run finished.")
+
+        xscaleTask_mergeLPFile = self.resultsDirectory / "ap__merged_XSCALE.LP"
+        xscaleTask_unmergeLPFile = self.resultsDirectory / "ap__unmerged_XSCALE.LP"
+        self.resultFilePaths.extend([xscaleTask_mergeLPFile,
+                                     xscaleTask_unmergeLPFile])
+        UtilsPath.systemCopyFile(self.xscaleTask_merge.outData["xscaleLp"], xscaleTask_mergeLPFile)
+        UtilsPath.systemCopyFile(self.xscaleTask_unmerge.outData["xscaleLp"], xscaleTask_unmergeLPFile)
+
         self.phenixXTriageTask.join()
+        self.uniqueify.join()
+        if self.uniqueify.isFailure():
+            logger.error("Error running uniqueify. As this is a rare occurrence, it usually means")
+            logger.error("something is seriously wrong with the data. Stopping here.")
+
 
         truncateLog = self.resultsDirectory / f"{self.pyarchPrefix}_truncate.log"
         uniqueMtz = self.resultsDirectory / f"{self.pyarchPrefix}_truncate.mtz"
@@ -961,29 +928,25 @@ class Edna2ProcTask(AbstractTask):
             self.resultsDirectory / f"{self.pyarchPrefix}_phenix_xtriage_anom.mtz"
         )
 
-        try:
-            shutil.copy(Path(self.truncate.outData["truncateLogPath"]), truncateLog)
-            shutil.copy(Path(self.uniqueify.outData["uniqueifyOutputMtz"]), uniqueMtz)
-            shutil.copy(
-                Path(self.phenixXTriageTask.outData["logPath"]), phenixXTriageTaskLog
-            )
-        except:
-            logger.warning("Couldn't copy file to result directory")
-            logger.warning(e)
+        UtilsPath.systemCopyFile(Path(self.truncate.outData["truncateLogPath"]), truncateLog)
+        UtilsPath.systemCopyFile(Path(self.uniqueify.outData["uniqueifyOutputMtz"]), uniqueMtz)
+        UtilsPath.systemCopyFile(
+            Path(self.phenixXTriageTask.outData["logPath"]), phenixXTriageTaskLog
+        )
+        if self.phenixXTriageTask.isSuccess():
+            logger.info("Phenix.xtriage finished.")
 
-        logger.info("Phenix.xtriage finished.")
-
-        if (
-            self.phenixXTriageTask.outData["hasTwinning"]
-            and self.phenixXTriageTask.outData["hasPseudotranslation"]
-        ):
-            logger.warning("Pseudotranslation and twinning detected by phenix.xtriage!")
-        elif self.phenixXTriageTask.outData["hasTwinning"]:
-            logger.warning("Twinning detected by phenix.xtriage!")
-        elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
-            logger.warning("Pseudotranslation detected by phenix.xtriage!")
-        else:
-            logger.info("No twinning or pseudotranslation detected by phenix.xtriage.")
+            if (
+                self.phenixXTriageTask.outData["hasTwinning"]
+                and self.phenixXTriageTask.outData["hasPseudotranslation"]
+            ):
+                logger.warning("Pseudotranslation and twinning detected by phenix.xtriage!")
+            elif self.phenixXTriageTask.outData["hasTwinning"]:
+                logger.warning("Twinning detected by phenix.xtriage!")
+            elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
+                logger.warning("Pseudotranslation detected by phenix.xtriage!")
+            else:
+                logger.info("No twinning or pseudotranslation detected by phenix.xtriage.")
 
         self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
@@ -1001,11 +964,6 @@ class Edna2ProcTask(AbstractTask):
             isAnom=self.anomalous,
         )
 
-        with open(self.resultsDirectory / "ednaPROC.json", "w") as fp:
-            json.dump(
-                self.autoProcResultsContainer, fp, indent=2, default=lambda o: str(o)
-            )
-
         # now send it to ISPyB
         if self.doUploadIspyb:
             logger.info("Sending data to ISPyB...")
@@ -1017,11 +975,11 @@ class Edna2ProcTask(AbstractTask):
                 logger.error("ISPyB Store autoproc results failed.")
                 # self.setFailure()
                 # return
-
-            if self.phenixXTriageTask.outData["hasTwinning"]:
-                self.twinning = True
-            if self.phenixXTriageTask.outData["hasPseudotranslation"]:
-                self.pseudoTranslation = True
+            if self.phenixXTriageTask.isSuccess():
+                if self.phenixXTriageTask.outData.get("hasTwinning"):
+                    self.twinning = True
+                if self.phenixXTriageTask.outData.get("hasPseudotranslation"):
+                    self.pseudoTranslation = True
 
         outData = self.autoProcResultsContainer
         outData["anomalous"] = self.anomalous
@@ -1033,7 +991,9 @@ class Edna2ProcTask(AbstractTask):
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")
         if self.tmpdir is not None:
             self.tmpdir.cleanup()
-
+        self.timeEnd = time.perf_counter()
+        logger.info(f"EDNA2Proc Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
+        outData["processTime"] = self.timeEnd-self.timeStart
         return outData
 
     def storeDataOnPyarch(self, pyarchDirectory=None):
@@ -1049,7 +1009,7 @@ class Edna2ProcTask(AbstractTask):
                 resultFilePyarchPath = UtilsPath.createPyarchFilePath(resultFile)
                 try:
                     logger.info(f"Copying {resultFile} to pyarch directory")
-                    shutil.copy(resultFile, resultFilePyarchPath)
+                    shutil.copy2(resultFile, resultFilePyarchPath)
                 except Exception as e:
                     logger.warning(
                         f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
@@ -1060,7 +1020,7 @@ class Edna2ProcTask(AbstractTask):
                 try:
                     logger.info(f"Copying {resultFile} to pyarch directory")
                     resultFilePyarchPath = pyarchDirectory / Path(resultFile).name
-                    shutil.copy(resultFile, resultFilePyarchPath)
+                    shutil.copy2(resultFile, resultFilePyarchPath)
                 except Exception as e:
                     logger.warning(
                         f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
@@ -1307,6 +1267,7 @@ class Edna2ProcTask(AbstractTask):
         sufficiently large to run fast_ep. Generally, a value
         greater than 1 indicates a significant anomalous signal."""
         cc_rcr = 0.0
+        summary_switch = False
         try:
             with open(aimless_log, "r") as fp:
                 for line in fp:
@@ -1314,9 +1275,14 @@ class Edna2ProcTask(AbstractTask):
                         while "Overall" not in line:
                             line = next(fp)
                         cc_rcr = float(line.split()[3])
+                        if not cc_rcr >= threshold:
+                            return False
+                    if "<!--SUMMARY_BEGIN-->" in line:
+                        summary_switch = True
+                    if summary_switch and "the anomalous signal is weak" in line:
+                        return False
+                    if "<!--SUMMARY_END-->" in line:
+                        summary_switch = False
         except:
-            pass
-        if cc_rcr >= threshold:
-            return True
-        else:
             return False
+        return True
