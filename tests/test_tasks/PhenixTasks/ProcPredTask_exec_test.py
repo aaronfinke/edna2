@@ -21,35 +21,51 @@
 
 __authors__ = ["D. Fastus"]
 __license__ = "MIT"
-__date__ = "12/06/2023"
+__date__ = "01/10/2023"
 
 import unittest
 
+# import utils to test tasks, config and logging
 from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 
+# import task to test in this case the process predicted model task within the PhenixTasks
 from edna2.tasks.PhenixTasks import PhenixProcessPredictedModelTask
 
+# configure logger
 logger = UtilsLogging.getLogger()
 
-
-class AlphaFoldTaskExecTest(unittest.TestCase):
+# set up execution class by inheriting from unittest.TestCase
+class ProcPredModelExecTest(unittest.TestCase):
     
+    # set up test case with setting up data path from UtilsTest
     def setUp(self):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
+    # decorator to skip test if site is default and need to be configured
     @unittest.skipIf(UtilsConfig.getSite() == 'Default',
-                    'Cannot run AlphaFold test with default config')
-    def test_execute_AlphaFoldPrediction(self):
+                    'Cannot run Phenix test with default config')
+    
+    # method to test the execution of the PhenixProcessPredictedModelTask
+    # takes the test data path in a json format 
+    def test_execute_ProcPredModel(self):
         referenceDataPath = self.dataPath / 'inDataProcPredTask.json'
+
+        # load the input data from the reference data path and define the temporary directory
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
+
+        # create an instance of the PhenixProcessPredictedModelTask and execute it within the test class
         phenixProcessPredictedModelTask = PhenixProcessPredictedModelTask(inData=inData)
-        phenixProcessPredictedModelTask.execute() 
+        phenixProcessPredictedModelTask.execute()
+
+        # test run is ok when the task is successful and the output data is available
+        # is Success item is defined though the parser structure in the PhenixProcessPredictedModelTask
         self.assertTrue(phenixProcessPredictedModelTask.isSuccess())
         outData = phenixProcessPredictedModelTask.outData
-        print(outData)
         self.assertTrue(outData['jobComplete'])
         
+# instantiate the test case by calling unittest.main()
+# an object of TestCase will be instantiated and the test methods will be run
 if __name__ == '__main__':
     unittest.main()
