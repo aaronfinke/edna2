@@ -23,9 +23,7 @@ __license__ = "MIT"
 __date__ = "20/01/2023"
 
 import os
-import shutil
 import tempfile
-import numpy as np
 from pathlib import Path
 import gzip
 import time
@@ -61,18 +59,18 @@ from edna2.tasks.WaitFileTask import WaitFileTask
 class FastSADPhasingTask(AbstractTask):
     # def setFailure(self):
     #     self._dictInOut["isFailure"] = True
-        # if self.doUploadIspyb:
-        # if self.integrationId is not None and self.programId is not None:
-        #     ISPyBStoreAutoProcResults.setIspybToFailed(
-        #         dataCollectionId=self.dataCollectionId,
-        #         autoProcProgramId=self.programId,
-        #         autoProcIntegrationId=self.integrationId,
-        #         processingCommandLine=self.processingCommandLine,
-        #         processingPrograms=self.processingPrograms,
-        #         isAnom=False,
-        #         timeStart=self.startDateTime,
-        #         timeEnd=datetime.now().isoformat(timespec='seconds')
-        #     )
+    # if self.doUploadIspyb:
+    # if self.integrationId is not None and self.programId is not None:
+    #     ISPyBStoreAutoProcResults.setIspybToFailed(
+    #         dataCollectionId=self.dataCollectionId,
+    #         autoProcProgramId=self.programId,
+    #         autoProcIntegrationId=self.integrationId,
+    #         processingCommandLine=self.processingCommandLine,
+    #         processingPrograms=self.processingPrograms,
+    #         isAnom=False,
+    #         timeStart=self.startDateTime,
+    #         timeEnd=datetime.now().isoformat(timespec='seconds')
+    #     )
 
     def getInDataSchema(self):
         return {
@@ -120,8 +118,6 @@ class FastSADPhasingTask(AbstractTask):
 
         self.resultsDirectory = Path(self.getWorkingDirectory() / "results")
         self.resultsDirectory.mkdir(parents=True, exist_ok=True)
-
-        self.timeStart = datetime.now().isoformat(timespec="seconds")
 
         if self.checkDataFirst:
             checkData = self.checkForPhasingDataQuality(mtzFile=self.mtzFile)
@@ -207,9 +203,7 @@ class FastSADPhasingTask(AbstractTask):
                         client=client, file=file, autoProcProgramId=self.autoProcProgramId
                     )
                 comments = "Fast SAD Phasing results available for fast_dp."
-                UtilsIspyb.updateDataCollectionGroupComments(
-                    dataCollectionId=self.dataCollectionId,
-                    comments=comments)
+                UtilsIspyb.updateDataCollectionGroupComments(dataCollectionId=self.dataCollectionId, comments=comments)
             except Exception as e:
                 logger.error(f"Could not store processing attachments: {e}")
 
@@ -220,7 +214,10 @@ class FastSADPhasingTask(AbstractTask):
                 outData[k] = v
         except Exception as e:
             logger.error(f"could not parse fast_ep json output:{e}")
-
+        
+        self.timeEnd = time.perf_counter()
+        logger.info(f"Processing Time of FastSADPhasingTask:{self.timeEnd - self.timeStart}")
+        
         return outData
 
     @staticmethod
@@ -293,4 +290,3 @@ class FastSADPhasingTask(AbstractTask):
                 UtilsPath.systemCopyFile(resultFile, resultFilePyarchPath)
 
         return pyarchDirectory
-

@@ -330,6 +330,14 @@ class MAXIVFastProcessingTask(AbstractTask):
 
         if doFastSADPhasing:
             logger.info("Starting Fast SAD Phasing...")
+            if self.doUploadIspyb:
+                try:
+                    autoProcProgramId = fastDpTask.outData["autoProcProgram"]["autoProcProgramId"]
+                except:
+                    logger.error("Could not get autoProcProgramId from fast_dp task!")
+                    autoProcProgramId = None
+            else:
+                autoProcProgramId = None
             fastSADPhasingTask = FastSADPhasingTask(
                 inData={
                     "test": self.test,
@@ -338,6 +346,7 @@ class MAXIVFastProcessingTask(AbstractTask):
                     "onlineAutoProcessing": False,
                     "doUploadIspyb": True,
                     "checkDataFirst": False,
+                    "autoProcProgramId":autoProcProgramId
                 },
                 workingDirectorySuffix="0",
             )

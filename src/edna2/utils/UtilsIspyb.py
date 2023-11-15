@@ -289,6 +289,8 @@ def updateDataCollectionGroupComments(dataCollectionId, comments):
         else:
             dataCollectionWS3VO.comments = comments
             dataCollectionId = storeOrUpdateDataCollection(dataCollectionWS3VO, client=client)
+    else:
+        logger.warning(f"Comments already appear in the DataCollectionGroup: {comments}")
     logger.debug(f"dataCollectionGroupId: {iDataCollectionGroupId}")
 
 
