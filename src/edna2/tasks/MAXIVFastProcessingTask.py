@@ -80,9 +80,7 @@ class MAXIVFastProcessingTask(AbstractTask):
 
     def run(self, inData):
         self.timeStart = time.perf_counter()
-        UtilsLogging.addLocalFileHandler(
-            logger, self.getWorkingDirectory() / "MAXIVAutoProcessing.log"
-        )
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory() / "MAXIVAutoProcessing.log")
         logger.info("MAX IV Autoprocessing started")
         if os.environ.get("SLURM_JOB_ID"):
             logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
@@ -102,9 +100,7 @@ class MAXIVFastProcessingTask(AbstractTask):
         self.spaceGroup = inData.get("spaceGroup", 0)
         self.unitCell = inData.get("unitCell", None)
         self.residues = inData.get("residues", None)
-        self.workingDirectory = inData.get(
-            "workingDirectory", self.getWorkingDirectory()
-        )
+        self.workingDirectory = inData.get("workingDirectory", self.getWorkingDirectory())
         self.doUploadIspyb = inData.get("doUploadIspyb", True)
         self.waitForFiles = inData.get("waitForFiles", True)
 
@@ -120,9 +116,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             pass
 
         # set up SG and unit cell
-        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(
-            self.spaceGroup
-        )
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
         # set up unit cell
         if self.unitCell is not None:
@@ -133,13 +127,9 @@ class MAXIVFastProcessingTask(AbstractTask):
         # get masterfile name
         if self.masterFilePath is None:
             if self.dataCollectionId:
-                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(
-                    self.dataCollectionId
-                )
+                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
                 if self.masterFilePath is None or not self.masterFilePath.exists():
-                    logger.error(
-                        "dataCollectionId could not return master file path, exiting."
-                    )
+                    logger.error("dataCollectionId could not return master file path, exiting.")
                     self.setFailure()
                     return
 
@@ -153,9 +143,7 @@ class MAXIVFastProcessingTask(AbstractTask):
         if self.imageNoStart is None or self.imageNoEnd is None:
             if self.dataCollectionId:
                 try:
-                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(
-                        self.dataCollectionId
-                    )
+                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
                     self.imageNoStart = dataCollectionWS3VO.startImageNumber
                     numImages = dataCollectionWS3VO.numberOfImages
                     self.imageNoEnd = numImages - self.imageNoStart + 1
@@ -182,9 +170,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             return
 
         if self.waitForFiles:
-            dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(
-                self.masterFilePath
-            )
+            dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(self.masterFilePath)
             pathToStartImage = dataH5ImageList[0]
             pathToEndImage = dataH5ImageList[-1]
 
@@ -218,9 +204,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": str(self.masterFilePath)
-                if self.masterFilePath
-                else None,
+                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "imageNoStart": self.imageNoStart,
@@ -238,9 +222,7 @@ class MAXIVFastProcessingTask(AbstractTask):
             inData={
                 "onlineAutoProcessing": False,
                 "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": str(self.masterFilePath)
-                if self.masterFilePath
-                else None,
+                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
                 "unitCell": self.unitCell,
                 "spaceGroup": self.spaceGroup,
                 "masterFilePath": self.masterFilePath,
@@ -273,9 +255,9 @@ class MAXIVFastProcessingTask(AbstractTask):
                 "edna2Proc": edna2ProcTask.outData,
                 "fastDp": fastDpTask.outData,
             }
-            self.anomalous = edna2ProcTask.outData.get(
+            self.anomalous = edna2ProcTask.outData.get("anomalous", False) and fastDpTask.outData.get(
                 "anomalous", False
-            ) and fastDpTask.outData.get("anomalous", False)
+            )
             logger.debug(f"self.anomalous = {self.anomalous}")
         elif edna2ProcTask.isSuccess():
             outData = {
@@ -298,14 +280,14 @@ class MAXIVFastProcessingTask(AbstractTask):
         if edna2ProcTask.isSuccess():
             if edna2ProcTask.outData.get("reindex", False):
                 comments += "Data could not be processed by EDNA2Proc with supplied unit cell and space group! "
+                self.spaceGroup = 0
+                self.unitCell = None
             if edna2ProcTask.outData.get("twinning", False):
                 comments += "Twinning detected by phenix.xtriage! "
             if edna2ProcTask.outData.get("pseudotranslation", False):
                 comments += "Pseudotranslation detected by phenix.xtriage! "
             if comments:
-                UtilsIspyb.updateDataCollectionGroupComments(
-                    self.dataCollectionId, comments
-                )
+                UtilsIspyb.updateDataCollectionGroupComments(self.dataCollectionId, comments)
 
         autoPROCTaskinData = {
             "onlineAutoProcessing": False,
@@ -337,13 +319,11 @@ class MAXIVFastProcessingTask(AbstractTask):
         if self.anomalous and fastDpTask.isSuccess():
             mtzFile = fastDpTask.outData.get("mtzFileForFastPhasing", None)
             if mtzFile:
-                checkData = FastSADPhasingTask.checkForPhasingDataQuality(
-                    mtzFile=mtzFile
-                )
+                checkData = FastSADPhasingTask.checkForPhasingDataQuality(mtzFile=mtzFile)
                 if not checkData:
-                    logger.error("Data quality insufficient for phasing. Exiting")
+                    logger.error("Data quality insufficient for phasing.")
                 else:
-                    logger.info("Data quality check passed.")
+                    logger.info("Data quality check for SAD phasing passed.")
                     doFastSADPhasing = True
             else:
                 logger.error("Could not get MTZ file for fast phasing.")
@@ -356,6 +336,7 @@ class MAXIVFastProcessingTask(AbstractTask):
                     "dataCollectionId": self.dataCollectionId,
                     "fast_dpMtzFile": mtzFile,
                     "onlineAutoProcessing": False,
+                    "doUploadIspyb": True,
                     "checkDataFirst": False,
                 },
                 workingDirectorySuffix="0",
