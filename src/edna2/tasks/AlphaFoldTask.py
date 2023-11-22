@@ -35,6 +35,7 @@ from edna2.tasks.AbstractTask import AbstractTask
 # from edna2.tasks.PhenixTasks import ProcPredTask
 # from edna2.tasks.CCP4Tasks import DimpleTask
 from edna2.utils import UtilsLogging
+from edna2.utils import UtilsConfig
 
 # import edna2.utils.UtilsPDB as UtilsPDB
 from edna2.utils import UtilsPDB
@@ -72,10 +73,8 @@ class AlphaFoldTask(AbstractTask):
             logger.error(f"{fasta_path} can not be open or does not exist!", exc_info=True)
             sys.exit(1)
 
-        commandLine = "module purge \n"
-        commandLine += "module add fosscuda/2020b AlphaFold \n"
-        commandLine += "export ALPHAFOLD_DATA_DIR=/sw/pkg/miv/mx/db/alphafold-2021b \n\n"
-
+        commandLine = UtilsConfig.get("AlphaFold","alphaFold_env") if UtilsConfig.get("AlphaFold","alphaFold_env") else ""
+        commandLine += " "
         commandLine += "alphafold "
         commandLine += f"--fasta_paths={fasta_path} "
         commandLine += f"--max_template_date=2021-11-01 "

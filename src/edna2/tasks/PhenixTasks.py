@@ -31,8 +31,11 @@ from typing import Tuple
 
 from edna2.tasks.AbstractTask import AbstractTask
 from edna2.utils import UtilsLogging
+from edna2.utils import UtilsConfig
+
 
 logger = UtilsLogging.getLogger()
+
 
 class PhenixXTriageTask(AbstractTask):
     """
@@ -40,17 +43,24 @@ class PhenixXTriageTask(AbstractTask):
     """
 
     def run(self, inData):
-        if os.environ.get('PHENIX', None) is None:
-            commandLine = 'source /mxn/groups/sw/mxsw/env_setup/phenix_env.sh \n'
+        if os.environ.get("PHENIX", None) is None:
+            phenixSetup = UtilsConfig.get("Phenix", "phenix_env")
+            logger.debug(f"Phenix Setup: {phenixSetup}")
+            if phenixSetup is None:
+                logger.warning("Phenix setup not found!")
+                commandLine = ""
+            else:
+                logger.info(f"PHENIX version is {os.environ.get('PHENIX_VERSION', None)}")
+                commandLine = "source " + phenixSetup + "\n"
         else:
-            commandLine = ''
+            commandLine = ""
             logger.info(f"PHENIX version is {os.environ.get('PHENIX_VERSION', None)}")
 
-        input_file, was_unzipped = self.gunzipInputFile(input_file=pathlib.Path(inData['input_file']))
-        commandLine += 'phenix.xtriage '
+        input_file, was_unzipped = self.gunzipInputFile(input_file=pathlib.Path(inData["input_file"]))
+        commandLine += "phenix.xtriage "
         commandLine += str(input_file)
-        commandLine += ' obs=I,SIGI,merged '
-        logPath = self.getWorkingDirectory() / 'PhenixXtriage.log'
+        commandLine += " obs=I,SIGI,merged "
+        logPath = self.getWorkingDirectory() / "PhenixXtriage.log"
         self.runCommandLine(commandLine, logPath=logPath)
         if was_unzipped:
             input_file.unlink(missing_ok=True)
@@ -58,14 +68,14 @@ class PhenixXTriageTask(AbstractTask):
         outData = self.parseXtriageLogFile(logPath)
 
         return outData
-    
+
     def gunzipInputFile(self, input_file: pathlib.Path) -> Tuple[pathlib.Path, bool]:
         """unzips input file and whether it was unzipped"""
         if ".gz" in input_file.suffixes:
             fIn = gzip.open(input_file, "rb")
             fileContent = fIn.read()
             fIn.close()
-            strMtzFileName = input_file.stem 
+            strMtzFileName = input_file.stem
             self.strPathToLocalMtz = pathlib.Path(self.getWorkingDirectory() / strMtzFileName)
             fOut = open(self.strPathToLocalMtz, "wb")
             fOut.write(fileContent)
@@ -74,31 +84,27 @@ class PhenixXTriageTask(AbstractTask):
         else:
             return (input_file, False)
 
-
     def parseXtriageLogFile(self, pathToLogFile: pathlib.Path):
-        outData = {
-            "logPath" : str(pathToLogFile)
-        }
+        outData = {"logPath": str(pathToLogFile)}
         outData["hasTwinning"] = False
         outData["hasPseudotranslation"] = False
         outData["TwinLawsStatistics"] = []
 
         if pathToLogFile.is_file():
-            with open(pathToLogFile,'r') as f:
+            with open(pathToLogFile, "r") as f:
                 strLog = f.readlines()
             iIndex = 0
             listLines = [x.strip("\n") for x in strLog]
             bContinue = True
             while bContinue:
-                
                 if listLines[iIndex].startswith("Statistics depending on twin laws"):
-                    #------------------------------------------------------
-                    #| Operator | type | R obs. | Britton alpha | H alpha |
-                    #------------------------------------------------------
-                    #| k,h,-l   |  PM  | 0.025  | 0.458         | 0.478   |
-                    #| -h,k,-l  |  PM  | 0.017  | 0.459         | 0.487   |
-                    #------------------------------------------------------
-                    iIndex +=4
+                    # ------------------------------------------------------
+                    # | Operator | type | R obs. | Britton alpha | H alpha |
+                    # ------------------------------------------------------
+                    # | k,h,-l   |  PM  | 0.025  | 0.458         | 0.478   |
+                    # | -h,k,-l  |  PM  | 0.017  | 0.459         | 0.487   |
+                    # ------------------------------------------------------
+                    iIndex += 4
                     while not listLines[iIndex].startswith("---------"):
                         listLine = listLines[iIndex].split("|")
                         xsDataTwinLawsStatistics = {}
@@ -111,7 +117,7 @@ class PhenixXTriageTask(AbstractTask):
                         outData["TwinLawsStatistics"].append(xsDataTwinLawsStatistics)
 
                         iIndex += 1
-                                  
+
                 elif listLines[iIndex].startswith("Patterson analyses"):
                     # - Largest peak height   : 6.089
                     iIndex += 1
@@ -121,11 +127,11 @@ class PhenixXTriageTask(AbstractTask):
                     iIndex += 1
                     pattersonPValue = float(listLines[iIndex].split(":")[1].split(")")[0])
                     outData["pattersonPValue"] = pattersonPValue
-                    
+
                 elif "indicating pseudo translational symmetry" in listLines[iIndex]:
                     #    The analyses of the Patterson function reveals a significant off-origin
                     #    peak that is 66.43 % of the origin peak, indicating pseudo translational symmetry.
-                    #    The chance of finding a peak of this or larger height by random in a 
+                    #    The chance of finding a peak of this or larger height by random in a
                     #    structure without pseudo translational symmetry is equal to the 6.0553e-06.
                     #    The detected translational NCS is most likely also responsible for the elevated intensity ratio.
                     #    See the relevant section of the logfile for more details.
@@ -135,13 +141,13 @@ class PhenixXTriageTask(AbstractTask):
                     #    are significantly different than is expected from good to reasonable,
                     #    untwinned data.
                     #    As there are twin laws possible given the crystal symmetry, twinning could
-                    #    be the reason for the departure of the intensity statistics from normality. 
-                    outData["hasTwinning"] = True                   
-                iIndex += 1                
+                    #    be the reason for the departure of the intensity statistics from normality.
+                    outData["hasTwinning"] = True
+                iIndex += 1
                 if iIndex == len(listLines):
                     bContinue = False
         return outData
-        
+
 
 class DistlSignalStrengthTask(AbstractTask):
     """
@@ -149,14 +155,14 @@ class DistlSignalStrengthTask(AbstractTask):
     """
 
     def run(self, inData):
-        commandLine = 'distl.signal_strength '
-        commandLine += inData['referenceImage']
-        logPath = self.getWorkingDirectory() / 'distl.log'
+        commandLine = "distl.signal_strength "
+        commandLine += inData["referenceImage"]
+        logPath = self.getWorkingDirectory() / "distl.log"
         self.runCommandLine(commandLine, logPath=logPath)
         with open(str(logPath)) as f:
             logText = f.read()
         imageQualityIndicators = self.parseLabelitDistlOutput(logText)
-        outData = {'imageQualityIndicators': imageQualityIndicators}
+        outData = {"imageQualityIndicators": imageQualityIndicators}
         return outData
 
     def parseLabelitDistlOutput(self, logText):
@@ -164,53 +170,120 @@ class DistlSignalStrengthTask(AbstractTask):
         for line in logText.split("\n"):
             if line.find("Spot Total") != -1:
                 spotTotal = int(line.split()[3])
-                imageQualityIndicators['spotTotal'] = spotTotal
+                imageQualityIndicators["spotTotal"] = spotTotal
             elif line.find("In-Resolution Total") != -1:
                 inResTotal = int(line.split()[3])
-                imageQualityIndicators['inResTotal'] = inResTotal
+                imageQualityIndicators["inResTotal"] = inResTotal
             elif line.find("Good Bragg Candidates") != -1:
                 goodBraggCandidates = int(line.split()[4])
-                imageQualityIndicators['goodBraggCandidates'] = goodBraggCandidates
+                imageQualityIndicators["goodBraggCandidates"] = goodBraggCandidates
             elif line.find("Ice Rings") != -1:
                 iceRings = int(line.split()[3])
-                imageQualityIndicators['iceRings'] = iceRings
+                imageQualityIndicators["iceRings"] = iceRings
             elif line.find("Method 1 Resolution") != -1:
                 method1Res = float(line.split()[4])
-                imageQualityIndicators['method1Res'] = method1Res
+                imageQualityIndicators["method1Res"] = method1Res
             elif line.find("Method 2 Resolution") != -1:
                 if line.split()[4] != "None":
                     fMethod2Res = float(line.split()[4])
-                    imageQualityIndicators['method2Res'] = fMethod2Res
+                    imageQualityIndicators["method2Res"] = fMethod2Res
             elif line.find("Maximum unit cell") != -1:
                 if line.split()[4] != "None":
                     fMaxUnitCell = float(line.split()[4])
-                    imageQualityIndicators['maxUnitCell'] = fMaxUnitCell
+                    imageQualityIndicators["maxUnitCell"] = fMaxUnitCell
             elif line.find("%Saturation, Top 50 Peaks") != -1:
                 pctSaturationTop50Peaks = float(line.split()[5])
-                imageQualityIndicators['pctSaturationTop50Peaks'] = pctSaturationTop50Peaks
+                imageQualityIndicators["pctSaturationTop50Peaks"] = pctSaturationTop50Peaks
             elif line.find("In-Resolution Ovrld Spots") != -1:
                 inResolutionOvrlSpots = int(line.split()[4])
-                imageQualityIndicators['inResolutionOvrlSpots'] = inResolutionOvrlSpots
+                imageQualityIndicators["inResolutionOvrlSpots"] = inResolutionOvrlSpots
             elif line.find("Bin population cutoff for method 2 resolution") != -1:
                 binPopCutOffMethod2Res = float(line.split()[7][:-1])
-                imageQualityIndicators['binPopCutOffMethod2Res'] = binPopCutOffMethod2Res
-            elif line.find("Total integrated signal, pixel-ADC units above local background (just the good Bragg candidates)") != -1:
+                imageQualityIndicators["binPopCutOffMethod2Res"] = binPopCutOffMethod2Res
+            elif (
+                line.find(
+                    "Total integrated signal, pixel-ADC units above local background (just the good Bragg candidates)"
+                )
+                != -1
+            ):
                 totalIntegratedSignal = float(line.split()[-1])
-                imageQualityIndicators['totalIntegratedSignal'] = totalIntegratedSignal
+                imageQualityIndicators["totalIntegratedSignal"] = totalIntegratedSignal
             elif line.find("signals range from") != -1:
                 listStrLine = line.split()
                 signalRangeMin = float(listStrLine[3])
                 signalRangeMax = float(listStrLine[5])
                 signalRangeAverage = float(listStrLine[-1])
-                imageQualityIndicators['signalRangeMin'] = signalRangeMin
-                imageQualityIndicators['signalRangeMax'] = signalRangeMax
-                imageQualityIndicators['signalRangeAverage'] = signalRangeAverage
+                imageQualityIndicators["signalRangeMin"] = signalRangeMin
+                imageQualityIndicators["signalRangeMax"] = signalRangeMax
+                imageQualityIndicators["signalRangeAverage"] = signalRangeAverage
             elif line.find("Saturations range from") != -1:
                 listStrLine = line.split()
                 saturationRangeMin = float(listStrLine[3][:-1])
                 saturationRangeMax = float(listStrLine[5][:-1])
                 saturationRangeAverage = float(listStrLine[-1][:-1])
-                imageQualityIndicators['saturationRangeMin'] = saturationRangeMin
-                imageQualityIndicators['saturationRangeMax'] = saturationRangeMax
-                imageQualityIndicators['saturationRangeAverage'] = saturationRangeAverage
+                imageQualityIndicators["saturationRangeMin"] = saturationRangeMin
+                imageQualityIndicators["saturationRangeMax"] = saturationRangeMax
+                imageQualityIndicators["saturationRangeAverage"] = saturationRangeAverage
         return imageQualityIndicators
+
+
+class PhenixProcessPredictedModelTask(AbstractTask):
+    """
+    This task runs phenix.process_predicted_model to replace B-factors and (optinally) break the model into domains
+    """
+
+    def run(self, inData):
+        
+        if os.environ.get("PHENIX", None) is None:
+            phenixSetup = UtilsConfig.get("Phenix", "phenix_env")
+            logger.debug(f"Phenix Setup: {phenixSetup}")
+            if phenixSetup is None:
+                logger.warning("Phenix setup not found!")
+                commandLine = ""
+            else:
+                logger.info(f"PHENIX version is {os.environ.get('PHENIX_VERSION', None)}")
+                commandLine = "source " + phenixSetup + "\n"
+        else:
+            commandLine = ""
+            logger.info(f"PHENIX version is {os.environ.get('PHENIX_VERSION', None)}")
+
+        commandLine += "phenix.process_predicted_model "
+        commandLine += inData["PDB_file"]
+        # commandLine += ' '
+
+        logPath = self.getWorkingDirectory() / "PhenixProcPM.log"
+        self.runCommandLine(commandLine, logPath=logPath)
+        if logPath.exists():
+            with open(str(logPath)) as f:
+                logText = f.read()
+        else:
+            logger.error(f"Log file {logPath} does not exist")
+
+        logger.info("Command line: {0}".format(commandLine))
+
+        outData = self.parseProcessPredictedModel(logText)
+
+        return outData
+
+    def parseProcessPredictedModel(self, logText):
+        outData = {}
+
+        for line in logText.split("\n"):
+            if line.find("Working directory:") != -1:
+                outData["workingDirectory"] = line.split(":")[1].strip()
+            elif line.find("Found model,") != -1:
+                outData["processedModel"] = line.split(",")[1].strip()
+            elif line.find("B-value field") != -1:
+                outData["B-value"] = line.split(" ")[2:]
+            elif line.find("Maximum B-Value") != -1:
+                outData["maximumB-value"] = line.split(":")[1]
+            elif line.find("Maximum rmsd") != -1:
+                outData["maximumRmsd"] = line.split(" ")[3:4]
+            elif line.find("Clusters:") != -1:
+                outData["Clusters"] = line.split(":")[1]
+            elif line.find("Threshold:") != -1:
+                outData["Threshold"] = line.split(":")[1]
+            elif line.find("Job complete") != -1:
+                outData["jobComplete"] = True
+
+        return outData
