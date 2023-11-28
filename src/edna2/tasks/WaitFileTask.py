@@ -51,8 +51,8 @@ class WaitFileTask(AbstractTask):
             raise BaseException("No expected file path in input!")
         filePath = pathlib.Path(self.inData["file"])
         expectedSize = inData.get("expectedSize", None)
-        configTimeOut = UtilsConfig.get(self, "timeOut", DEFAULT_TIMEOUT)
-        timeOut = inData.get("timeOut", configTimeOut)
+        configTimeOut = UtilsConfig.get(self, "time", DEFAULT_TIMEOUT)
+        timeOut = inData.get("time", configTimeOut)
         hasTimedOut, finalSize = UtilsPath.waitForFile(
             filePath, expectedSize=expectedSize, timeOut=timeOut
         )
