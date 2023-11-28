@@ -59,25 +59,18 @@ def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
 
         # os.chmod(workingDirectory, 0o755)
         # workingDirectory = pathlib.Path(workingDirectory)
-        workingDirectory = makeRandomDirectoryPath(
-            prefix=task.__class__.__name__, dir=parentDirectory
-        )
+        workingDirectory = makeRandomDirectoryPath(prefix=task.__class__.__name__, dir=parentDirectory)
         workingDirectory.mkdir(mode=0o775, parents=True, exist_ok=False)
 
     else:
         # Here we assume that the user knows what he is doing and there's no
         # race condition for creating the working directory!
-        workingDirectoryName = (
-            task.__class__.__name__ + "_" + str(workingDirectorySuffix)
-        )
+        workingDirectoryName = task.__class__.__name__ + "_" + str(workingDirectorySuffix)
         workingDirectory = parentDirectory / workingDirectoryName
         index = 1
         while workingDirectory.exists():
             workingDirectoryName = (
-                task.__class__.__name__
-                + "_"
-                + str(workingDirectorySuffix)
-                + "_{0:02d}".format(index)
+                task.__class__.__name__ + "_" + str(workingDirectorySuffix) + "_{0:02d}".format(index)
             )
             workingDirectory = parentDirectory / workingDirectoryName
             index += 1
@@ -88,15 +81,11 @@ def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
 
 def makeRandomDirectoryPath(prefix, dir):
     "returns a random directory path that does not exist yet"
-    randomString = "".join(
-        random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH)
-    )
+    randomString = "".join(random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH))
     dirPath = prefix + "_" + randomString
     returnPath = pathlib.Path(dir) / dirPath
     while returnPath.exists():
-        randomString = "".join(
-            random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH)
-        )
+        randomString = "".join(random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH))
         dirPath = prefix + "_" + randomString
         returnPath = pathlib.Path(dir) / dirPath
     return returnPath
@@ -119,15 +108,9 @@ def createPyarchFilePath(filePath):
         elif "proprietary" in filePath.parts:
             index = filePath.parts.index("proprietary")
         else:
-            logger.error(
-                "The /data/ directory should contain either visitors/ or proprietary/\n"
-            )
-            assert (
-                False
-            ), "Unexpected filesystem dirs"  # Don't continue if filesystem is not setup right.
-        return pathlib.Path("/data/staff/ispybstorage").joinpath(
-            *filePath.parts[index:]
-        )
+            logger.error("The /data/ directory should contain either visitors/ or proprietary/\n")
+            assert False, "Unexpected filesystem dirs"  # Don't continue if filesystem is not setup right.
+        return pathlib.Path("/data/staff/ispybstorage").joinpath(*filePath.parts[index:])
 
     if UtilsConfig.isEMBL():
         if "p13" in listOfDirectories[0:3] or "P13" in listOfDirectories[0:3]:
@@ -146,11 +129,7 @@ def createPyarchFilePath(filePath):
         "id30b",
     ]
 
-    if (
-        "data" in listOfDirectories
-        and len(listOfDirectories) > 5
-        and listOfDirectories[1] != "data"
-    ):
+    if "data" in listOfDirectories and len(listOfDirectories) > 5 and listOfDirectories[1] != "data":
         while listOfDirectories[1] != "data" and len(listOfDirectories) > 5:
             del listOfDirectories[1]
 
@@ -173,10 +152,7 @@ def createPyarchFilePath(filePath):
                 proposal = fifthDirectory
                 beamline = thirdDirectory
             else:
-                raise RuntimeError(
-                    "Illegal path for UtilsPath.createPyarchFilePath: "
-                    + "{0}".format(filePath)
-                )
+                raise RuntimeError("Illegal path for UtilsPath.createPyarchFilePath: " + "{0}".format(filePath))
             listOfRemainingDirectories = listOfDirectories[6:]
         elif dataDirectory == "data" and secondDirectory == "visitor":
             proposal = listOfDirectories[3]
@@ -192,24 +168,19 @@ def createPyarchFilePath(filePath):
             for directory in listOfRemainingDirectories:
                 pyarchFilePath = pyarchFilePath / directory
     if pyarchFilePath is None:
-        logger.warning(
-            "UtilsPath.createPyarchFilePath: path not converted for"
-            + " pyarch: %s " % filePath
-        )
+        logger.warning("UtilsPath.createPyarchFilePath: path not converted for" + " pyarch: %s " % filePath)
     else:
         pyarchFilePath = pyarchFilePath.as_posix()
     return pyarchFilePath
 
 
 def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
-    """Wait for the file to appear on disk."""
     file_path = pathlib.Path(file)
-    file_size = None
     final_size = None
     has_timed_out = False
     should_continue = True
-    fileHash = "abc"
-    fileHash_old = "def"
+    old_md5_hash = "abc"
+    new_md5_hash = "def"
     file_dir = file_path.parent
     if os.name != "nt" and file_dir.exists():
         # Patch provided by Sebastien 2018/02/09 for forcing NFS cache:
@@ -220,18 +191,25 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
         # logger.debug("Results of os.fstat: {0}".format(statResult))
     # Check if file is there
     if file_path.exists():
+        old_md5_hash = get_md5Hash(file_path)
         file_size = file_path.stat().st_size
-        file_mtime = file_path.stat().st_mtime
-        time.sleep(0.1)
-        # if expectedSize is not None:
-        #     # Check size
-        #     if file_size > expectedSize:
-        #         should_continue = False
-        # final_size = file_size
-    else:
-        file_size = 0
-        file_mtime = 0
-        time.sleep(0.1)
+        if expectedSize is not None:
+            # Check size
+            if file_size > expectedSize:
+                time.sleep(1)
+                new_md5_hash = get_md5Hash(file_path)
+                logger.info(f"old md5: {old_md5_hash}")
+                logger.info(f"new md5: {new_md5_hash}")
+                if old_md5_hash == new_md5_hash:
+                    should_continue = False
+        else:
+            time.sleep(1)
+            new_md5_hash = get_md5Hash(file_path)
+            logger.info(f"old md5: {old_md5_hash}")
+            logger.info(f"new md5: {new_md5_hash}")
+            if old_md5_hash == new_md5_hash:
+                should_continue = False
+        final_size = file_size
     if should_continue:
         logger.info("Waiting for file %s" % file_path)
         #
@@ -248,30 +226,29 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
             # Check if time out
             if time_elapsed > timeOut:
                 has_timed_out = True
-                str_warning = f"Timeout while waiting for file {file_path}"
+                str_warning = "Timeout while waiting for file %s" % file_path
                 logger.warning(str_warning)
             else:
                 # Check if file is there
                 if file_path.exists():
-                    file_size_new = file_path.stat().st_size
-                    file_mtime_new = file_path.stat().st_mtime
+                    new_md5_hash = get_md5Hash(file_path)
+                    file_size = file_path.stat().st_size
+                    logger.info(f"old md5: {old_md5_hash}")
+                    logger.info(f"new md5: {new_md5_hash}")
                     if expectedSize is not None:
                         # Check that it has right size
-                        if (
-                            file_size > expectedSize
-                            and file_size_new == file_size
-                            and file_mtime_new == file_mtime
-                        ):
-                            should_continue = False
+                        if file_size > expectedSize:
+                            if old_md5_hash == new_md5_hash:
+                                should_continue = False
                     else:
-                        if file_size_new == file_size and file_mtime_new == file_mtime:
+                        if old_md5_hash == new_md5_hash:
                             should_continue = False
                     final_size = file_size
-                    file_size = file_size_new
-                    file_mtime == file_mtime_new
             if should_continue:
                 # Sleep 1 s
                 time.sleep(1)
+                old_md5_hash = new_md5_hash
+    logger.info("File found %s" % file_path)
     return has_timed_out, final_size
 
 
