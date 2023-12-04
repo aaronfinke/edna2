@@ -567,7 +567,7 @@ class Edna2ProcTask(AbstractTask):
             "cell_from_pointless": self.pointlessTask.outData["cell"],
             "subWedge": self.integration.inData["subWedge"],
             "resCutoff": self.firstResCutoff,
-            "onlineAutoProcessing": self.onlineAutoProcessing,
+            "onlineAutoProcessing": False,
             "isAnom": self.anomalous,
         }
 
@@ -698,7 +698,7 @@ class Edna2ProcTask(AbstractTask):
                 "cell_from_pointless": self.pointlessTask.outData["cell"],
                 "subWedge": self.integration.inData["subWedge"],
                 "resCutoff": self.firstResCutoff,
-                "onlineAutoProcessing": self.onlineAutoProcessing,
+                "onlineAutoProcessing": False,
                 "isAnom": True,
             }
 
