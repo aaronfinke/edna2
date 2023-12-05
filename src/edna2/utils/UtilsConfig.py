@@ -63,7 +63,7 @@ def setSite(site):
 
 def getConfig(site=None):
     config = configparser.ConfigParser()
-    # config.optionxform = str
+    config.optionxform = str
     if site is None:
         site = getSite()
     configFile = site + ".ini"
@@ -122,5 +122,5 @@ def get(task, parameterName, defaultValue=None):
         taskConfig = getTaskConfig(task)
     else:
         taskConfig = getTaskConfig(task.__class__.__name__)
-    value = taskConfig.get(parameterName.lower(), defaultValue)
+    value = taskConfig.get(parameterName, defaultValue)
     return value
