@@ -269,3 +269,44 @@ def eiger_template_to_image(fmt, num):
         fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
     return fmt_string.format(num)
 
+def getImageMetadataFromH5MasterFile(masterFilePath):
+    dictHeader = {}
+    try:
+        with h5py.File(masterFilePath,'r') as f:
+            dictHeader = {
+                "wavelength": f["entry"]["instrument"]["beam"]["incident_wavelength"][()],
+                "beam_center_x": f["entry"]["instrument"]["detector"]["beam_center_x"][()],
+                "beam_center_y": f["entry"]["instrument"]["detector"]["beam_center_y"][()],
+                "count_time": f["entry"]["instrument"]["detector"]["count_time"][()],
+                "detector_distance": f["entry"]["instrument"]["detector"]["detector_distance"][()],
+                "translation": list(
+                    f["entry"]["instrument"]["detector"]["geometry"]["translation"][
+                        "distances"
+                    ]
+                ),
+                "saturation_value": f["entry"]["instrument"]["detector"]["saturation_value"][()],
+                "nx": f["entry"]["instrument"]["detector"]["module"]["data_size"][()][0],
+                "ny": f["entry"]["instrument"]["detector"]["module"]["data_size"][()][1],
+                "x_pixel_size": f["entry"]["instrument"]["detector"]["x_pixel_size"][()],
+                "y_pixel_size": f["entry"]["instrument"]["detector"]["y_pixel_size"][()],
+                "omega_range_average": f["entry"]["sample"]["goniometer"][
+                    "omega_range_average"
+                ][()],
+                "starting_angle": f["entry"]["sample"]["goniometer"]["omega"][()][0],
+                "detector_number": f["entry"]["instrument"]["detector"]["detector_number"][
+                    ()
+                ].decode("utf-8"),
+                "description": f["entry"]["instrument"]["detector"]["description"][
+                    ()
+                ].decode("utf-8"),
+                "data_collection_date": f["entry"]["instrument"]["detector"][
+                    "detectorSpecific"
+                ]["data_collection_date"][()].decode("utf-8"),
+                "data": list(f["entry"]["data"]),
+                "omega" : f['/entry/sample/goniometer/omega'][()],
+                "num_images": len(f['/entry/sample/goniometer/omega'][()])
+            }
+    except Exception as e:
+        logger.error(f"Failed reading hdf5 metadata: {e}")
+    return dictHeader
+ 
