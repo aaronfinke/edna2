@@ -712,7 +712,7 @@ class Xia2DialsExecTask(AbstractTask):
         if xia2DialsFastMode:
             commandLine += " dials.fast_mode=True"
         if self.spaceGroupNumber != 0:
-            commandLine += f" space_group={self.spaceGroupString}"
+            commandLine += f" space_group={self.spaceGroupNumber}"
             commandLine += " unit_cell={cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}".format(
                 **self.unitCell
             )
