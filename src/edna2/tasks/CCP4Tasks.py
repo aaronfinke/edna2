@@ -48,88 +48,89 @@ class AimlessTask(AbstractTask):
     """
 
     def run(self, inData):
-        doSubmit = inData.get('doSubmit',False)
+        doSubmit = inData.get("doSubmit", False)
         outData = {}
-        input_file = inData['input_file']
-        output_file = inData['output_file']
-        symoplib = UtilsConfig.get('CCP4', 'symoplib')
-        ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
+        input_file = inData["input_file"]
+        output_file = inData["output_file"]
+        xml_file = self.getWorkingDirectory() / "aimless.xml"
+        symoplib = UtilsConfig.get("CCP4", "symoplib")
+        ccp4setup = UtilsConfig.get("CCP4", "ccp4setup")
         if ccp4setup is None:
             commandLine = ""
         else:
-            commandLine = ". " + ccp4setup + '\n'
+            commandLine = ". " + ccp4setup + "\n"
         if symoplib is None:
-            commandLine += 'aimless HKLIN {0} HKLOUT {1}'.format(
-                input_file, output_file)
+            commandLine += "aimless HKLIN {0} HKLOUT {1}".format(input_file, output_file)
         else:
-            commandLine += 'aimless HKLIN {0} HKLOUT {1} SYMINFO {2}'.format(
-                input_file, output_file, symoplib)
+            commandLine += "aimless HKLIN {0} HKLOUT {1} SYMINFO {2}".format(input_file, output_file, symoplib)
+        commandLine += " XMLOUT {0}".format(xml_file)
         logger.info("Command line: {0}".format(commandLine))
-        start_image = inData['start_image']
-        end_image = inData['end_image']
-        projectName = inData.get('dataCollectionID', 'EDNA_proc')
-        resolution = inData.get('res', 0.0)
-        anom = inData['anomalous']
+        start_image = inData["start_image"]
+        end_image = inData["end_image"]
+        projectName = inData.get("dataCollectionID", "EDNA_proc")
+        resolution = inData.get("res", 0.0)
+        anom = inData["anomalous"]
         listCommand = [
-            'bins 15',
-            'run 1 batch {0} to {1}'.format(start_image, end_image),
-            'name run 1 project {0} crystal DEFAULT dataset NATIVE'.format(projectName),
-            'scales constant',
-            'resolution 50 {0}'.format(resolution),
-            'cycles 100',
-            'anomalous {0}'.format('ON' if anom else 'OFF'),
-            'output MERGED UNMERGED',
-            'END'
-            ]
-        self.setLogFileName('aimless.log')
+            "bins 15",
+            "run 1 batch {0} to {1}".format(start_image, end_image),
+            "name run 1 project {0} crystal DEFAULT dataset NATIVE".format(projectName),
+            "scales constant",
+            "resolution 50 {0}".format(resolution),
+            "cycles 100",
+            "anomalous {0}".format("ON" if anom else "OFF"),
+            "output MERGED UNMERGED",
+            "END",
+        ]
+        self.setLogFileName("aimless.log")
         self.runCommandLine(commandLine, doSubmit=doSubmit, listCommand=listCommand)
-        outData['isSuccess'] = os.path.exists(output_file)
+        outData["isSuccess"] = os.path.exists(output_file)
 
         aimlessMergedMtz = self.getWorkingDirectory() / (output_file)
-        aimlessUnmergedMtz = self.getWorkingDirectory() / (output_file.replace('.mtz' , "_unmerged.mtz"))
+        aimlessUnmergedMtz = self.getWorkingDirectory() / (output_file.replace(".mtz", "_unmerged.mtz"))
         aimlessLog = self.getWorkingDirectory() / self.getLogFileName()
-        #gzip the unmerged aimless.mtz file
+        # gzip the unmerged aimless.mtz file
         try:
             logger.debug("gzip'ing aimless unmerged file {0}".format(str(aimlessUnmergedMtz)))
-            subprocess.call(['gzip', str(aimlessUnmergedMtz)])
+            subprocess.call(["gzip", str(aimlessUnmergedMtz)])
         except Exception:
             logger.debug("gzip'ing the file failed: {0}".format(traceback.format_exc()))
         aimlessUnmergedMtzGz = str(aimlessUnmergedMtz) + ".gz"
         outData["aimlessMergedMtz"] = str(aimlessMergedMtz)
         outData["aimlessUnmergedMtz"] = aimlessUnmergedMtzGz
         outData["aimlessLog"] = aimlessLog
-        outData['aimlessResults'] = self.extractAimlessResults(aimlessLog)
+        outData["aimlessXml"] = xml_file
+        outData["aimlessResults"] = self.extractAimlessResults(aimlessLog)
         return outData
-    
+
     @staticmethod
     def extractAimlessResults(logfile):
         """
         extract the aimless results summary
         """
         aimlessResults = {
-            "overall" : {
-                "AutoProcScalingStatisticsId" : None,
+            "overall": {
+                "AutoProcScalingStatisticsId": None,
             },
             "innerShell": {
-                "AutoProcScalingStatisticsId" : None,
+                "AutoProcScalingStatisticsId": None,
             },
             "outerShell": {
-                "AutoProcScalingStatisticsId" : None,
+                "AutoProcScalingStatisticsId": None,
             },
         }
         extract = []
         try:
-            with open(logfile,"r") as fp:
+            with open(logfile, "r") as fp:
                 for line in fp:
                     if line.startswith("<!--SUMMARY_BEGIN--> $TEXT:Result: $$ $$"):
                         while not line.startswith("$$ <!--SUMMARY_END-->"):
-                            extract.append(line.strip('\n'))
+                            extract.append(line.strip("\n"))
                             line = next(fp)
                         break
         except:
             logger.error("aimless log file could not be parsed")
             return None
-        
+
         lowResLimit = [x for x in extract if x.startswith("Low resolution limit")][0].split()[-3:]
         aimlessResults["overall"]["resolutionLimitLow"] = float(lowResLimit[0])
         aimlessResults["innerShell"]["resolutionLimitLow"] = float(lowResLimit[1])
@@ -201,123 +202,129 @@ class AimlessTask(AbstractTask):
 
         return aimlessResults
 
+
 class PointlessTask(AbstractTask):
     """
     Executes the CCP4 program pointless
     """
 
     def run(self, inData):
-        symoplib = UtilsConfig.get('CCP4', 'symoplib')
-        ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
-        logger.debug(f'CCP4 Setup: {ccp4setup}')
+        symoplib = UtilsConfig.get("CCP4", "symoplib")
+        ccp4setup = UtilsConfig.get("CCP4", "ccp4setup")
+        logger.debug(f"CCP4 Setup: {ccp4setup}")
         if ccp4setup is None:
-            logger.warning('CCP4 setup not found!')
+            logger.warning("CCP4 setup not found!")
             commandLine = ""
         else:
-            commandLine = ". " + ccp4setup + '\n'
+            commandLine = ". " + ccp4setup + "\n"
 
-        self.input_file = inData['input_file']
-        self.output_file = inData['output_file']
-        commandLine += 'pointless'
+        self.input_file = inData["input_file"]
+        self.output_file = inData["output_file"]
+        self.xml_file = "pointless.xml"
+        commandLine += "pointless"
         if UtilsConfig.isEMBL():
-            commandLine += ' -c'
+            commandLine += " -c"
         commandLine += " xdsin {0} hklout {1}".format(self.input_file, self.output_file)
-        listCommand = ['setting symmetry-based']
-        if 'choose_spacegroup' in inData:
-            listCommand += 'choose spacegroup {0}'.format(
-                inData['choose_spacegroup'])
-        self.setLogFileName('pointless.log')
+        commandLine += " xmlout {0}".format(self.xml_file)
+        listCommand = ["setting symmetry-based"]
+        if "choose_spacegroup" in inData:
+            listCommand += "choose spacegroup {0}".format(inData["choose_spacegroup"])
+        self.setLogFileName("pointless.log")
         self.runCommandLine(commandLine, listCommand=listCommand)
         outData = self.parsePointlessOutput(self.getLogPath())
         outData["pointlessUnmergedMtz"] = str(self.getWorkingDirectory() / self.output_file)
+        outData["pointlessXml"] = str(self.getWorkingDirectory() / self.xml_file)
 
         return outData
 
     @classmethod
     def parsePointlessOutput(cls, logPath):
         sgre = re.compile(""" \* Space group = '(?P<sgstr>.*)' \(number\s+(?P<sgnumber>\d+)\)""")
-        outData = {'isSuccess': False}
+        outData = {"isSuccess": False}
         if logPath.exists():
             with open(str(logPath)) as f:
                 log = f.read()
             m = sgre.search(log)
             if m is not None:
                 d = m.groupdict()
-                sgnumber = d['sgnumber']
-                sgstr = d['sgstr']
+                sgnumber = d["sgnumber"]
+                sgstr = d["sgstr"]
 
-                outData['sgnumber'] = int(sgnumber)
-                outData['sgstr'] = sgstr
-                outData['isSuccess'] = True
+                outData["sgnumber"] = int(sgnumber)
+                outData["sgstr"] = sgstr
+                outData["isSuccess"] = True
                 # Search first for unit cell after the Laue group...
                 unitCellRe = re.compile("""  Laue group confidence.+\\n\\n\s+Unit cell:(.+)""")
                 m2 = unitCellRe.search(log)
                 if m2 is None:
                     # Then search it from the end...
-                    unitCellRe = re.compile(""" \* Cell Dimensions : \(obsolete \- refer to dataset cell dimensions above\)\\n\\n(.+)""")
+                    unitCellRe = re.compile(
+                        """ \* Cell Dimensions : \(obsolete \- refer to dataset cell dimensions above\)\\n\\n(.+)"""
+                    )
                     m2 = unitCellRe.search(log)
                 if m2 is not None:
                     listCell = m2.groups()[0].split()
                     cell = {
-                        'length_a': float(listCell[0]),
-                        'length_b': float(listCell[1]),
-                        'length_c': float(listCell[2]),
-                        'angle_alpha': float(listCell[3]),
-                        'angle_beta': float(listCell[4]),
-                        'angle_gamma': float(listCell[5])
+                        "length_a": float(listCell[0]),
+                        "length_b": float(listCell[1]),
+                        "length_c": float(listCell[2]),
+                        "angle_alpha": float(listCell[3]),
+                        "angle_beta": float(listCell[4]),
+                        "angle_gamma": float(listCell[5]),
                     }
-                    outData['cell'] = cell
+                    outData["cell"] = cell
         return outData
 
     def gzipUnmergedPointlessFile(self):
         pointless_out = self.getWorkingDirectory() / self.output_file
         try:
             self.DEBUG("gzip'ing pointless multirecord file {0}".format(pointless_out))
-            subprocess.call(['gzip', pointless_out])
+            subprocess.call(["gzip", pointless_out])
         except Exception:
             self.DEBUG("gzip'ing the file failed: {0}".format(traceback.format_exc()))
+
 
 class TruncateTask(AbstractTask):
     """run the CCP4 program Truncate"""
 
     def getInDataSchema(self):
         return {
-             "type": "object",
-             "properties": {
-                "inputFile": {"type":"string"},
-                "outputFile":{"type":"string"},
-                "res": {"type":"number"},
-                "isAnom": {"type":"boolean"},
-                "nres": {"type":["integer","null"]}
-             }
+            "type": "object",
+            "properties": {
+                "inputFile": {"type": "string"},
+                "outputFile": {"type": "string"},
+                "res": {"type": "number"},
+                "isAnom": {"type": "boolean"},
+                "nres": {"type": ["integer", "null"]},
+            },
         }
 
     def run(self, inData):
         outData = {}
-        ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
-        logger.debug(f'CCP4 Setup: {ccp4setup}')
+        ccp4setup = UtilsConfig.get("CCP4", "ccp4setup")
+        logger.debug(f"CCP4 Setup: {ccp4setup}")
         if ccp4setup is None:
-            logger.warning('CCP4 setup not found!')
+            logger.warning("CCP4 setup not found!")
             commandLine = ""
         else:
-            commandLine = ". " + ccp4setup + '\n'
+            commandLine = ". " + ccp4setup + "\n"
 
-        self.inputFile = inData['inputFile']
-        self.outputFile = self.getWorkingDirectory() / inData['outputFile']
-        commandLine += 'truncate '
-        commandLine += 'hklin {0} hklout {1}'.format(self.inputFile, self.outputFile)
-        listCommand = ['truncate YES']
+        self.inputFile = inData["inputFile"]
+        self.outputFile = self.getWorkingDirectory() / inData["outputFile"]
+        commandLine += "truncate "
+        commandLine += "hklin {0} hklout {1}".format(self.inputFile, self.outputFile)
+        listCommand = ["truncate YES"]
         listCommand.append("nres {0}".format(inData.get("nres")) if inData.get("nres") else "")
-        listCommand.append('anomalous {0}'.format(inData["isAnom"]))
-        listCommand.append('plot OFF')
-        listCommand.append('labout F=F_xdsproc SIGF=SIGF_xdsproc')
-        listCommand.append('falloff YES')
-        listCommand.append('resolution 50 {0}'.format(inData["res"]))
-        listCommand.append('PNAME EDNA2proc')
-        listCommand.append('DNAME EDNA2proc')
-        listCommand.append('end')
+        listCommand.append("anomalous {0}".format(inData["isAnom"]))
+        listCommand.append("plot OFF")
+        listCommand.append("labout F=F_xdsproc SIGF=SIGF_xdsproc")
+        listCommand.append("falloff YES")
+        listCommand.append("resolution 50 {0}".format(inData["res"]))
+        listCommand.append("PNAME EDNA2proc")
+        listCommand.append("DNAME EDNA2proc")
+        listCommand.append("end")
 
-        self.setLogFileName('truncate.log')
+        self.setLogFileName("truncate.log")
         logger.debug("Running ccp4/truncate...")
         try:
             self.runCommandLine(commandLine, listCommand=listCommand)
@@ -332,24 +339,25 @@ class TruncateTask(AbstractTask):
         self.isSuccess = Path(self.outputFile).exists()
 
         return outData
-    
+
+
 class UniqueifyTask(AbstractTask):
     def run(self, inData):
         outData = {}
-        ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
-        logger.debug(f'CCP4 Setup: {ccp4setup}')
+        ccp4setup = UtilsConfig.get("CCP4", "ccp4setup")
+        logger.debug(f"CCP4 Setup: {ccp4setup}")
         if ccp4setup is None:
-            logger.warning('CCP4 setup not found!')
+            logger.warning("CCP4 setup not found!")
             commandLine = ""
         else:
-            commandLine = ". " + ccp4setup + '\n'
+            commandLine = ". " + ccp4setup + "\n"
 
-        self.inputFile = inData['inputFile']
-        self.outputFile = self.getWorkingDirectory() / inData['outputFile']
-        self.setLogFileName('uniqeuify.log')
+        self.inputFile = inData["inputFile"]
+        self.outputFile = self.getWorkingDirectory() / inData["outputFile"]
+        self.setLogFileName("uniqeuify.log")
 
-        commandLine += 'uniqueify '
-        commandLine += '{0} {1}'.format(self.inputFile, self.outputFile)
+        commandLine += "uniqueify "
+        commandLine += "{0} {1}".format(self.inputFile, self.outputFile)
 
         logger.debug("Running ccp4/uniqueify...")
         try:
@@ -364,40 +372,36 @@ class UniqueifyTask(AbstractTask):
 
         return outData
 
+
 class DimpleTask(AbstractTask):
-        def run(self, inData):
-            self.doSubmit = inData.get("doSubmit", False)
-            ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
-            logger.debug(f'CCP4 Setup: {ccp4setup}')
-            if ccp4setup is None:
-                logger.warning('CCP4 setup not found!')
-                commandLine = ""
-            else:
-                commandLine = ". " + ccp4setup + '\n'
+    def run(self, inData):
+        self.doSubmit = inData.get("doSubmit", False)
+        ccp4setup = UtilsConfig.get("CCP4", "ccp4setup")
+        logger.debug(f"CCP4 Setup: {ccp4setup}")
+        if ccp4setup is None:
+            logger.warning("CCP4 setup not found!")
+            commandLine = ""
+        else:
+            commandLine = ". " + ccp4setup + "\n"
 
-            self.inputMtz = inData.get('inputMtz')
-            self.inputPdb = inData.get('inputPdb')
-            if self.inputPdb is None or self.inputMtz is None:
-                logger.error("Model PDB and MTZ are required:")
-                logger.error(f"PDB: {self.inputPdb}, MTZ: {self.inputMtz}")
-                self.setFailure()
-            self.setLogFileName('dimple.log')
+        self.inputMtz = inData.get("inputMtz")
+        self.inputPdb = inData.get("inputPdb")
+        if self.inputPdb is None or self.inputMtz is None:
+            logger.error("Model PDB and MTZ are required:")
+            logger.error(f"PDB: {self.inputPdb}, MTZ: {self.inputMtz}")
+            self.setFailure()
+        self.setLogFileName("dimple.log")
 
-            commandLine += 'dimple '
-            commandLine += f'{self.inputMtz} {self.inputPdb} {self.getWorkingDirectory()}'
+        commandLine += "dimple "
+        commandLine += f"{self.inputMtz} {self.inputPdb} {self.getWorkingDirectory()}"
 
-            logger.info("Running ccp4/dimple...")
+        logger.info("Running ccp4/dimple...")
 
-            if self.doSubmit:
-                self.submitCommandLine(commandLine)
-            else:
-                self.runCommandLine(commandLine)
-            # outData["uniqueifyOutputMtz"] = self.outputFile
-            # self.isSuccess = Path(self.outputFile).exists()
+        if self.doSubmit:
+            self.submitCommandLine(commandLine)
+        else:
+            self.runCommandLine(commandLine)
+        # outData["uniqueifyOutputMtz"] = self.outputFile
+        # self.isSuccess = Path(self.outputFile).exists()
 
-            return 
-
-
-
-
-
+        return
