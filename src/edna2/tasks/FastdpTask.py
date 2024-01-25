@@ -93,9 +93,7 @@ class FastdpTask(AbstractTask):
         }
 
     def run(self, inData):
-        UtilsLogging.addLocalFileHandler(
-            logger, self.getWorkingDirectory() / "EDNA_fastdp.log"
-        )
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory() / "EDNA_fastdp.log")
 
         self.timeStart = time.perf_counter()
         self.tmpdir = None
@@ -131,9 +129,7 @@ class FastdpTask(AbstractTask):
             pass
 
         # set up SG and unit cell
-        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(
-            self.spaceGroup
-        )
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
         # set up unit cell
         if self.unitCell is not None:
@@ -144,13 +140,9 @@ class FastdpTask(AbstractTask):
         # get masterfile name
         if self.masterFilePath is None:
             if self.dataCollectionId:
-                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(
-                    self.dataCollectionId
-                )
+                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
                 if self.masterFilePath is None or not self.masterFilePath.exists():
-                    logger.error(
-                        "dataCollectionId could not return master file path, exiting."
-                    )
+                    logger.error("dataCollectionId could not return master file path, exiting.")
                     self.setFailure()
                     return
 
@@ -164,9 +156,7 @@ class FastdpTask(AbstractTask):
         if self.imageNoStart is None or self.imageNoEnd is None:
             if self.dataCollectionId:
                 try:
-                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(
-                        self.dataCollectionId
-                    )
+                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
                     self.imageNoStart = dataCollectionWS3VO.startImageNumber
                     numImages = dataCollectionWS3VO.numberOfImages
                     self.imageNoEnd = numImages - self.imageNoStart + 1
@@ -186,9 +176,7 @@ class FastdpTask(AbstractTask):
             self.setFailure()
             return
 
-        dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(
-            self.masterFilePath
-        )
+        dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(self.masterFilePath)
         pathToStartImage = dataH5ImageList[0]
         pathToEndImage = dataH5ImageList[-1]
 
@@ -200,28 +188,20 @@ class FastdpTask(AbstractTask):
 
         # generate pyarch prefix
         if UtilsConfig.isALBA():
-            self.pyarchPrefix = "ap_{0}_{1}".format(
-                "_".join(listPrefix[:-2]), listPrefix[-2]
-            )
+            self.pyarchPrefix = "ap_{0}_{1}".format("_".join(listPrefix[:-2]), listPrefix[-2])
         elif UtilsConfig.isMAXIV():
             self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
         else:
             if len(listPrefix) > 2:
-                self.pyarchPrefix = "ap_{0}_run{1}".format(
-                    listPrefix[-3], listPrefix[-2]
-                )
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
             elif len(listPrefix) > 1:
-                self.pyarchPrefix = "ap_{0}_run{1}".format(
-                    listPrefix[:-2], listPrefix[-2]
-                )
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[:-2], listPrefix[-2])
             else:
                 self.pyarchPrefix = "ap_{0}_run".format(listPrefix[0])
 
         if self.waitForFiles:
             logger.info("Waiting for start image: {0}".format(pathToStartImage))
-            waitFileFirst = WaitFileTask(
-                inData={"file": pathToStartImage, "expectedSize": 100000}
-            )
+            waitFileFirst = WaitFileTask(inData={"file": pathToStartImage, "expectedSize": 100000})
             waitFileFirst.execute()
             if waitFileFirst.outData["timedOut"]:
                 logger.warning(
@@ -231,9 +211,7 @@ class FastdpTask(AbstractTask):
                 )
 
             logger.info("Waiting for end image: {0}".format(pathToEndImage))
-            waitFileLast = WaitFileTask(
-                inData={"file": pathToEndImage, "expectedSize": 100000}
-            )
+            waitFileLast = WaitFileTask(inData={"file": pathToEndImage, "expectedSize": 100000})
             waitFileLast.execute()
             if waitFileLast.outData["timedOut"]:
                 logger.warning(
@@ -284,24 +262,13 @@ class FastdpTask(AbstractTask):
         commandLine += " -j {0}".format(numJobs) if numJobs else ""
         commandLine += " -k {0}".format(numCores) if numCores else ""
         commandLine += " -R {0}".format(self.lowRes) if self.lowRes else ""
-        commandLine += (
-            " -r {0}".format(highResolutionLimit) if highResolutionLimit else ""
-        )
-        commandLine += (
-            " -s {0}".format(self.spaceGroupNumber) if self.spaceGroupNumber else ""
-        )
-        commandLine += (
-            ' -c "{cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}"'.format(
-                **self.unitCell
-            )
-            if self.unitCell
-            else ""
-        )
+        commandLine += " -r {0}".format(highResolutionLimit) if highResolutionLimit else ""
+        if self.spaceGroupNumber != 0 and self.unitCell:
+            commandLine += " -s {0}".format(self.spaceGroupNumber)
+            commandLine += ' -c "{cell_a},{cell_b},{cell_c},{cell_alpha},{cell_beta},{cell_gamma}"'.format(**self.unitCell)
         commandLine += " -a {0}".format(atom) if atom else ""
         commandLine += " -b {0},{1}".format(beamX, beamY) if beamX and beamY else ""
-        commandLine += (
-            " -l {0}".format(pathToNeggiaPlugin) if pathToNeggiaPlugin else ""
-        )
+        commandLine += " -l {0}".format(pathToNeggiaPlugin) if pathToNeggiaPlugin else ""
         commandLine += " {0}".format(self.masterFilePath)
 
         logger.info("fastdp command is {}".format(commandLine))
@@ -365,9 +332,7 @@ class FastdpTask(AbstractTask):
         if pathToXdsAsciiHkl.exists():
             pyarchXdsAsciiHkl = self.pyarchPrefix + "_XDS_ASCII.HKL.gz"
             with open(pathToXdsAsciiHkl, "rb") as f_in:
-                with gzip.open(
-                    os.path.join(self.resultsDirectory, pyarchXdsAsciiHkl), "wb"
-                ) as f_out:
+                with gzip.open(os.path.join(self.resultsDirectory, pyarchXdsAsciiHkl), "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
 
         # Add fast_dp.mtz if present and gzip it
@@ -388,9 +353,7 @@ class FastdpTask(AbstractTask):
         if inData.get("test", False):
             self.tmpdir = tempfile.TemporaryDirectory()
             pyarchDirectory = Path(self.tmpdir.name)
-            self.pyarchDirectory = self.storeDataOnPyarch(
-                pyarchDirectory=pyarchDirectory
-            )
+            self.pyarchDirectory = self.storeDataOnPyarch(pyarchDirectory=pyarchDirectory)
         else:
             self.pyarchDirectory = self.storeDataOnPyarch()
 
@@ -413,10 +376,10 @@ class FastdpTask(AbstractTask):
         outData["mtzFileForFastPhasing"] = str(pathToFastDpMtz)
         if outData["anomalous"]:
             logger.info("Significant anomalous signal found.")
-            
+
         self.timeEnd = time.perf_counter()
         logger.info(f"FastdpTask Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
-        outData["processTime"] = self.timeEnd-self.timeStart
+        outData["processTime"] = self.timeEnd - self.timeStart
         return outData
 
     def generateAutoProcResultsContainer(self, programId, integrationId, isAnom):
@@ -451,16 +414,12 @@ class FastdpTask(AbstractTask):
             }
             autoProcAttachmentContainerList.append(attachmentContainer)
 
-        autoProcResultsContainer[
-            "autoProcProgramAttachment"
-        ] = autoProcAttachmentContainerList
+        autoProcResultsContainer["autoProcProgramAttachment"] = autoProcAttachmentContainerList
 
         autoProcScalingStatisticsContainer = self.fastDpJsonToISPyBScalingStatistics(
             self.fastDpResults, aimlessResults=self.aimlessData, isAnom=False
         )
-        autoProcResultsContainer[
-            "autoProcScalingStatistics"
-        ] = autoProcScalingStatisticsContainer
+        autoProcResultsContainer["autoProcScalingStatistics"] = autoProcScalingStatisticsContainer
 
         if self.fastDpResultFiles["gxParmXds"].exists():
             xdsRerun = XDSTask.parseCorrectLp(inData=self.fastDpResultFiles)
@@ -470,15 +429,9 @@ class FastdpTask(AbstractTask):
                 "autoProcProgramId": programId,
                 "startImageNumber": self.imageNoStart,
                 "endImageNumber": self.imageNoEnd,
-                "refinedDetectorDistance": xdsRerun.get("refinedDiffractionParams").get(
-                    "crystal_to_detector_distance"
-                ),
-                "refinedXbeam": xdsRerun.get("refinedDiffractionParams").get(
-                    "direct_beam_detector_coordinates"
-                )[0],
-                "refinedYbeam": xdsRerun.get("refinedDiffractionParams").get(
-                    "direct_beam_detector_coordinates"
-                )[1],
+                "refinedDetectorDistance": xdsRerun.get("refinedDiffractionParams").get("crystal_to_detector_distance"),
+                "refinedXbeam": xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[0],
+                "refinedYbeam": xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[1],
                 "rotationAxisX": xdsRerun.get("gxparmData").get("rot")[0],
                 "rotationAxisY": xdsRerun.get("gxparmData").get("rot")[1],
                 "rotationAxisZ": xdsRerun.get("gxparmData").get("rot")[2],
@@ -494,18 +447,14 @@ class FastdpTask(AbstractTask):
                 "anomalous": isAnom,
                 "dataCollectionId": self.dataCollectionId,
             }
-            autoProcResultsContainer[
-                "autoProcIntegration"
-            ] = autoProcIntegrationContainer
+            autoProcResultsContainer["autoProcIntegration"] = autoProcIntegrationContainer
 
         return autoProcResultsContainer
 
     def storeDataOnPyarch(self, pyarchDirectory=None):
         # create paths on Pyarch
         if pyarchDirectory is None:
-            pyarchDirectory = UtilsPath.createPyarchFilePath(
-                self.resultFilePaths[0]
-            ).parent
+            pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
                 logger.debug(f"pyarchDirectory: {pyarchDirectory}")
@@ -515,9 +464,7 @@ class FastdpTask(AbstractTask):
                     logger.info(f"Copying {resultFile} to pyarch directory")
                     shutil.copy(resultFile, resultFilePyarchPath)
                 except Exception as e:
-                    logger.warning(
-                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
-                    )
+                    logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
                     logger.warning(e)
         else:
             for resultFile in [f for f in self.resultFilePaths if f.exists()]:
@@ -526,16 +473,12 @@ class FastdpTask(AbstractTask):
                     resultFilePyarchPath = pyarchDirectory / Path(resultFile).name
                     shutil.copy(resultFile, resultFilePyarchPath)
                 except Exception as e:
-                    logger.warning(
-                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
-                    )
+                    logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
                     logger.warning(e)
-                
+
         return pyarchDirectory
 
-    def fastDpJsonToISPyBScalingStatistics(
-        self, fastDpResults, aimlessResults=None, isAnom=False
-    ):
+    def fastDpJsonToISPyBScalingStatistics(self, fastDpResults, aimlessResults=None, isAnom=False):
         autoProcScalingContainer = []
         for shell, result in fastDpResults["scaling_statistics"].items():
             resultsShell = {}
@@ -543,22 +486,14 @@ class FastdpTask(AbstractTask):
             resultsShell["resolutionLimitLow"] = result.get("res_lim_low", None)
             resultsShell["resolutionLimitHigh"] = result.get("res_lim_high", None)
             resultsShell["rmerge"] = result.get("r_merge", None) * 100
-            resultsShell["rmeasAllIplusIminus"] = (
-                result.get("r_meas_all_iplusi_minus", None) * 100
-            )
+            resultsShell["rmeasAllIplusIminus"] = result.get("r_meas_all_iplusi_minus", None) * 100
             resultsShell["nTotalObservations"] = result.get("n_tot_obs", None)
-            resultsShell["nTotalUniqueObservations"] = result.get(
-                "n_tot_unique_obs", None
-            )
+            resultsShell["nTotalUniqueObservations"] = result.get("n_tot_unique_obs", None)
             resultsShell["meanIoverSigI"] = result.get("mean_i_sig_i", None)
             resultsShell["completeness"] = result.get("completeness", None)
             resultsShell["multiplicity"] = result.get("multiplicity", None)
-            resultsShell["anomalousCompleteness"] = result.get(
-                "anom_completeness", None
-            )
-            resultsShell["anomalousMultiplicity"] = result.get(
-                "anom_multiplicity", None
-            )
+            resultsShell["anomalousCompleteness"] = result.get("anom_completeness", None)
+            resultsShell["anomalousMultiplicity"] = result.get("anom_multiplicity", None)
             resultsShell["anomalous"] = isAnom
             resultsShell["ccHalf"] = result.get("cc_half", None)
             resultsShell["ccAno"] = result.get("cc_anom", None) * 100
@@ -568,40 +503,20 @@ class FastdpTask(AbstractTask):
             autoProcScalingContainer.append(resultsShell)
         if aimlessResults is not None:
             for shell, result in aimlessResults.items():
-                f = next(
-                    item
-                    for item in autoProcScalingContainer
-                    if item["scalingStatisticsType"] == shell
-                )
+                f = next(item for item in autoProcScalingContainer if item["scalingStatisticsType"] == shell)
                 f["rpimWithinIplusIminus"] = (
-                    result.get("rpimWithinIplusIminus") * 100
-                    if result.get("rpimWithinIplusIminus")
-                    else None
+                    result.get("rpimWithinIplusIminus") * 100 if result.get("rpimWithinIplusIminus") else None
                 )
                 f["rpimAllIplusIminus"] = (
-                    result.get("rpimAllIplusIminus") * 100
-                    if result.get("rpimAllIplusIminus")
-                    else None
+                    result.get("rpimAllIplusIminus") * 100 if result.get("rpimAllIplusIminus") else None
                 )
                 f["sigAno"] = result.get("sigAno")
         # sorting these so EXI will put sigAno/ISa in the right position...
         try:
             autoProcScalingContainer = [
-                next(
-                    item
-                    for item in autoProcScalingContainer
-                    if item["scalingStatisticsType"] == "overall"
-                ),
-                next(
-                    item
-                    for item in autoProcScalingContainer
-                    if item["scalingStatisticsType"] == "innerShell"
-                ),
-                next(
-                    item
-                    for item in autoProcScalingContainer
-                    if item["scalingStatisticsType"] == "outerShell"
-                ),
+                next(item for item in autoProcScalingContainer if item["scalingStatisticsType"] == "overall"),
+                next(item for item in autoProcScalingContainer if item["scalingStatisticsType"] == "innerShell"),
+                next(item for item in autoProcScalingContainer if item["scalingStatisticsType"] == "outerShell"),
             ]
         except:
             logger.error("autoProcScalingContainer could not be sorted")
@@ -616,10 +531,7 @@ class FastdpTask(AbstractTask):
         try:
             with open(aimless_log, "r") as fp:
                 for line in fp:
-                    if (
-                        "$TABLE:  Correlations CC(1/2) within dataset, XDSdataset"
-                        in line
-                    ):
+                    if "$TABLE:  Correlations CC(1/2) within dataset, XDSdataset" in line:
                         while "Overall" not in line:
                             line = next(fp)
                         cc_rcr = float(line.split()[3])
