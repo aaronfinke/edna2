@@ -1,0 +1,11 @@
+{
+    "aimlessXml": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/AimlessTask_anom/aimless.xml",
+    "aimlessLog": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/AimlessTask_anom/aimless.log",
+    "cTruncateLog": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/CTruncateTask_final/ctruncate.log",
+    "integrateLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XDSIntegration_init/INTEGRATE.LP",
+    "xtriageOutput": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/MmtbxXtriageTask_final/outDataMmtbxXtriageTask.json",
+    "xdsstatLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XdsstatTask_qdc3s5xr/XDSSTAT.LP",
+    "XdsIndexingLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XDSIndexing_init/IDXREF.LP",
+    "XdsCorrectLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XDSRerunCorrect_anom/CORRECT.LP"
+    
+}

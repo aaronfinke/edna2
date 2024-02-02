@@ -55,16 +55,15 @@ import logging
 
 logger = UtilsLogging.getLogger()
 
-from edna2.tasks.XDSTasks import XDSIndexing, XDSIntegration, XDSRerunCorrect
+from edna2.tasks.XDSTasks import XDSIndexing, XDSIntegration, XDSRerunCorrect, XdsstatTask
 from edna2.tasks.SubWedgeAssembly import SubWedgeAssembly
 from edna2.tasks.CCP4Tasks import (
     PointlessTask,
     AimlessTask,
-    TruncateTask,
+    CTruncateTask,
     UniqueifyTask,
 )
-from edna2.tasks.XSCALETasks import XSCALETask
-from edna2.tasks.PhenixTasks import PhenixXTriageTask
+from edna2.tasks.PhenixTasks import MmtbxXtriageTask
 from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, ISPyBStoreAutoProcStatus
 from edna2.tasks.WaitFileTask import WaitFileTask
 
@@ -112,9 +111,7 @@ class Edna2ProcTask(AbstractTask):
                 )
 
     def run(self, inData):
-        UtilsLogging.addLocalFileHandler(
-            logger, self.getWorkingDirectory() / "EDNA2Proc.log"
-        )
+        UtilsLogging.addLocalFileHandler(logger, self.getWorkingDirectory() / "EDNA2Proc.log")
         logger.info("EDNA2Proc started")
         if os.environ.get("SLURM_JOB_ID"):
             logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
@@ -148,9 +145,7 @@ class Edna2ProcTask(AbstractTask):
             pass
 
         # set up SG and unit cell
-        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(
-            self.spaceGroup
-        )
+        self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
 
         # set up unit cell
         if self.unitCell is not None:
@@ -161,13 +156,9 @@ class Edna2ProcTask(AbstractTask):
         # get masterfile name
         if self.masterFilePath is None:
             if self.dataCollectionId:
-                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(
-                    self.dataCollectionId
-                )
+                self.masterFilePath = UtilsIspyb.getXDSMasterFilePath(self.dataCollectionId)
                 if self.masterFilePath is None or not self.masterFilePath.exists():
-                    logger.error(
-                        "dataCollectionId could not return master file path, exiting."
-                    )
+                    logger.error("dataCollectionId could not return master file path, exiting.")
                     self.setFailure()
                     return
 
@@ -181,9 +172,7 @@ class Edna2ProcTask(AbstractTask):
         if self.imageNoStart is None or self.imageNoEnd is None:
             if self.dataCollectionId:
                 try:
-                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(
-                        self.dataCollectionId
-                    )
+                    dataCollectionWS3VO = UtilsIspyb.findDataCollection(self.dataCollectionId)
                     self.imageNoStart = dataCollectionWS3VO.startImageNumber
                     numImages = dataCollectionWS3VO.numberOfImages
                     self.imageNoEnd = numImages - self.imageNoStart + 1
@@ -203,9 +192,7 @@ class Edna2ProcTask(AbstractTask):
             self.setFailure()
             return
 
-        dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(
-            self.masterFilePath
-        )
+        dataH5ImageList = UtilsImage.generateDataFileListFromH5Master(self.masterFilePath)
         pathToStartImage = dataH5ImageList[0]
         pathToEndImage = dataH5ImageList[-1]
 
@@ -217,28 +204,20 @@ class Edna2ProcTask(AbstractTask):
 
         # generate pyarch prefix
         if UtilsConfig.isALBA():
-            self.pyarchPrefix = "ap_{0}_{1}".format(
-                "_".join(listPrefix[:-2]), listPrefix[-2]
-            )
+            self.pyarchPrefix = "ap_{0}_{1}".format("_".join(listPrefix[:-2]), listPrefix[-2])
         elif UtilsConfig.isMAXIV():
             self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
         else:
             if len(listPrefix) > 2:
-                self.pyarchPrefix = "ap_{0}_run{1}".format(
-                    listPrefix[-3], listPrefix[-2]
-                )
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[-3], listPrefix[-2])
             elif len(listPrefix) > 1:
-                self.pyarchPrefix = "ap_{0}_run{1}".format(
-                    listPrefix[:-2], listPrefix[-2]
-                )
+                self.pyarchPrefix = "ap_{0}_run{1}".format(listPrefix[:-2], listPrefix[-2])
             else:
                 self.pyarchPrefix = "ap_{0}_run".format(listPrefix[0])
 
         if self.waitForFiles:
             logger.info("Waiting for start image: {0}".format(pathToStartImage))
-            waitFileFirst = WaitFileTask(
-                inData={"file": pathToStartImage, "expectedSize": 100000}
-            )
+            waitFileFirst = WaitFileTask(inData={"file": pathToStartImage, "expectedSize": 100000})
             waitFileFirst.execute()
             if waitFileFirst.outData["timedOut"]:
                 logger.warning(
@@ -248,9 +227,7 @@ class Edna2ProcTask(AbstractTask):
                 )
 
             logger.info("Waiting for end image: {0}".format(pathToEndImage))
-            waitFileLast = WaitFileTask(
-                inData={"file": pathToEndImage, "expectedSize": 100000}
-            )
+            waitFileLast = WaitFileTask(inData={"file": pathToEndImage, "expectedSize": 100000})
             waitFileLast.execute()
             if waitFileLast.outData["timedOut"]:
                 logger.warning(
@@ -267,15 +244,9 @@ class Edna2ProcTask(AbstractTask):
                 self.integrationId, self.programId = self.createIntegrationId(
                     "Creating integration ID", isAnom=self.anomalous
                 )
-                logger.info(
-                    f"integrationID: {self.integrationId}, programId: {self.programId}"
-                )
+                logger.info(f"integrationID: {self.integrationId}, programId: {self.programId}")
             except Exception as e:
-                logger.error(
-                    "Could not get integration ID: \n{0}".format(
-                        traceback.format_exc(e)
-                    )
-                )
+                logger.error("Could not get integration ID: \n{0}".format(traceback.format_exc(e)))
 
         # set working directory, results directory, log file
         workingDirectory = self.getWorkingDirectory()
@@ -291,10 +262,8 @@ class Edna2ProcTask(AbstractTask):
                 self.imgNumLow,
                 self.imgNumHigh,
                 self.imageList,
-            ) = self.generateImageListFromH5Master_fast(
-                masterFilePath=self.masterFilePath
-            )
-            self.subWedgeAssembly = SubWedgeAssembly(inData=self.imageList, workingDirectorySuffix='0')
+            ) = self.generateImageListFromH5Master_fast(masterFilePath=self.masterFilePath)
+            self.subWedgeAssembly = SubWedgeAssembly(inData=self.imageList, workingDirectorySuffix="0")
             self.subWedgeAssembly.execute()
             self.xdsIndexingInData = self.subWedgeAssembly.outData
         else:
@@ -305,9 +274,7 @@ class Edna2ProcTask(AbstractTask):
         self.xdsIndexingInData["isAnom"] = self.anomalous
         self.xdsIndexingInData["onlineAutoProcessing"] = self.onlineAutoProcessing
 
-        self.indexing = XDSIndexing(
-            inData=self.xdsIndexingInData, workingDirectorySuffix="init"
-        )
+        self.indexing = XDSIndexing(inData=self.xdsIndexingInData, workingDirectorySuffix="init")
 
         logger.info("XDS Indexing started")
 
@@ -320,16 +287,12 @@ class Edna2ProcTask(AbstractTask):
         self.timeXdsIndexing = time1 - self.timeStart
 
         if self.indexing.isFailure() and self.unitCell is not None:
-            logger.info(
-                "Indexing Failed. Rerunning indexing with no unit cell and no space group..."
-            )
+            logger.info("Indexing Failed. Rerunning indexing with no unit cell and no space group...")
             self.reindex = True
             self.xdsIndexingInDataRound2 = self.xdsIndexingInData
             self.xdsIndexingInDataRound2["unitCell"] = None
             self.xdsIndexingInDataRound2["spaceGroupNumber"] = 0
-            self.indexingRound2 = XDSIndexing(
-                inData=self.xdsIndexingInDataRound2, workingDirectorySuffix="round2"
-            )
+            self.indexingRound2 = XDSIndexing(inData=self.xdsIndexingInDataRound2, workingDirectorySuffix="round2")
             logger.info("Starting reindexing")
             self.indexingRound2.execute()
 
@@ -381,15 +344,11 @@ class Edna2ProcTask(AbstractTask):
         del self.integrationInData["workingDirectory"]
         self.integrationInData["subWedge"] = self.indexing.inData["subWedge"]
         self.integrationInData["onlineAutoProcessing"] = self.onlineAutoProcessing
-        self.integration = XDSIntegration(
-            inData=self.integrationInData, workingDirectorySuffix="init"
-        )
+        self.integration = XDSIntegration(inData=self.integrationInData, workingDirectorySuffix="init")
         logger.info("Integration started")
 
         if self.doUploadIspyb:
-            self.logToIspyb(
-                self.integrationId, "Integration", "Launched", "XDS started"
-            )
+            self.logToIspyb(self.integrationId, "Integration", "Launched", "XDS started")
 
         self.integration.execute()
 
@@ -399,18 +358,14 @@ class Edna2ProcTask(AbstractTask):
         resCutoffFlag = False
         if self.integration.isSuccess():
             # calculate resolution cutoff. Reintegrate if no CC above 30%
-            completenessEntries = self.integration.outData.get(
-                "completenessEntries", None
-            )
+            completenessEntries = self.integration.outData.get("completenessEntries", None)
             firstResCutoff = self.getResCutoff(completenessEntries)
             if firstResCutoff is None:
                 resCutoffFlag = True
 
-        if (
-            self.integration.isFailure()
-            and self.unitCell is not None
-            and not self.reindex
-        ) or (resCutoffFlag and self.unitCell is not None):
+        if (self.integration.isFailure() and self.unitCell is not None and not self.reindex) or (
+            resCutoffFlag and self.unitCell is not None
+        ):
             logger.info(
                 "First round of integration failed. Rerunning indexing and integration with no unit cell and no space group..."
             )
@@ -447,9 +402,7 @@ class Edna2ProcTask(AbstractTask):
             del self.reintegrationInData["workingDirectory"]
             self.reintegrationInData["subWedge"] = self.indexing.inData["subWedge"]
             self.reintegrationInData["onlineAutoProcessing"] = self.onlineAutoProcessing
-            self.reintegration = XDSIntegration(
-                inData=self.reintegrationInData, workingDirectorySuffix="reInt_round2"
-            )
+            self.reintegration = XDSIntegration(inData=self.reintegrationInData, workingDirectorySuffix="reInt_round2")
             logger.info("Starting Reintegration")
 
             self.reintegration.execute()
@@ -487,9 +440,7 @@ class Edna2ProcTask(AbstractTask):
                     "Successful",
                     "XDS finished after {0:.1f}s".format(self.timeXdsIntegration),
                 )
-            logger.info(
-                f"XDS integration time took {self.timeXdsIntegration:0.1f} seconds"
-            )
+            logger.info(f"XDS integration time took {self.timeXdsIntegration:0.1f} seconds")
             logger.info("Integration Successful.")
 
         logger.info("Starting first resolution cutoff...")
@@ -497,31 +448,21 @@ class Edna2ProcTask(AbstractTask):
         self.firstResCutoff = self.getResCutoff(self.completenessEntries)
         if self.firstResCutoff is None:
             logger.error("No bins with CC1/2 greater than 30%")
-            logger.error(
-                "Something could be wrong, or the completeness could be too low!"
-            )
-            logger.error(
-                "bravais lattice/SG could be incorrect or something more insidious like"
-            )
-            logger.error(
-                "incorrect parameters in XDS.INP like distance, X beam, Y beam, etc."
-            )
+            logger.error("Something could be wrong, or the completeness could be too low!")
+            logger.error("bravais lattice/SG could be incorrect or something more insidious like")
+            logger.error("incorrect parameters in XDS.INP like distance, X beam, Y beam, etc.")
             logger.error("Stopping")
             self.setFailure()
             return
         logger.info(f"Resolution cutoff is {self.firstResCutoff}")
 
         # copy the XDS.INP file from the successful run into the results directory.
-        xds_INP_result_path = (
-            self.resultsDirectory / f"{self.pyarchPrefix}_successful_XDS.INP"
-        )
+        xds_INP_result_path = self.resultsDirectory / f"{self.pyarchPrefix}_successful_XDS.INP"
         integrateLp_path = self.resultsDirectory / f"{self.pyarchPrefix}_INTEGRATE.LP"
         correctLp_path = self.resultsDirectory / f"{self.pyarchPrefix}_CORRECT.LP"
         integrateHkl_path = self.resultsDirectory / f"{self.pyarchPrefix}_INTEGRATE.HKL"
         xdsAsciiHkl_path = self.resultsDirectory / f"{self.pyarchPrefix}_XDS_ASCII.HKL"
-        UtilsPath.systemCopyFile(
-            Path(self.integration.outData["integrateHkl"]), integrateHkl_path
-        )
+        UtilsPath.systemCopyFile(Path(self.integration.outData["integrateHkl"]), integrateHkl_path)
         UtilsPath.systemCopyFile(Path(self.integration.outData["xdsInp"]), xds_INP_result_path)
         UtilsPath.systemCopyFile(Path(self.integration.outData["integrateLp"]), integrateLp_path)
         UtilsPath.systemCopyFile(Path(self.integration.outData["correctLp"]), correctLp_path)
@@ -543,9 +484,7 @@ class Edna2ProcTask(AbstractTask):
             "output_file": "ep_pointless_unmerged.mtz",
         }
         logger.info("Starting pointless task...")
-        self.pointlessTask = PointlessTask(
-            inData=pointlessTaskinData, workingDirectorySuffix="init"
-        )
+        self.pointlessTask = PointlessTask(inData=pointlessTaskinData, workingDirectorySuffix="init")
         self.pointlessTask.execute()
 
         # logger.debug(f"Pointless output: {self.pointlessTask.outData}")
@@ -572,9 +511,7 @@ class Edna2ProcTask(AbstractTask):
         }
 
         logger.info("Rerunning CORRECT with the unit cell/SG from POINTLESS...")
-        self.xdsRerun = XDSRerunCorrect(
-            inData=rerunCor_data, workingDirectorySuffix="0"
-        )
+        self.xdsRerun = XDSRerunCorrect(inData=rerunCor_data, workingDirectorySuffix="0")
 
         self.xdsRerun.execute()
 
@@ -609,21 +546,13 @@ class Edna2ProcTask(AbstractTask):
         if self.resCutoff is None:
             logger.error("Error in determining resolution after CORRECT rerun.")
             logger.error("No bins with CC1/2 greater than 30%")
-            logger.error(
-                "Something could be wrong, or the completeness could be too low!"
-            )
-            logger.error(
-                "bravais lattice/SG could be incorrect or something more insidious like"
-            )
-            logger.error(
-                "incorrect parameters in XDS.INP like distance, X beam, Y beam, etc."
-            )
+            logger.error("Something could be wrong, or the completeness could be too low!")
+            logger.error("bravais lattice/SG could be incorrect or something more insidious like")
+            logger.error("incorrect parameters in XDS.INP like distance, X beam, Y beam, etc.")
             logger.error("Stopping")
             self.setFailure()
             if self.doUploadIspyb:
-                self.logToIspyb(
-                    self.integrationId, "Scaling", "Failed", "resolution cutoffs failed"
-                )
+                self.logToIspyb(self.integrationId, "Scaling", "Failed", "resolution cutoffs failed")
             self.setFailure()
             return
 
@@ -636,9 +565,7 @@ class Edna2ProcTask(AbstractTask):
             )
 
         self.bins = [
-            x["res"]
-            for x in self.xdsRerun.outData["completenessEntries"]
-            if x["include_res_based_on_cc"] is True
+            x["res"] for x in self.xdsRerun.outData["completenessEntries"] if x["include_res_based_on_cc"] is True
         ]
 
         self.pointlessTaskReruninData = {
@@ -646,12 +573,9 @@ class Edna2ProcTask(AbstractTask):
             "output_file": "ep__pointless_unmerged.mtz",
         }
         logger.info("Starting pointless tasks...")
-        self.pointlessTaskRerun = PointlessTask(
-            inData=self.pointlessTaskReruninData, workingDirectorySuffix="rerun"
-        )
+        self.pointlessTaskRerun = PointlessTask(inData=self.pointlessTaskReruninData, workingDirectorySuffix="rerun")
 
         self.pointlessTaskRerun.execute()
-
         if self.pointlessTaskRerun.isFailure():
             logger.error("Pointless task failed.")
             self.setFailure()
@@ -667,21 +591,15 @@ class Edna2ProcTask(AbstractTask):
             "anomalous": True,
         }
         logger.info("Starting aimless...")
-        self.aimlessTask = AimlessTask(
-            inData=self.aimlessTaskinData, workingDirectorySuffix="0"
-        )
+        self.aimlessTask = AimlessTask(inData=self.aimlessTaskinData, workingDirectorySuffix="0")
         self.aimlessTask.execute()
 
         logger.info(f"Aimless finished.")
 
-        highAnomSignalFound = self.if_anomalous_signal(
-            self.aimlessTask.outData["aimlessLog"], threshold=1.0
-        )
+        highAnomSignalFound = self.if_anomalous_signal(self.aimlessTask.outData["aimlessLog"], threshold=1.0)
 
         if highAnomSignalFound and not self.anomalous:
-            logger.info(
-                "Rerunning CORRECT/AIMLESS with anomalous flags due to significant anomalous signal found."
-            )
+            logger.info("Rerunning CORRECT/AIMLESS with anomalous flags due to significant anomalous signal found.")
             self.anomalous = True
             rerunCor_Anomdata = {
                 "xdsInp": self.integration.outData["xdsInp"],
@@ -702,16 +620,12 @@ class Edna2ProcTask(AbstractTask):
                 "isAnom": True,
             }
 
-            logger.info(
-                "Rerunning CORRECT with the unit cell/SG from POINTLESS and with anomalous flag on..."
-            )
-            self.xdsRerunAnom = XDSRerunCorrect(
-                inData=rerunCor_Anomdata, workingDirectorySuffix="anom"
-            )
+            logger.info("Rerunning CORRECT with the unit cell/SG from POINTLESS and with anomalous flag on...")
+            self.xdsRerunAnom = XDSRerunCorrect(inData=rerunCor_Anomdata, workingDirectorySuffix="anom")
 
             self.xdsRerunAnom.execute()
 
-            if self.xdsRerun.isFailure():
+            if self.xdsRerunAnom.isFailure():
                 logger.error("Rerun of CORRECT failed")
                 self.setFailure()
                 if self.doUploadIspyb:
@@ -739,15 +653,9 @@ class Edna2ProcTask(AbstractTask):
             if self.resCutoff is None:
                 logger.error("Error in determining resolution after CORRECT rerun.")
                 logger.error("No bins with CC1/2 greater than 30%")
-                logger.error(
-                    "Something could be wrong, or the completeness could be too low!"
-                )
-                logger.error(
-                    "bravais lattice/SG could be incorrect or something more insidious like"
-                )
-                logger.error(
-                    "incorrect parameters in XDS.INP like distance, X beam, Y beam, etc."
-                )
+                logger.error("Something could be wrong, or the completeness could be too low!")
+                logger.error("bravais lattice/SG could be incorrect or something more insidious like")
+                logger.error("incorrect parameters in XDS.INP like distance, X beam, Y beam, etc.")
                 logger.error("Stopping")
                 self.setFailure()
                 if self.doUploadIspyb:
@@ -787,9 +695,7 @@ class Edna2ProcTask(AbstractTask):
             self.pointlessTaskRerunAnom.execute()
 
             self.aimlessTaskInDataAnom = {
-                "input_file": self.pointlessTaskRerunAnom.outData[
-                    "pointlessUnmergedMtz"
-                ],
+                "input_file": self.pointlessTaskRerunAnom.outData["pointlessUnmergedMtz"],
                 "output_file": "ep__aimless.mtz",
                 "start_image": self.indexing.outData["start_image"],
                 "end_image": self.indexing.outData["end_image"],
@@ -798,9 +704,7 @@ class Edna2ProcTask(AbstractTask):
                 "anomalous": True,
             }
             logger.info("Starting aimless with anomalous flag on...")
-            self.aimlessTaskAnom = AimlessTask(
-                inData=self.aimlessTaskInDataAnom, workingDirectorySuffix="anom"
-            )
+            self.aimlessTaskAnom = AimlessTask(inData=self.aimlessTaskInDataAnom, workingDirectorySuffix="anom")
             self.aimlessTaskAnom.execute()
 
             logger.info(f"Aimless with anomalous flag finished.")
@@ -809,9 +713,14 @@ class Edna2ProcTask(AbstractTask):
             self.pointlessTaskRerun = self.pointlessTaskRerunAnom
             self.aimlessTask = self.aimlessTaskAnom
 
-        pointlessUnmergedMtzPath = self.resultsDirectory / (
-            f"{self.pyarchPrefix}_ep__pointless_unmerged.mtz"
-        )
+        xdsStatinData = {"xdsAsciiHkl": self.xdsRerun.outData["xdsAsciiHkl"]}
+
+        self.xdsStat = XdsstatTask(inData=xdsStatinData)
+        self.xdsStat.start()
+        
+        logger.info("Start xdsstat...")
+
+        pointlessUnmergedMtzPath = self.resultsDirectory / (f"{self.pyarchPrefix}_ep__pointless_unmerged.mtz")
         self.resultFilePaths.append(pointlessUnmergedMtzPath)
 
         UtilsPath.systemCopyFile(
@@ -819,57 +728,25 @@ class Edna2ProcTask(AbstractTask):
             pointlessUnmergedMtzPath,
         )
 
-        aimlessMergedMtzPath = (
-            self.resultsDirectory / f"{self.pyarchPrefix}_aimless.mtz"
-        )
-        aimlessUnmergedMtzPath = (
-            self.resultsDirectory / f"{self.pyarchPrefix}_aimless_unmerged.mtz.gz"
-        )
+        aimlessMergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_aimless.mtz"
+        aimlessUnmergedMtzPath = self.resultsDirectory / f"{self.pyarchPrefix}_aimless_unmerged.mtz.gz"
         aimlessLogPath = self.resultsDirectory / f"{self.pyarchPrefix}_aimless.log"
 
-        self.resultFilePaths.extend(
-            [aimlessMergedMtzPath, aimlessUnmergedMtzPath, aimlessLogPath]
-        )
+        self.resultFilePaths.extend([aimlessMergedMtzPath, aimlessUnmergedMtzPath, aimlessLogPath])
 
-        UtilsPath.systemCopyFile(
-            Path(self.aimlessTask.outData["aimlessMergedMtz"]), aimlessMergedMtzPath
-        )
+        UtilsPath.systemCopyFile(Path(self.aimlessTask.outData["aimlessMergedMtz"]), aimlessMergedMtzPath)
         UtilsPath.systemCopyFile(
             Path(self.aimlessTask.outData["aimlessUnmergedMtz"]),
             aimlessUnmergedMtzPath,
         )
         UtilsPath.systemCopyFile(Path(self.aimlessTask.outData["aimlessLog"]), aimlessLogPath)
 
-        self.timeXscaleStart = time.perf_counter()
-        self.xscaleTaskData = {
-            "xdsAsciiPath": self.xdsRerun.outData["xdsAsciiHkl"],
-            "bins" : self.bins,
-            "sgNumber": self.pointlessTask.outData["sgnumber"],
-            "cell" : self.pointlessTask.outData["cell"],
-            "onlineAutoProcessing": self.onlineAutoProcessing,
-            "isAnom" : self.anomalous,
-            "res" : self.resCutoff
-        }
-        logger.info("Start XSCALE run...")
-        self.xscaleTaskData_merge = self.xscaleTaskData
-        self.xscaleTaskData_merge['merge'] = True
-
-        self.xscaleTask_merge = XSCALETask(inData=self.xscaleTaskData_merge, workingDirectorySuffix="merged")
-
-        self.xscaleTaskData_unmerge = self.xscaleTaskData
-        self.xscaleTaskData_unmerge['merge'] = False
-
-        self.xscaleTask_unmerge = XSCALETask(inData=self.xscaleTaskData_unmerge, workingDirectorySuffix="unmerged")
-
-        self.xscaleTask_merge.start()
-        self.xscaleTask_unmerge.start()
-
         logger.info("Start phenix.xtriage run...")
         self.phenixXTriageTaskData = {
             "input_file": aimlessUnmergedMtzPath,
-            "workingDirectory": self.getWorkingDirectory()
+            "workingDirectory": self.getWorkingDirectory(),
         }
-        self.phenixXTriageTask = PhenixXTriageTask(inData=self.phenixXTriageTaskData, workingDirectorySuffix="final")
+        self.phenixXTriageTask = MmtbxXtriageTask(inData=self.phenixXTriageTaskData, workingDirectorySuffix="final")
         self.phenixXTriageTask.start()
 
         # now run truncate/unique
@@ -882,71 +759,50 @@ class Edna2ProcTask(AbstractTask):
         truncateOut = tempFile.name
         tempFile.close()
         os.chmod(truncateOut, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
-        shutil.chown(truncateOut, group = self.getWorkingDirectory().group())
+        shutil.chown(truncateOut, group=self.getWorkingDirectory().group())
 
         logger.info("Start ccp4/truncate...")
-        self.truncate = TruncateTask(inData= {
-            "inputFile" : aimlessMergedMtzPath,
-            "outputFile" : truncateOut,
-            "isAnom" : self.anomalous,
-            "res" : self.resCutoff,
-        }, workingDirectorySuffix="final")
+        self.truncate = CTruncateTask(
+            inData={
+                "inputFile": aimlessMergedMtzPath,
+                "outputFile": truncateOut,
+                "isAnom": True,
+                "colin": "IMEAN,SIGIMEAN",
+                "colano": "I(+),SIGI(+),I(-),SIGI(-)",
+            },
+            workingDirectorySuffix="final",
+        )
         self.truncate.execute()
         if self.truncate.isFailure():
             logger.error("Error running truncate. As this is a rare occurrence, it usually means")
             logger.error("something is seriously wrong with the data. Stopping here.")
 
         uniqueifyData = {
-            "inputFile": self.truncate.outData["truncateOutputMtz"],
+            "inputFile": self.truncate.outData["cTruncateOutputMtz"],
             "outputFile": "truncate_unique.mtz",
         }
-        self.uniqueify = UniqueifyTask(inData=uniqueifyData,  workingDirectorySuffix="final")
+        self.uniqueify = UniqueifyTask(inData=uniqueifyData, workingDirectorySuffix="final")
 
         self.uniqueify.start()
-        
-        self.xscaleTask_merge.join()
-        self.xscaleTask_unmerge.join()
-        logger.info("XSCALE run finished.")
 
-        xscaleTask_mergeLPFile = self.resultsDirectory / "ap__merged_XSCALE.LP"
-        xscaleTask_unmergeLPFile = self.resultsDirectory / "ap__unmerged_XSCALE.LP"
-        self.resultFilePaths.extend([xscaleTask_mergeLPFile,
-                                     xscaleTask_unmergeLPFile])
-        UtilsPath.systemCopyFile(self.xscaleTask_merge.outData["xscaleLp"], xscaleTask_mergeLPFile)
-        UtilsPath.systemCopyFile(self.xscaleTask_unmerge.outData["xscaleLp"], xscaleTask_unmergeLPFile)
-
+        self.xdsStat.join()
         self.phenixXTriageTask.join()
         self.uniqueify.join()
         if self.uniqueify.isFailure():
             logger.error("Error running uniqueify. As this is a rare occurrence, it usually means")
             logger.error("something is seriously wrong with the data. Stopping here.")
-
-
-        truncateLog = self.resultsDirectory / f"{self.pyarchPrefix}_truncate.log"
-        uniqueMtz = self.resultsDirectory / f"{self.pyarchPrefix}_truncate.mtz"
-        phenixXTriageTaskLog = (
-            self.resultsDirectory / f"{self.pyarchPrefix}_phenix_xtriage_anom.mtz"
-        )
-
-        UtilsPath.systemCopyFile(Path(self.truncate.outData["truncateLogPath"]), truncateLog)
-        UtilsPath.systemCopyFile(Path(self.uniqueify.outData["uniqueifyOutputMtz"]), uniqueMtz)
-        UtilsPath.systemCopyFile(
-            Path(self.phenixXTriageTask.outData["logPath"]), phenixXTriageTaskLog
-        )
         if self.phenixXTriageTask.isSuccess():
-            logger.info("Phenix.xtriage finished.")
+            logger.info("mmtbx.xtriage finished.")
 
-            if (
-                self.phenixXTriageTask.outData["hasTwinning"]
-                and self.phenixXTriageTask.outData["hasPseudotranslation"]
-            ):
-                logger.warning("Pseudotranslation and twinning detected by phenix.xtriage!")
-            elif self.phenixXTriageTask.outData["hasTwinning"]:
-                logger.warning("Twinning detected by phenix.xtriage!")
-            elif self.phenixXTriageTask.outData["hasPseudotranslation"]:
-                logger.warning("Pseudotranslation detected by phenix.xtriage!")
-            else:
-                logger.info("No twinning or pseudotranslation detected by phenix.xtriage.")
+        truncateLog = self.resultsDirectory / f"{self.pyarchPrefix}_ctruncate.log"
+        uniqueMtz = self.resultsDirectory / f"{self.pyarchPrefix}_final.mtz"
+        phenixXTriageTaskLog = self.resultsDirectory / f"{self.pyarchPrefix}_xtriage.log"
+        
+        xdsstatLpFile = self.xdsStat.outData["logFile"]
+
+        UtilsPath.systemCopyFile(Path(self.truncate.outData["cTruncateLogPath"]), truncateLog)
+        UtilsPath.systemCopyFile(Path(self.uniqueify.outData["uniqueifyOutputMtz"]), uniqueMtz)
+        UtilsPath.systemCopyFile(Path(self.phenixXTriageTask.outData["logFile"]), phenixXTriageTaskLog)
 
         self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
@@ -993,15 +849,13 @@ class Edna2ProcTask(AbstractTask):
             self.tmpdir.cleanup()
         self.timeEnd = time.perf_counter()
         logger.info(f"EDNA2Proc Completed. Process time: {self.timeEnd-self.timeStart:.1f} seconds")
-        outData["processTime"] = self.timeEnd-self.timeStart
+        outData["processTime"] = self.timeEnd - self.timeStart
         return outData
 
     def storeDataOnPyarch(self, pyarchDirectory=None):
         # create paths on Pyarch
         if pyarchDirectory is None:
-            pyarchDirectory = UtilsPath.createPyarchFilePath(
-                self.resultFilePaths[0]
-            ).parent
+            pyarchDirectory = UtilsPath.createPyarchFilePath(self.resultFilePaths[0]).parent
             if not pyarchDirectory.exists():
                 pyarchDirectory.mkdir(parents=True, exist_ok=True, mode=0o755)
                 logger.debug(f"pyarchDirectory: {pyarchDirectory}")
@@ -1011,9 +865,7 @@ class Edna2ProcTask(AbstractTask):
                     logger.info(f"Copying {resultFile} to pyarch directory")
                     shutil.copy2(resultFile, resultFilePyarchPath)
                 except Exception as e:
-                    logger.warning(
-                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
-                    )
+                    logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
                     logger.warning(e)
         else:
             for resultFile in [f for f in self.resultFilePaths if f.exists()]:
@@ -1022,11 +874,9 @@ class Edna2ProcTask(AbstractTask):
                     resultFilePyarchPath = pyarchDirectory / Path(resultFile).name
                     shutil.copy2(resultFile, resultFilePyarchPath)
                 except Exception as e:
-                    logger.warning(
-                        f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}"
-                    )
+                    logger.warning(f"Couldn't copy file {resultFile} to results directory {pyarchDirectory}")
                     logger.warning(e)
-                
+
         return pyarchDirectory
 
     def generateAutoProcScalingResultsContainer(self, programId, integrationId, isAnom):
@@ -1062,9 +912,7 @@ class Edna2ProcTask(AbstractTask):
             }
             autoProcAttachmentContainerList.append(attachmentContainer)
 
-        autoProcResultsContainer[
-            "autoProcProgramAttachment"
-        ] = autoProcAttachmentContainerList
+        autoProcResultsContainer["autoProcProgramAttachment"] = autoProcAttachmentContainerList
         xdsRerun = self.xdsRerun.outData
 
         autoProcIntegrationContainer = {
@@ -1072,15 +920,9 @@ class Edna2ProcTask(AbstractTask):
             "autoProcProgramId": programId,
             "startImageNumber": self.imgNumLow,
             "endImageNumber": self.imgNumHigh,
-            "refinedDetectorDistance": xdsRerun.get("refinedDiffractionParams").get(
-                "crystal_to_detector_distance"
-            ),
-            "refinedXbeam": xdsRerun.get("refinedDiffractionParams").get(
-                "direct_beam_detector_coordinates"
-            )[0],
-            "refinedYbeam": xdsRerun.get("refinedDiffractionParams").get(
-                "direct_beam_detector_coordinates"
-            )[1],
+            "refinedDetectorDistance": xdsRerun.get("refinedDiffractionParams").get("crystal_to_detector_distance"),
+            "refinedXbeam": xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[0],
+            "refinedYbeam": xdsRerun.get("refinedDiffractionParams").get("direct_beam_detector_coordinates")[1],
             "rotationAxisX": xdsRerun.get("gxparmData").get("rot")[0],
             "rotationAxisY": xdsRerun.get("gxparmData").get("rot")[1],
             "rotationAxisZ": xdsRerun.get("gxparmData").get("rot")[2],
@@ -1101,9 +943,7 @@ class Edna2ProcTask(AbstractTask):
         autoProcScalingHasIntContainer = {
             "autoProcIntegrationId": integrationId,
         }
-        autoProcResultsContainer[
-            "autoProcScalingHasInt"
-        ] = autoProcScalingHasIntContainer
+        autoProcResultsContainer["autoProcScalingHasInt"] = autoProcScalingHasIntContainer
 
         # add the scaling statistics to a list of containers...
         autoProcScalingStatisticsContainerList = []
@@ -1123,13 +963,9 @@ class Edna2ProcTask(AbstractTask):
             autoProcScalingStatisticsContainer["rmeasAllIplusIminus"] *= 100
             autoProcScalingStatisticsContainer["rpimWithinIplusIminus"] *= 100
             autoProcScalingStatisticsContainer["rpimAllIplusIminus"] *= 100
-            autoProcScalingStatisticsContainerList.append(
-                autoProcScalingStatisticsContainer
-            )
+            autoProcScalingStatisticsContainerList.append(autoProcScalingStatisticsContainer)
 
-        autoProcResultsContainer[
-            "autoProcScalingStatistics"
-        ] = autoProcScalingStatisticsContainerList
+        autoProcResultsContainer["autoProcScalingStatistics"] = autoProcScalingStatisticsContainerList
 
         return autoProcResultsContainer
 
@@ -1143,16 +979,10 @@ class Edna2ProcTask(AbstractTask):
         image_list = []
         master_file = h5py.File(inData["imagePath"], "r")
         for data_file in master_file["/entry/data"].keys():
-            image_nr_high = int(
-                master_file["/entry/data"][data_file].attrs["image_nr_high"]
-            )
-            image_nr_low = int(
-                master_file["/entry/data"][data_file].attrs["image_nr_low"]
-            )
+            image_nr_high = int(master_file["/entry/data"][data_file].attrs["image_nr_high"])
+            image_nr_low = int(master_file["/entry/data"][data_file].attrs["image_nr_low"])
             for i in range(image_nr_low, image_nr_high + 1):
-                image_list.append(
-                    f"{str(image_path.parent)}/{image_list_stem}_{i:06}.h5"
-                )
+                image_list.append(f"{str(image_path.parent)}/{image_list_stem}_{i:06}.h5")
         master_file.close()
         return len(image_list), {"imagePath": image_list}
 
@@ -1167,15 +997,9 @@ class Edna2ProcTask(AbstractTask):
         with h5py.File(masterFilePath, "r") as master_file:
             data_file_low = list(master_file["/entry/data"].keys())[0]
             data_file_high = list(master_file["/entry/data"].keys())[-1]
-            image_nr_high = int(
-                master_file["/entry/data"][data_file_high].attrs["image_nr_high"]
-            )
-            image_nr_low = int(
-                master_file["/entry/data"][data_file_low].attrs["image_nr_low"]
-            )
-            image_list.append(
-                f"{str(masterFilePath.parent)}/{image_list_stem}_{image_nr_low:06}.h5"
-            )
+            image_nr_high = int(master_file["/entry/data"][data_file_high].attrs["image_nr_high"])
+            image_nr_low = int(master_file["/entry/data"][data_file_low].attrs["image_nr_low"])
+            image_list.append(f"{str(masterFilePath.parent)}/{image_list_stem}_{image_nr_low:06}.h5")
         return image_nr_low, image_nr_high, {"imagePath": image_list}
 
     def getResCutoff(self, completeness_entries):
@@ -1223,9 +1047,7 @@ class Edna2ProcTask(AbstractTask):
             },
         }
 
-        autoprocStatus = ISPyBStoreAutoProcStatus(
-            inData=statusInput, workingDirectorySuffix=""
-        )
+        autoprocStatus = ISPyBStoreAutoProcStatus(inData=statusInput, workingDirectorySuffix="")
         autoprocStatus.execute()
 
     def createIntegrationId(self, comments, isAnom=False):
@@ -1251,9 +1073,7 @@ class Edna2ProcTask(AbstractTask):
                 "bltimeStamp": datetime.now().isoformat(timespec="seconds"),
             },
         }
-        autoprocStatus = ISPyBStoreAutoProcStatus(
-            inData=statusInput, workingDirectorySuffix="createIntegrationId"
-        )
+        autoprocStatus = ISPyBStoreAutoProcStatus(inData=statusInput, workingDirectorySuffix="createIntegrationId")
 
         # get our EDNAproc status id
         autoprocStatus.execute()

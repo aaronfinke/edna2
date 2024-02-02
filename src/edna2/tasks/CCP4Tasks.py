@@ -341,6 +341,59 @@ class TruncateTask(AbstractTask):
         return outData
 
 
+class CTruncateTask(AbstractTask):
+    """run the CCP4 program CTruncate"""
+
+    def getInDataSchema(self):
+        return {
+            "type": "object",
+            "properties": {
+                "inputFile": {"type": "string"},
+                "outputFile": {"type": "string"},
+                "isAnom": {"type": "boolean"},
+                "nres": {"type": ["integer", "null"]},
+                "colin": {"type": "string"},
+                "colano": {"type": "string"},
+            },
+        }
+
+    def run(self, inData):
+        outData = {}
+        ccp4setup = UtilsConfig.get("CCP4", "ccp4setup")
+        logger.debug(f"CCP4 Setup: {ccp4setup}")
+        if ccp4setup is None:
+            logger.warning("CCP4 setup not found!")
+            commandLine = ""
+        else:
+            commandLine = ". " + ccp4setup + "\n"
+        self.isAnom = inData.get("isAnom",True)
+        self.inputFile = inData["inputFile"]
+        self.outputFile = self.getWorkingDirectory() / inData["outputFile"]
+        self.colin = inData.get("colin", "IMEAN,SIGIMEAN")
+        self.colano = inData.get("colano","I(+),SIGI(+),I(-),SIGI(-)")
+        self.nres = inData.get("nres")
+        commandLine += "ctruncate "
+        commandLine += "-hklin {0} -hklout {1} ".format(self.inputFile, self.outputFile)
+        commandLine += "-colin \"/*/*/[{}]\" ".format(self.colin)
+        commandLine += "-colano \"/*/*/[{}]\" ".format(self.colano) if self.isAnom else ""
+
+        self.setLogFileName("ctruncate.log")
+        logger.debug("Running ccp4/ctruncate...")
+        try:
+            self.runCommandLine(commandLine)
+        except:
+            logger.error("Error running CTruncate! Check the log file.")
+            outData["cTruncateLogPath"] = self.getWorkingDirectory() / self.getLogFileName()
+            self.setFailure()
+            return outData
+
+        outData["cTruncateOutputMtz"] = self.outputFile
+        outData["cTruncateLogPath"] = self.getWorkingDirectory() / self.getLogFileName()
+        self.isSuccess = Path(self.outputFile).exists()
+
+        return outData
+
+
 class UniqueifyTask(AbstractTask):
     def run(self, inData):
         outData = {}
