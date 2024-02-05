@@ -834,42 +834,6 @@ class Edna2ProcTask(AbstractTask):
 
         self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
-        if inData.get("test", False):
-            self.tmpdir = tempfile.TemporaryDirectory()
-            pyarchDirectory = Path(self.tmpdir.name)
-            self.pyarchDirectory = self.storeDataOnPyarch(pyarchDirectory=pyarchDirectory)
-        else:
-            self.pyarchDirectory = self.storeDataOnPyarch()
-
-        # Let's get results into a container for ispyb
-        self.autoProcResultsContainer = self.generateAutoProcScalingResultsContainer(
-            programId=self.programId,
-            integrationId=self.integrationId,
-            isAnom=self.anomalous,
-        )
-
-        # now send it to ISPyB
-        if self.doUploadIspyb:
-            logger.info("Sending data to ISPyB...")
-            self.ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(
-                inData=self.autoProcResultsContainer, workingDirectorySuffix="final"
-            )
-            self.ispybStoreAutoProcResults.execute()
-            if self.ispybStoreAutoProcResults.isFailure():
-                logger.error("ISPyB Store autoproc results failed.")
-                # self.setFailure()
-                # return
-            if self.phenixXTriageTask.isSuccess():
-                if self.phenixXTriageTask.outData.get("hasTwinning"):
-                    self.twinning = True
-                if self.phenixXTriageTask.outData.get("hasPseudotranslation"):
-                    self.pseudoTranslation = True
-
-        outData = self.autoProcResultsContainer
-        outData["anomalous"] = self.anomalous
-        outData["reindex"] = self.reindex or self.reintegrate
-        outData["twinning"] = self.twinning
-        outData["pseudotranslation"] = self.pseudoTranslation
         headers = ["File Type", "File name"]
         self.edna2ReportFileList = {
                 "mtz_files": [    
@@ -944,6 +908,46 @@ class Edna2ProcTask(AbstractTask):
         logger.info("Generating report...")
         self.edna2Report = Edna2ReportTask(inData=self.Edna2ProcReportInData)
         self.edna2Report.execute()
+        edna2Report = self.resultsDirectory / "edna2proc_summary.html"
+        UtilsPath.systemCopyFile(Path(self.edna2Report.outData["htmlFile"]), edna2Report)
+
+        if inData.get("test", False):
+            self.tmpdir = tempfile.TemporaryDirectory()
+            pyarchDirectory = Path(self.tmpdir.name)
+            self.pyarchDirectory = self.storeDataOnPyarch(pyarchDirectory=pyarchDirectory)
+        else:
+            self.pyarchDirectory = self.storeDataOnPyarch()
+
+        # Let's get results into a container for ispyb
+        self.autoProcResultsContainer = self.generateAutoProcScalingResultsContainer(
+            programId=self.programId,
+            integrationId=self.integrationId,
+            isAnom=self.anomalous,
+        )
+
+        # now send it to ISPyB
+        if self.doUploadIspyb:
+            logger.info("Sending data to ISPyB...")
+            self.ispybStoreAutoProcResults = ISPyBStoreAutoProcResults(
+                inData=self.autoProcResultsContainer, workingDirectorySuffix="final"
+            )
+            self.ispybStoreAutoProcResults.execute()
+            if self.ispybStoreAutoProcResults.isFailure():
+                logger.error("ISPyB Store autoproc results failed.")
+                # self.setFailure()
+                # return
+            if self.phenixXTriageTask.isSuccess():
+                if self.phenixXTriageTask.outData.get("hasTwinning"):
+                    self.twinning = True
+                if self.phenixXTriageTask.outData.get("hasPseudotranslation"):
+                    self.pseudoTranslation = True
+
+        outData = self.autoProcResultsContainer
+        outData["anomalous"] = self.anomalous
+        outData["reindex"] = self.reindex or self.reintegrate
+        outData["twinning"] = self.twinning
+        outData["pseudotranslation"] = self.pseudoTranslation
+
 
         self.timeEnd = time.perf_counter()
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")

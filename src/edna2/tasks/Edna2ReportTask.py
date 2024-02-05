@@ -148,7 +148,7 @@ class Edna2ReportTask(AbstractTask):
             styles=styles,
         )
         try:
-            with open(Path(self.getWorkingDirectory()/"edna2_proc.html"), "wb") as f:
+            with open(Path(self.getWorkingDirectory()/"edna2proc_summary.html"), "wb") as f:
                 f.write(html_source.encode("utf-8", "xmlcharrefreplace"))
         except Exception as e:
             logger.error(f"Couldn't write html file: {e}")
@@ -157,7 +157,7 @@ class Edna2ReportTask(AbstractTask):
         logger.info(f"process took {time.perf_counter() - t1:0.1f} s")
 
         outData = {
-            "htmlFile": str(Path(self.getWorkingDirectory()/"edna2_proc.html"))
+            "htmlFile": str(Path(self.getWorkingDirectory()/"edna2proc_summary.html"))
         }
 
         return outData
