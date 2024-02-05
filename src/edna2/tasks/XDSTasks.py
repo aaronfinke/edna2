@@ -813,6 +813,7 @@ class XDSIndexing(XDSTask):
         out_data = {
             "workingDirectory": workingDirectory,
             "xdsInp": str(workingDirectory / "XDS.INP"),
+            "idxrefLp": str(idxref_path),
             "idxref": XDSIndexing.readIdxrefLp(idxref_path),
             "xparm": XDSIndexing.parseXparm(Path(xparm_path)),
             "xparmXds": xparm_path,
@@ -1273,5 +1274,5 @@ class XdsstatTask(AbstractTask):
             commandLine += ". " + ccp4Setup + "\n"
         commandLine += "echo XDS_ASCII.HKL | xdsstat"
         self.runCommandLine(commandLine)
-        outData = {"logFile": str(self.getLogFileName())}
+        outData = {"logFile": str(self.getWorkingDirectory() / "XDSSTAT.LP")}
         return outData

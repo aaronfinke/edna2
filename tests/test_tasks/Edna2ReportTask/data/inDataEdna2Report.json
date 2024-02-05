@@ -6,6 +6,6 @@
     "xtriageOutput": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/MmtbxXtriageTask_final/outDataMmtbxXtriageTask.json",
     "xdsstatLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XdsstatTask_qdc3s5xr/XDSSTAT.LP",
     "XdsIndexingLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XDSIndexing_init/IDXREF.LP",
-    "XdsCorrectLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XDSRerunCorrect_anom/CORRECT.LP"
-    
+    "XdsCorrectLp": "/gpfs/offline1/staff/biomax/aarfin/edna2proctest/Edna2ProcTask_0/XDSRerunCorrect_anom/CORRECT.LP",
+    "pointlessOutput": {"alternativeSpacegroups": ["P 41 21 2","P 43 21 2"]}
 }

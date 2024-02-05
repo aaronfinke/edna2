@@ -32,6 +32,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from edna2.utils import UtilsLogging
+import time
 
 from edna2.tasks.AbstractTask import AbstractTask
 logger = UtilsLogging.getLogger()
@@ -46,6 +47,7 @@ class Edna2ReportTask(AbstractTask):
     output. Template stolen without remorse from xia2/dials.
     Requirements:
     AIMLESS XML output
+    POINTLESS XML output
     CTRUNCATE log file
     INTEGRATE.LP from XDS
     xdsstat output
@@ -53,21 +55,24 @@ class Edna2ReportTask(AbstractTask):
     """
 
     def run(self, inData):
+        t1 = time.perf_counter()
         loader = PackageLoader("edna2", "templates")
         env = Environment(loader=loader)
         template = env.get_template("edna2.html")
 
         styles = {}
-
+        datasetName = inData.get("datasetName","DEFAULT")
         aimlessXml = inData["aimlessXml"]
         aimlessLog = inData["aimlessLog"]
         cTruncateLog = inData["cTruncateLog"]
         integrateLp = inData["integrateLp"]
         xtriageOutput = inData["xtriageOutput"]
+        pointlessOutput = inData["pointlessOutput"]
         # outputFilesList = inData["outputFilesList"]
         xdsstatLp = inData["xdsstatLp"]
         XdsIndexingLp = inData["XdsIndexingLp"]
         XdsCorrectLp = inData["XdsCorrectLp"]
+        files = inData["files"]
 
         refs = inData.get("refsList")
         xdsIndexOutput = self.generateHtmlFromText(XdsIndexingLp)
@@ -75,7 +80,6 @@ class Edna2ReportTask(AbstractTask):
         xdsCorrectOutput = self.generateHtmlFromText(XdsCorrectLp)
         aimlessOutput = self.generateHtmlFromText(aimlessLog)
         cTruncateOutput = self.generateHtmlFromText(cTruncateLog)
-        xtriageOutput = json.load(open(xtriageOutput,'r'))
         try:
             aimlessResults = xmltodict.parse(open(aimlessXml).read())
         except Exception as e:
@@ -113,14 +117,13 @@ class Edna2ReportTask(AbstractTask):
         ]
 
         references = {cdict["acta"]: cdict.get("url") for cdict in refs}
-        alternative_space_groups = []
-        mtz_files = []
-        unmerged_files = []
-        other_files = []
-        log_files_table = []
+        if pointlessOutput["alternativeSpacegroups"]:
+            alternative_space_groups = ", ".join(x for x in pointlessOutput["alternativeSpacegroups"])
+        else:
+            alternative_space_groups = None
         html_source = template.render(
             page_title="edna2proc processing report",
-            wname="NATIVE",
+            wname=datasetName,
             xdsIndexOutput=xdsIndexOutput,
             xdsIntegrateOutput=xdsIntegrateOutput,
             xdsCorrectOutput=xdsCorrectOutput,
@@ -132,10 +135,10 @@ class Edna2ReportTask(AbstractTask):
             overall_stats_table=overallStatsTable,
             detailed_stats_table=overallResultsTable,
             resShells=resShells,
-            mtz_files=mtz_files,
-            unmerged_files=unmerged_files,
-            other_files=other_files,
-            log_files_table=log_files_table,
+            mtz_files=files["mtz_files"],
+            unmerged_files=files["unmerged_files"],
+            other_files=files["other_files"],
+            log_files_table=files["log_files"],
             ccHalfPlot=analysisByResolutionPlots,
             batchplots=batchResultsPlotly,
             xtriage_results=xtriageOutput,
@@ -143,8 +146,21 @@ class Edna2ReportTask(AbstractTask):
             references=references,
             styles=styles,
         )
-        with open(Path(self.getWorkingDirectory()/"edna2_practice.html"), "wb") as f:
-            f.write(html_source.encode("utf-8", "xmlcharrefreplace"))
+        try:
+            with open(Path(self.getWorkingDirectory()/"edna2_proc.html"), "wb") as f:
+                f.write(html_source.encode("utf-8", "xmlcharrefreplace"))
+        except Exception as e:
+            logger.error(f"Couldn't write html file: {e}")
+            return
+        
+        logger.info(f"process took {time.perf_counter() - t1:0.1f} s")
+
+        outData = {
+            "htmlFile": str(Path(self.getWorkingDirectory()/"edna2_proc.html"))
+        }
+
+        return outData
+
 
     @staticmethod
     def generateHtmlFromText(textLog):
@@ -163,11 +179,8 @@ class Edna2ReportTask(AbstractTask):
         spaceGroupName = aimlessResults["AIMLESS"]["Result"]["Dataset"]["SpacegroupName"]
         spaceGroupString = sgtbx.space_group_info(symbol=spaceGroupName).symbol_and_number()
 
-        alternative_space_groups = []
-
         unitCell = aimlessResults["AIMLESS"]["Result"]["Dataset"]["cell"]
-        unitCellParams = uctbx.unit_cell(parameters="{a} {b} {c} {alpha} {beta} {gamma}".format(**unitCell))
-        unitCellString = str(unitCellParams)
+        unitCellString = "a = {a}, b = {b}, c = {c} , \u0391 = {alpha}, \u0392 = {beta}, \u0393 = {gamma}".format(**unitCell)
 
         resLow = aimlessResults["AIMLESS"]["Result"]["Dataset"]["ResolutionLow"]
         resHigh = aimlessResults["AIMLESS"]["Result"]["Dataset"]["ResolutionHigh"]

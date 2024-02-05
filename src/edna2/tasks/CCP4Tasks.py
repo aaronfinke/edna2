@@ -38,6 +38,7 @@ from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 import traceback
 import subprocess
+import xmltodict
 
 logger = UtilsLogging.getLogger()
 
@@ -231,7 +232,7 @@ class PointlessTask(AbstractTask):
             listCommand += "choose spacegroup {0}".format(inData["choose_spacegroup"])
         self.setLogFileName("pointless.log")
         self.runCommandLine(commandLine, listCommand=listCommand)
-        outData = self.parsePointlessOutput(self.getLogPath())
+        outData = self.parsePointlessXmlOutput(str(self.getWorkingDirectory() / self.xml_file))
         outData["pointlessUnmergedMtz"] = str(self.getWorkingDirectory() / self.output_file)
         outData["pointlessXml"] = str(self.getWorkingDirectory() / self.xml_file)
 
@@ -274,6 +275,70 @@ class PointlessTask(AbstractTask):
                     }
                     outData["cell"] = cell
         return outData
+
+    def parsePointlessXmlOutput(self, xmlPath):
+        try:
+            xmlOutput = xmltodict.parse(open(xmlPath,'r').read())
+        except Exception as e:
+            logger.Error(f"could not parse pointless xml output: {e}")
+
+        pointlessOut = xmlOutput["POINTLESS"]
+        bestSolution = pointlessOut["BestSolution"]
+
+        self.sgnumber = int(bestSolution["SGnumber"])
+        self.sgstr = bestSolution["GroupName"]
+        self.sgProb = bestSolution["TotalProb"]
+
+        bestCell = pointlessOut["BestCell"]["cell"]
+        self.unitcell = {
+            "length_a": float(bestCell['a']),
+            "length_b": float(bestCell['b']),
+            "length_c": float(bestCell['c']),
+            "angle_alpha": float(bestCell['alpha']),
+            "angle_beta": float(bestCell['beta']),
+            "angle_gamma": float(bestCell['gamma']),
+        }
+        self.solutionMessage = pointlessOut.get("SolutionMessage","")
+        try:
+            self.solutionWarning = pointlessOut["solutionWarning"]["#text"]
+        except:
+            logger.debug("no solution warning in pointless, which is fine")
+            self.solutionWarning = ""
+
+        alternative_space_groups = self.alternative_space_groups(xmlOutput)
+
+        outData = {
+            "cell": self.unitcell,
+            "sgnumber": self.sgnumber,
+            "sgstr": self.sgstr,
+            "solutionMessage":self.solutionMessage,
+            "solutionWarning":self.solutionWarning,
+            "alternativeSpacegroups":alternative_space_groups,
+            "isSuccess":True
+        }
+
+        return outData
+    
+    def alternative_space_groups(self,xmlOutput):
+        """grab alternative space groups
+        requires pointless xml parsed to dict"""
+        spaceGroupList = xmlOutput["POINTLESS"]["SpacegroupList"]['Spacegroup']
+        bestProb = float(self.sgProb)
+
+        #if probability is within 0.01 of best probability, then it's 
+        #probably very likely
+
+        alternativeSpacegroups = [x['SpacegroupName'] for x in spaceGroupList 
+                                  if abs(bestProb - float(x['TotalProb'])) < 0.01]
+        try:
+            alternativeSpacegroups.remove(self.sgstr)
+        except:
+            logger.debug("best solution is not in list(?)")
+        
+        
+        return alternativeSpacegroups
+
+
 
     def gzipUnmergedPointlessFile(self):
         pointless_out = self.getWorkingDirectory() / self.output_file

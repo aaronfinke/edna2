@@ -61,7 +61,6 @@ def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
         # workingDirectory = pathlib.Path(workingDirectory)
         workingDirectory = makeRandomDirectoryPath(prefix=task.__class__.__name__, dir=parentDirectory)
         workingDirectory.mkdir(mode=0o775, parents=True, exist_ok=False)
-
     else:
         # Here we assume that the user knows what he is doing and there's no
         # race condition for creating the working directory!
@@ -70,11 +69,12 @@ def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
         index = 1
         while workingDirectory.exists():
             workingDirectoryName = (
-                task.__class__.__name__ + "_" + str(workingDirectorySuffix) + "_{0:02d}".format(index)
+                task.__class__.__name__ + "_" + str(workingDirectorySuffix) + "_{0:d}".format(index)
             )
             workingDirectory = parentDirectory / workingDirectoryName
             index += 1
         workingDirectory.mkdir(mode=0o775, parents=True, exist_ok=False)
+
     workingDirectory = stripDataDirectoryPrefix(workingDirectory)
     return workingDirectory
 

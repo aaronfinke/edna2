@@ -29,9 +29,7 @@
 
             {% if alternative_space_groups %}
             <b>Alternative space groups:</b>
-            {% for item in alternative_space_groups %}
-            {{ item }}
-            {% endfor %}
+            {{ alternative_space_groups }}
             <br>
             {% endif %}
             <b>Unit cell:</b> {{ unit_cell }}

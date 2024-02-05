@@ -66,6 +66,7 @@ from edna2.tasks.CCP4Tasks import (
 from edna2.tasks.PhenixTasks import MmtbxXtriageTask
 from edna2.tasks.ISPyBTasks import ISPyBStoreAutoProcResults, ISPyBStoreAutoProcStatus
 from edna2.tasks.WaitFileTask import WaitFileTask
+from edna2.tasks.Edna2ReportTask import Edna2ReportTask
 
 
 class Edna2ProcTask(AbstractTask):
@@ -143,6 +144,33 @@ class Edna2ProcTask(AbstractTask):
             logger.debug(f"System load avg: {os.getloadavg()}")
         except OSError:
             pass
+
+        if self.dataCollectionId:
+            (
+                proteinAcronym,
+                sampleName,
+            ) = UtilsIspyb.getProteinAcronymAndSampleNameFromDataCollectionId(
+                self.dataCollectionId
+            )
+            if proteinAcronym is not None and sampleName is not None:
+                # only alphanumerics and underscores are allowed
+                try:
+                    proteinAcronym = re.sub(r"\W", "_", proteinAcronym)
+                    proteinAcronym = re.sub(r"^([_0-9])",r"x\1", proteinAcronym)
+                    sampleName = re.sub(r"\W", "_", sampleName)
+                    sampleName = re.sub(r"^([_0-9])",r"x\1", sampleName)
+                    self.proteinAcronym = proteinAcronym
+                    self.sampleName = sampleName
+                except Exception as e:
+                    logger.error(f"Error parsing proteinAcronym and sampleName: {e}")
+                    self.proteinAcronym = "AUTOMATIC"
+                    self.sampleName = "DEFAULT"
+            else:
+                self.proteinAcronym = "AUTOMATIC"
+                self.sampleName = "DEFAULT"
+        else:
+            self.proteinAcronym = "AUTOMATIC"
+            self.sampleName = "DEFAULT"
 
         # set up SG and unit cell
         self.spaceGroupNumber, self.spaceGroupString = UtilsCCTBX.parseSpaceGroup(self.spaceGroup)
@@ -511,7 +539,7 @@ class Edna2ProcTask(AbstractTask):
         }
 
         logger.info("Rerunning CORRECT with the unit cell/SG from POINTLESS...")
-        self.xdsRerun = XDSRerunCorrect(inData=rerunCor_data, workingDirectorySuffix="0")
+        self.xdsRerun = XDSRerunCorrect(inData=rerunCor_data, workingDirectorySuffix="first")
 
         self.xdsRerun.execute()
 
@@ -591,7 +619,7 @@ class Edna2ProcTask(AbstractTask):
             "anomalous": True,
         }
         logger.info("Starting aimless...")
-        self.aimlessTask = AimlessTask(inData=self.aimlessTaskinData, workingDirectorySuffix="0")
+        self.aimlessTask = AimlessTask(inData=self.aimlessTaskinData, workingDirectorySuffix="first")
         self.aimlessTask.execute()
 
         logger.info(f"Aimless finished.")
@@ -621,7 +649,7 @@ class Edna2ProcTask(AbstractTask):
             }
 
             logger.info("Rerunning CORRECT with the unit cell/SG from POINTLESS and with anomalous flag on...")
-            self.xdsRerunAnom = XDSRerunCorrect(inData=rerunCor_Anomdata, workingDirectorySuffix="anom")
+            self.xdsRerunAnom = XDSRerunCorrect(inData=rerunCor_Anomdata, workingDirectorySuffix="rerun_anom")
 
             self.xdsRerunAnom.execute()
 
@@ -741,7 +769,7 @@ class Edna2ProcTask(AbstractTask):
         )
         UtilsPath.systemCopyFile(Path(self.aimlessTask.outData["aimlessLog"]), aimlessLogPath)
 
-        logger.info("Start phenix.xtriage run...")
+        logger.info("Start mmtbx.xtriage run...")
         self.phenixXTriageTaskData = {
             "input_file": aimlessUnmergedMtzPath,
             "workingDirectory": self.getWorkingDirectory(),
@@ -761,7 +789,7 @@ class Edna2ProcTask(AbstractTask):
         os.chmod(truncateOut, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
         shutil.chown(truncateOut, group=self.getWorkingDirectory().group())
 
-        logger.info("Start ccp4/truncate...")
+        logger.info("Start ccp4/ctruncate...")
         self.truncate = CTruncateTask(
             inData={
                 "inputFile": aimlessMergedMtzPath,
@@ -842,6 +870,79 @@ class Edna2ProcTask(AbstractTask):
         outData["reindex"] = self.reindex or self.reintegrate
         outData["twinning"] = self.twinning
         outData["pseudotranslation"] = self.pseudoTranslation
+        headers = ["File Type", "File name"]
+        self.edna2ReportFileList = {
+                "mtz_files": [    
+                    headers,
+                    [
+                    "Aimless Merged Data",
+                    aimlessMergedMtzPath.name,
+                    ],
+                    [
+                    "Aimless Unmerged Data",
+                    aimlessUnmergedMtzPath.name,
+                    ],
+                    [
+                    "Truncate Merged Data (with free column)",
+                    uniqueMtz.name,
+                    ],
+                ],
+                "unmerged_files": [
+                    headers,
+                    [
+                    "XDS_ASCII.HKL Output",
+                    xdsAsciiHkl_path.name,
+                    ],
+                    [
+                    "INTEGRATE.HKL from XDS",
+                    integrateHkl_path.name
+                    ]
+                ],
+                "other_files": [
+                    headers,
+                    [
+                    "XDS.INP file",
+                    xds_INP_result_path.name
+                    ]
+
+                ],
+                "log_files": [
+                    [
+                    "Aimless Log",
+                    aimlessLogPath.name,
+                    ],
+                    [
+                    "Truncate Log",
+                    truncateLog.name,
+                    ],
+                    [
+                    "INTEGRATE.LP from XDS",
+                    integrateLp_path.name,
+                    ],
+                    [
+                    "CORRECT.LP from XDS",
+                    correctLp_path.name
+                    ]
+                ]
+            }
+        
+        #generate report
+        self.Edna2ProcReportInData = {
+            "datasetName": self.sampleName,
+            "aimlessXml": self.aimlessTask.outData["aimlessXml"],
+            "aimlessLog": self.aimlessTask.outData["aimlessLog"],
+            "cTruncateLog": self.truncate.outData["cTruncateLogPath"],
+            "integrateLp": self.integration.outData["integrateLp"],
+            "xtriageOutput": self.phenixXTriageTask.outData,
+            "xdsstatLp": self.xdsStat.outData["logFile"],
+            "XdsIndexingLp": self.indexing.outData["idxrefLp"],
+            "XdsCorrectLp": self.xdsRerun.outData["correctLp"],
+            "pointlessOutput": self.pointlessTask.outData,
+            "files": self.edna2ReportFileList,
+        }
+        logger.info("Generating report...")
+        self.edna2Report = Edna2ReportTask(inData=self.Edna2ProcReportInData)
+        self.edna2Report.execute()
 
         self.timeEnd = time.perf_counter()
         logger.info(f"Time to process was {self.timeEnd-self.timeStart:0.4f} seconds")
