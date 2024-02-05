@@ -750,7 +750,7 @@ class Edna2ProcTask(AbstractTask):
 
         pointlessUnmergedMtzPath = self.resultsDirectory / (f"{self.pyarchPrefix}_ep__pointless_unmerged.mtz")
         self.resultFilePaths.append(pointlessUnmergedMtzPath)
-
+        self.pointlessLog = self.pointlessTaskRerun.outData["pointlessLog"]
         UtilsPath.systemCopyFile(
             Path(self.pointlessTaskRerun.outData["pointlessUnmergedMtz"]),
             pointlessUnmergedMtzPath,
@@ -931,6 +931,7 @@ class Edna2ProcTask(AbstractTask):
             "datasetName": self.sampleName,
             "aimlessXml": self.aimlessTask.outData["aimlessXml"],
             "aimlessLog": self.aimlessTask.outData["aimlessLog"],
+            "pointlessLog": self.pointlessLog,
             "cTruncateLog": self.truncate.outData["cTruncateLogPath"],
             "integrateLp": self.integration.outData["integrateLp"],
             "xtriageOutput": self.phenixXTriageTask.outData,

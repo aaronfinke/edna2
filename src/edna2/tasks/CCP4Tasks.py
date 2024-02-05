@@ -235,6 +235,7 @@ class PointlessTask(AbstractTask):
         outData = self.parsePointlessXmlOutput(str(self.getWorkingDirectory() / self.xml_file))
         outData["pointlessUnmergedMtz"] = str(self.getWorkingDirectory() / self.output_file)
         outData["pointlessXml"] = str(self.getWorkingDirectory() / self.xml_file)
+        outData["pointlessLog"] = str(self.getWorkingDirectory() / "pointless.log" )
 
         return outData
 
@@ -325,16 +326,19 @@ class PointlessTask(AbstractTask):
         spaceGroupList = xmlOutput["POINTLESS"]["SpacegroupList"]['Spacegroup']
         bestProb = float(self.sgProb)
 
-        #if probability is within 0.01 of best probability, then it's 
-        #probably very likely
-
-        alternativeSpacegroups = [x['SpacegroupName'] for x in spaceGroupList 
-                                  if abs(bestProb - float(x['TotalProb'])) < 0.01]
-        try:
-            alternativeSpacegroups.remove(self.sgstr)
-        except:
-            logger.debug("best solution is not in list(?)")
-        
+        #output is list if there are other SG possibilities, otherwise it's
+        #a dict
+        if isinstance(spaceGroupList, list):
+            #if probability is within 0.01 of best probability, then it's 
+            #probably very likely
+            alternativeSpacegroups = [x['SpacegroupName'] for x in spaceGroupList 
+                                    if abs(bestProb - float(x['TotalProb'])) < 0.01]
+            try:
+                alternativeSpacegroups.remove(self.sgstr)
+            except:
+                logger.debug("best solution is not in list(?)")
+        else:
+            alternativeSpacegroups = []
         
         return alternativeSpacegroups
 

@@ -30,6 +30,7 @@ import os
 from typing import Tuple
 import io
 from mmtbx.scaling import printed_output
+import html
 
 from edna2.tasks.AbstractTask import AbstractTask
 from edna2.utils import UtilsLogging
@@ -117,6 +118,7 @@ class MmtbxXtriageTask(AbstractTask):
 
         for level, text, sub_header in issues._issues:
             summary = sub_header_to_out.get(sub_header, io.StringIO()).getvalue()
+            summary = html.escape(summary)
             d = {"level": level, "text": text, "summary": summary, "header": sub_header}
             if level == 0:
                 xtriage_success.append(d)

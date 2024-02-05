@@ -23,7 +23,7 @@
                                     {% for issue in danger %}
                                         <button type="button" class="btn btn-danger btn-block" style="text-align:left; padding-left:6px" data-toggle="modal" data-target="#danger{{ suffix }}{{ loop.index }}">
                                         <span class="glyphicon glyphicon-remove"></span>
-                                        {{ issue.text }}
+                                        {{ issue.text | safe }}
                                         </button>
                                     {{ xtriage_modal(issue.header, issue.summary, "danger"+suffix+loop.index|string)}}
                                     {% endfor %}
@@ -44,7 +44,7 @@
                                     {% for issue in warning %}
                                         <button type="button" class="btn btn-warning btn-block" style="text-align:left; padding-left:6px" data-toggle="modal" data-target="#warning{{ suffix }}{{ loop.index }}">
                                         <span class="glyphicon glyphicon-exclamation-sign"></span>
-                                        {{ issue.text }}
+                                        {{ issue.text | safe }}
                                         </button>
                                     {{ xtriage_modal(issue.header, issue.summary, "warning"+suffix+loop.index|string)}}
                                     {% endfor %}
@@ -65,7 +65,7 @@
                                     {% for issue in success %}
                                         <button type="button" class="btn btn-success btn-block" style="text-align:left; padding-left:6px" data-toggle="modal" data-target="#success{{ suffix }}{{ loop.index }}">
                                         <span class="glyphicon glyphicon-ok"></span>
-                                        {{ issue.text }}
+                                        {{ issue.text | safe }}
                                         </button>
                                     {{ xtriage_modal(issue.header, issue.summary, "success"+suffix+loop.index|string)}}
                                     {% endfor %}
@@ -98,7 +98,7 @@
       </div>
       <div class="modal-body">
         {% autoescape true %}
-          <pre>{{ content }}</pre>
+          <pre>{{ content | safe }}</pre>
         {% endautoescape %}
       </div>
       <div class="modal-footer">

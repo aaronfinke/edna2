@@ -23,11 +23,10 @@ __authors__ = ["A. Finke"]
 __license__ = "MIT"
 __date__ = "20/01/2024"
 
-from jinja2 import ChoiceLoader, Environment, PackageLoader
+from jinja2 import Environment, PackageLoader
 from cctbx import sgtbx, uctbx
-import json, xmltodict
+import xmltodict
 import html
-import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -61,14 +60,14 @@ class Edna2ReportTask(AbstractTask):
         template = env.get_template("edna2.html")
 
         styles = {}
-        datasetName = inData.get("datasetName","DEFAULT")
+        self.datasetName = inData.get("datasetName","DEFAULT")
+        pointlessLog = inData["pointlessLog"]
         aimlessXml = inData["aimlessXml"]
         aimlessLog = inData["aimlessLog"]
         cTruncateLog = inData["cTruncateLog"]
         integrateLp = inData["integrateLp"]
         xtriageOutput = inData["xtriageOutput"]
         pointlessOutput = inData["pointlessOutput"]
-        # outputFilesList = inData["outputFilesList"]
         xdsstatLp = inData["xdsstatLp"]
         XdsIndexingLp = inData["XdsIndexingLp"]
         XdsCorrectLp = inData["XdsCorrectLp"]
@@ -78,6 +77,7 @@ class Edna2ReportTask(AbstractTask):
         xdsIndexOutput = self.generateHtmlFromText(XdsIndexingLp)
         xdsIntegrateOutput = self.generateHtmlFromText(integrateLp)
         xdsCorrectOutput = self.generateHtmlFromText(XdsCorrectLp)
+        pointlessHtml = self.generateHtmlFromText(pointlessLog)
         aimlessOutput = self.generateHtmlFromText(aimlessLog)
         cTruncateOutput = self.generateHtmlFromText(cTruncateLog)
         try:
@@ -127,6 +127,7 @@ class Edna2ReportTask(AbstractTask):
             xdsIndexOutput=xdsIndexOutput,
             xdsIntegrateOutput=xdsIntegrateOutput,
             xdsCorrectOutput=xdsCorrectOutput,
+            pointlessOutput=pointlessHtml,
             aimlessOutput=aimlessOutput,
             cTruncateOutput=cTruncateOutput,
             space_group=spaceGroupString,
@@ -172,15 +173,15 @@ class Edna2ReportTask(AbstractTask):
             return
         return output
 
-    @staticmethod
-    def generateOverallStatsTable(aimlessResults):
+
+    def generateOverallStatsTable(self, aimlessResults):
         wavelengthString = str(float(aimlessResults["AIMLESS"]["ReflectionData"]["Dataset"]["Wavelength"]))
 
         spaceGroupName = aimlessResults["AIMLESS"]["Result"]["Dataset"]["SpacegroupName"]
         spaceGroupString = sgtbx.space_group_info(symbol=spaceGroupName).symbol_and_number()
 
         unitCell = aimlessResults["AIMLESS"]["Result"]["Dataset"]["cell"]
-        unitCellString = "a = {a}, b = {b}, c = {c} , \u0391 = {alpha}, \u0392 = {beta}, \u0393 = {gamma}".format(**unitCell)
+        unitCellString = "a = {a}, b = {b}, c = {c} , \u03B1 = {alpha}, \u03B2 = {beta}, \u03B3 = {gamma}".format(**unitCell)
 
         resLow = aimlessResults["AIMLESS"]["Result"]["Dataset"]["ResolutionLow"]
         resHigh = aimlessResults["AIMLESS"]["Result"]["Dataset"]["ResolutionHigh"]
@@ -217,7 +218,7 @@ class Edna2ReportTask(AbstractTask):
                 "Multiplicity",
                 "CC-half",
                 "I/sigma",
-                "Rmerge(I)",
+                "R<sub>merge</sub>(I)",
                 # anomalous statistics
                 "Anomalous completeness (%)",
                 "Anomalous multiplicity",
@@ -225,7 +226,7 @@ class Edna2ReportTask(AbstractTask):
         )
         columns.append(
             [
-                "NATIVE",
+                self.datasetName,
                 wavelengthString,
                 resolutionString,
                 completenessString,
@@ -739,7 +740,7 @@ class Edna2ReportTask(AbstractTask):
                         "opacity": 0.8,
                         "mode": "lines",
                         "line": {"color": "rgb(31, 119, 180)"},
-                        "text": [f"#refl:{int(x)}" for x in list(df["nref"])],
+                        "text": [f"#refl:{x}" for x in list(df["nref"])],
                     },
                     {
                         "x": list(df["frame"]),
@@ -752,7 +753,7 @@ class Edna2ReportTask(AbstractTask):
                         "line": {
                             "color": "rgb(255, 127, 14)",
                         },
-                        "text": [f"#refl:{int(x)}" for x in list(df["NrefusedforRMeas"])],
+                        "text": [f"#refl:{x}" for x in list(df["NrefusedforRMeas"])],
                     },
                 ],
                 "layout": {
