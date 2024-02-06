@@ -32,7 +32,7 @@ import shutil
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 
-from iotbx.pdb.fetch import fetch, get_pdb
+import requests,json
 
 logger = UtilsLogging.getLogger()
 
@@ -41,6 +41,7 @@ def fetchPdbFileFromAccessionCode(pdbCode):
     downloads the PDB file of the code, and returns the 
     path of the downloaded file.
     """
+    from iotbx.pdb.fetch import fetch, get_pdb
     mirror = UtilsConfig.get("PDB","pdbMirror", None)
     if mirror is None:
         logger.warning("No PDB mirror indicated- using RCSB as default")
@@ -51,3 +52,24 @@ def fetchPdbFileFromAccessionCode(pdbCode):
     except:
         logger.error("Could not download pdb file!")
     return None
+
+def pdbQuery(query):
+    """
+    send a query to pdb API
+    query should be a dict
+    see: https://search.rcsb.org/#search-api
+    """
+    queryURL = UtilsConfig.get("PDB","pdbQuery", None)
+    query_string = json.dumps(query)
+    query = f"{queryURL}?json={query_string}"
+    results = requests.get(query)
+
+    # any reqiest with a status code > 300 indicates something went wrong
+    if results.status_code > 300:
+        logger.error("PDB API query failed")
+        return []
+    result_json = json.loads(results.text)
+    if result_json["total_count"] < 1:
+        return []
+    return result_json["result_set"]
+    
