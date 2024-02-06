@@ -123,7 +123,7 @@ class Edna2ReportTask(AbstractTask):
             alternative_space_groups = None
         html_source = template.render(
             page_title="edna2proc processing report",
-            wname=datasetName,
+            wname=self.datasetName,
             xdsIndexOutput=xdsIndexOutput,
             xdsIntegrateOutput=xdsIntegrateOutput,
             xdsCorrectOutput=xdsCorrectOutput,
