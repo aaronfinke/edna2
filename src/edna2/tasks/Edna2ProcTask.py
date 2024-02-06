@@ -909,8 +909,9 @@ class Edna2ProcTask(AbstractTask):
         self.edna2Report = Edna2ReportTask(inData=self.Edna2ProcReportInData)
         self.edna2Report.execute()
         edna2Report = self.resultsDirectory / "edna2proc_summary.html"
-        UtilsPath.systemCopyFile(Path(self.edna2Report.outData["htmlFile"]), edna2Report)
+        self.resultFilePaths.append(edna2Report)
 
+        UtilsPath.systemCopyFile(Path(self.edna2Report.outData["htmlFile"]), edna2Report)
         if inData.get("test", False):
             self.tmpdir = tempfile.TemporaryDirectory()
             pyarchDirectory = Path(self.tmpdir.name)
