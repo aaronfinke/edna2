@@ -39,6 +39,7 @@ from edna2.utils import UtilsImage
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsIspyb
 from edna2.utils import UtilsCCTBX
+from edna2.utils import UtilsConfig
 from textwrap import dedent
 import subprocess
 
@@ -358,13 +359,15 @@ class MAXIVFastProcessingTask(AbstractTask):
                 json.dump(autoPROCTaskinData, fp, indent=4)
         except Exception as e:
             logger.error(f"generating autoPROC json failed: {e}")
+        autoProcPartition = UtilsConfig.get("AutoPROCTask","slurm_partition","all")
+
         if autoProcSlurminDataJson.is_file():
             autoProcSlurm = f"""\
             #!/bin/bash
             #SBATCH --exclusive
             #SBATCH -t 02:00:00
             #SBATCH --mem=0
-            #SBATCH --partition=fujitsu
+            #SBATCH --partition={autoProcPartition}
             #SBATCH -J "EDNA2_aP"
             #SBATCH --output EDNA2job_%j.out
             #SBATCH --chdir {self.getWorkingDirectory()}
@@ -389,13 +392,14 @@ class MAXIVFastProcessingTask(AbstractTask):
                 json.dump(xia2DialsTaskinData, fp, indent=4)
         except Exception as e:
             logger.error(f"generating Xia2 json failed: {e}")
+        xia2Partition = UtilsConfig.get("Xia2DialsTask","slurm_partition","all")
         if xia2DialsSlurminDataJson.is_file():
             xia2DIALSSlurm = f"""\
             #!/bin/bash
             #SBATCH --exclusive
             #SBATCH -t 02:00:00
             #SBATCH --mem=0
-            #SBATCH --partition=fujitsu
+            #SBATCH --partition={xia2Partition}
             #SBATCH -J "EDNA2_x2d"
             #SBATCH --output EDNA2job_%j.out
             #SBATCH --chdir {self.getWorkingDirectory()}
