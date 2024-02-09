@@ -76,6 +76,10 @@ class MAXIVFastProcessingTask(AbstractTask):
                 "test": {"type": ["boolean", "null"]},
                 "waitForFiles": {"type": ["boolean", "null"]},
                 "doUploadIspyb": {"type": ["boolean", "null"]},
+                "doEdna2Proc": {"type": ["boolean", "null"]},
+                "doFastdp": {"type": ["boolean", "null"]},
+                "doAutoProc": {"type": ["boolean", "null"]},
+                "doXia2Dials": {"type": ["boolean", "null"]}
             },
         }
 
@@ -87,7 +91,6 @@ class MAXIVFastProcessingTask(AbstractTask):
             logger.info(f"SLURM job id: {os.environ.get('SLURM_JOB_ID')}")
         logger.info(f"Running on {socket.gethostname()}")
 
-        self.anomFlag = False
         outData = {}
         self.startDateTime = datetime.now().isoformat(timespec="seconds")
         self.startDateTimeFormatted = datetime.now().strftime("%y%m%d-%H%M%S")
@@ -104,9 +107,12 @@ class MAXIVFastProcessingTask(AbstractTask):
         self.workingDirectory = inData.get("workingDirectory", self.getWorkingDirectory())
         self.doUploadIspyb = inData.get("doUploadIspyb", True)
         self.waitForFiles = inData.get("waitForFiles", True)
-
         self.pdb = inData.get("pdb", None)
         self.test = inData.get("test", False)
+        self.doEdna2Proc = inData.get("doEdna2Proc",True)
+        self.doFastdp = inData.get("doFastdp",True)
+        self.doAutoProc = inData.get("doAutoProc",True)
+        self.doXia2Dials = inData.get("doXia2Dials",True)
 
         self.proteinAcronym = "AUTOMATIC"
         self.sampleName = "DEFAULT"
@@ -231,7 +237,7 @@ class MAXIVFastProcessingTask(AbstractTask):
                 "imageNoEnd": self.imageNoEnd,
                 "waitForFiles": False,
                 "doUploadIspyb": True,
-                "anomalous": False,
+                "anomalous": self.anomalous,
                 "test": self.test,
                 "timeOut": 1800,
             },
@@ -239,37 +245,22 @@ class MAXIVFastProcessingTask(AbstractTask):
         )
 
         # imgQualityDozor.start()
-        edna2ProcTask.start()
-        fastDpTask.start()
+        if self.doEdna2Proc:
+            edna2ProcTask.start()
+        if self.doFastdp:
+            fastDpTask.start()
 
         # imgQualityDozor.join()
-        fastDpTask.join()
-        edna2ProcTask.join()
-
-        # set the logic for anomalous processing: if both fastdp and edna2proc say it's anomalous,
-        # then set it to anomalous. otherwise don't (unless one or the other fails)
-        logger.debug("Checking for anomalous signal...")
-
-        if edna2ProcTask.isSuccess() and fastDpTask.isSuccess():
-            logger.debug("EDNA2Proc and fastdp successful")
-            outData = {
-                "edna2Proc": edna2ProcTask.outData,
-                "fastDp": fastDpTask.outData,
-            }
-            self.anomalous = edna2ProcTask.outData.get("anomalous", False) and fastDpTask.outData.get(
-                "anomalous", False
-            )
-            logger.debug(f"self.anomalous = {self.anomalous}")
-        elif edna2ProcTask.isSuccess():
-            outData = {
-                "edna2Proc": edna2ProcTask.outData,
-            }
-            self.anomalous = edna2ProcTask.outData.get("anomalous", False)
-        elif fastDpTask.isSuccess():
-            outData = {
-                "fastDp": fastDpTask.outData,
-            }
-            self.anomalous = fastDpTask.outData.get("anomalous", False)
+        if self.doFastdp:
+            fastDpTask.join()
+            if fastDpTask.isSuccess():
+                outData["fastDp"] = fastDpTask.outData
+        if self.doEdna2Proc:
+            edna2ProcTask.join()
+            if edna2ProcTask.isSuccess():
+                outData["edna2Proc"] = edna2ProcTask.outData                
+                if self.anomalous == False:
+                    self.anomalous = edna2ProcTask.outData.get("anomalous", False)
 
         if self.anomalous:
             logger.debug("Anomalous flag switched on.")
@@ -317,17 +308,18 @@ class MAXIVFastProcessingTask(AbstractTask):
         }
 
         doFastSADPhasing = False
-        if self.anomalous and fastDpTask.isSuccess():
-            mtzFile = fastDpTask.outData.get("mtzFileForFastPhasing", None)
-            if mtzFile:
-                checkData = FastSADPhasingTask.checkForPhasingDataQuality(mtzFile=mtzFile)
-                if not checkData:
-                    logger.error("Data quality insufficient for phasing.")
+        if self.doFastdp:
+            if self.anomalous and fastDpTask.isSuccess():
+                mtzFile = fastDpTask.outData.get("mtzFileForFastPhasing", None)
+                if mtzFile:
+                    checkData = FastSADPhasingTask.checkForPhasingDataQuality(mtzFile=mtzFile)
+                    if not checkData:
+                        logger.error("Data quality insufficient for phasing.")
+                    else:
+                        logger.info("Data quality check for SAD phasing passed.")
+                        doFastSADPhasing = True
                 else:
-                    logger.info("Data quality check for SAD phasing passed.")
-                    doFastSADPhasing = True
-            else:
-                logger.error("Could not get MTZ file for fast phasing.")
+                    logger.error("Could not get MTZ file for fast phasing.")
 
         if doFastSADPhasing:
             logger.info("Starting Fast SAD Phasing...")
@@ -353,75 +345,80 @@ class MAXIVFastProcessingTask(AbstractTask):
             )
             fastSADPhasingTask.start()
 
-        autoProcSlurminDataJson = self.getWorkingDirectory() / "inDataAutoPROC.json"
-        try:
-            with open(autoProcSlurminDataJson, "w+") as fp:
-                json.dump(autoPROCTaskinData, fp, indent=4)
-        except Exception as e:
-            logger.error(f"generating autoPROC json failed: {e}")
-        autoProcPartition = UtilsConfig.get("AutoPROCTask","slurm_partition","all")
+        if self.doAutoProc:
+            autoProcSlurminDataJson = self.getWorkingDirectory() / "inDataAutoPROC.json"
+            try:
+                with open(autoProcSlurminDataJson, "w+") as fp:
+                    json.dump(autoPROCTaskinData, fp, indent=4)
+            except Exception as e:
+                logger.error(f"generating autoPROC json failed: {e}")
+            autoProcPartition = UtilsConfig.get("AutoPROCTask","slurm_partition","all")
 
-        if autoProcSlurminDataJson.is_file():
-            autoProcSlurm = f"""\
-            #!/bin/bash
-            #SBATCH --exclusive
-            #SBATCH -t 02:00:00
-            #SBATCH --mem=0
-            #SBATCH --partition={autoProcPartition}
-            #SBATCH -J "EDNA2_aP"
-            #SBATCH --output EDNA2job_%j.out
-            #SBATCH --chdir {self.getWorkingDirectory()}
-            source /mxn/groups/sw/mxsw/env_setup/edna2_proc.sh
-            run_edna2.py --inDataFile {autoProcSlurminDataJson} AutoPROCTask
-            """
-            autoProcSlurm = dedent(autoProcSlurm)
+            if autoProcSlurminDataJson.is_file():
+                autoProcSlurm = f"""\
+                #!/bin/bash
+                #SBATCH --exclusive
+                #SBATCH -t 02:00:00
+                #SBATCH --mem=0
+                #SBATCH --partition={autoProcPartition}
+                #SBATCH -J "EDNA2_aP"
+                #SBATCH --output EDNA2job_%j.out
+                #SBATCH --chdir {self.getWorkingDirectory()}
+                source /mxn/groups/sw/mxsw/env_setup/edna2_proc.sh
+                run_edna2.py --inDataFile {autoProcSlurminDataJson} AutoPROCTask
+                """
+                autoProcSlurm = dedent(autoProcSlurm)
 
-            aPinputstring = autoProcSlurm.encode("ascii")
-            out = subprocess.run(
-                "sbatch",
-                input=aPinputstring,
-                cwd=self.getWorkingDirectory(),
-                capture_output=True,
-            )
-            aPJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
-            logger.info(f"AutoPROCJob submitted to Slurm with jobId {aPJobId}")
+                aPinputstring = autoProcSlurm.encode("ascii")
+                out = subprocess.run(
+                    "sbatch",
+                    input=aPinputstring,
+                    cwd=self.getWorkingDirectory(),
+                    capture_output=True,
+                )
+                aPJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
+                logger.info(f"AutoPROCJob submitted to Slurm with jobId {aPJobId}")
+                outData["autoProcJobId"] = aPJobId
 
-        xia2DialsSlurminDataJson = self.getWorkingDirectory() / "inDataXia2.json"
-        try:
-            with open(xia2DialsSlurminDataJson, "w+") as fp:
-                json.dump(xia2DialsTaskinData, fp, indent=4)
-        except Exception as e:
-            logger.error(f"generating Xia2 json failed: {e}")
-        xia2Partition = UtilsConfig.get("Xia2DialsTask","slurm_partition","all")
-        if xia2DialsSlurminDataJson.is_file():
-            xia2DIALSSlurm = f"""\
-            #!/bin/bash
-            #SBATCH --exclusive
-            #SBATCH -t 02:00:00
-            #SBATCH --mem=0
-            #SBATCH --partition={xia2Partition}
-            #SBATCH -J "EDNA2_x2d"
-            #SBATCH --output EDNA2job_%j.out
-            #SBATCH --chdir {self.getWorkingDirectory()}
-            source /mxn/groups/sw/mxsw/env_setup/edna2_proc.sh
-            run_edna2.py --inDataFile {xia2DialsSlurminDataJson} Xia2DIALSTask
-            """
-            xia2DIALSSlurm = dedent(xia2DIALSSlurm)
+        if self.doXia2Dials:
+            xia2DialsSlurminDataJson = self.getWorkingDirectory() / "inDataXia2.json"
+            try:
+                with open(xia2DialsSlurminDataJson, "w+") as fp:
+                    json.dump(xia2DialsTaskinData, fp, indent=4)
+            except Exception as e:
+                logger.error(f"generating Xia2 json failed: {e}")
+            xia2Partition = UtilsConfig.get("Xia2DialsTask","slurm_partition","all")
+            if xia2DialsSlurminDataJson.is_file():
+                xia2DIALSSlurm = f"""\
+                #!/bin/bash
+                #SBATCH --exclusive
+                #SBATCH -t 02:00:00
+                #SBATCH --mem=0
+                #SBATCH --partition={xia2Partition}
+                #SBATCH -J "EDNA2_x2d"
+                #SBATCH --output EDNA2job_%j.out
+                #SBATCH --chdir {self.getWorkingDirectory()}
+                source /mxn/groups/sw/mxsw/env_setup/edna2_proc.sh
+                run_edna2.py --inDataFile {xia2DialsSlurminDataJson} Xia2DIALSTask
+                """
+                xia2DIALSSlurm = dedent(xia2DIALSSlurm)
 
-            x2DinpuString = xia2DIALSSlurm.encode("ascii")
-            out = subprocess.run(
-                "sbatch",
-                input=x2DinpuString,
-                cwd=self.getWorkingDirectory(),
-                capture_output=True,
-            )
-            x2DJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
-            logger.info(f"Xia2DIALS submitted to Slurm with jobId {x2DJobId}")
+                x2DinpuString = xia2DIALSSlurm.encode("ascii")
+                out = subprocess.run(
+                    "sbatch",
+                    input=x2DinpuString,
+                    cwd=self.getWorkingDirectory(),
+                    capture_output=True,
+                )
+                x2DJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
+                logger.info(f"Xia2DIALS submitted to Slurm with jobId {x2DJobId}")
+                outData["xia2DialsJobId"] = x2DJobId
 
         if doFastSADPhasing:
             fastSADPhasingTask.join()
             if fastSADPhasingTask.isSuccess():
                 logger.info("fast SAD phasing completed.")
+                outData["fastSADPhasing"] = fastSADPhasingTask.outData
             else:
                 logger.error("Fast SAD phasing failed.")
 
