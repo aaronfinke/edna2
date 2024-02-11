@@ -206,51 +206,47 @@ class MAXIVFastProcessingTask(AbstractTask):
                         waitFileLast.outData["timeOut"], pathToEndImage
                     )
                 )
-
-        edna2ProcTask = Edna2ProcTask(
-            inData={
-                "onlineAutoProcessing": False,
-                "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
-                "unitCell": self.unitCell,
-                "spaceGroup": self.spaceGroup,
-                "imageNoStart": self.imageNoStart,
-                "imageNoEnd": self.imageNoEnd,
-                "anomalous": self.anomalous,
-                "waitForFiles": False,
-                "doUploadIspyb": True,
-                "test": self.test,
-                "timeOut": 1800,
-            },
-            workingDirectorySuffix="0",
-        )
-
-        fastDpTask = FastdpTask(
-            inData={
-                "onlineAutoProcessing": False,
-                "dataCollectionId": self.dataCollectionId,
-                "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
-                "unitCell": self.unitCell,
-                "spaceGroup": self.spaceGroup,
-                "masterFilePath": self.masterFilePath,
-                "imageNoStart": self.imageNoStart,
-                "imageNoEnd": self.imageNoEnd,
-                "waitForFiles": False,
-                "doUploadIspyb": True,
-                "anomalous": self.anomalous,
-                "test": self.test,
-                "timeOut": 1800,
-            },
-            workingDirectorySuffix="0",
-        )
-
-        # imgQualityDozor.start()
         if self.doEdna2Proc:
+            edna2ProcTask = Edna2ProcTask(
+                inData={
+                    "onlineAutoProcessing": False,
+                    "dataCollectionId": self.dataCollectionId,
+                    "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+                    "unitCell": self.unitCell,
+                    "spaceGroup": self.spaceGroup,
+                    "imageNoStart": self.imageNoStart,
+                    "imageNoEnd": self.imageNoEnd,
+                    "anomalous": self.anomalous,
+                    "waitForFiles": False,
+                    "doUploadIspyb": True,
+                    "test": self.test,
+                    "timeOut": 1800,
+                },
+                workingDirectorySuffix="0",
+            )
             edna2ProcTask.start()
+
         if self.doFastdp:
+            fastDpTask = FastdpTask(
+                inData={
+                    "onlineAutoProcessing": False,
+                    "dataCollectionId": self.dataCollectionId,
+                    "masterFilePath": str(self.masterFilePath) if self.masterFilePath else None,
+                    "unitCell": self.unitCell,
+                    "spaceGroup": self.spaceGroup,
+                    "masterFilePath": self.masterFilePath,
+                    "imageNoStart": self.imageNoStart,
+                    "imageNoEnd": self.imageNoEnd,
+                    "waitForFiles": False,
+                    "doUploadIspyb": True,
+                    "anomalous": self.anomalous,
+                    "test": self.test,
+                    "timeOut": 1800,
+                },
+                workingDirectorySuffix="0",
+            )
             fastDpTask.start()
 
-        # imgQualityDozor.join()
         if self.doFastdp:
             fastDpTask.join()
             if fastDpTask.isSuccess():
@@ -379,6 +375,8 @@ class MAXIVFastProcessingTask(AbstractTask):
                 aPJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
                 logger.info(f"AutoPROCJob submitted to Slurm with jobId {aPJobId}")
                 outData["autoProcJobId"] = aPJobId
+        else:
+            logger.info("AutoPROC Skipped.")
 
         if self.doXia2Dials:
             xia2DialsSlurminDataJson = self.getWorkingDirectory() / "inDataXia2.json"
@@ -413,6 +411,8 @@ class MAXIVFastProcessingTask(AbstractTask):
                 x2DJobId = out.stdout.decode("ascii").strip("\n").split()[-1]
                 logger.info(f"Xia2DIALS submitted to Slurm with jobId {x2DJobId}")
                 outData["xia2DialsJobId"] = x2DJobId
+        else:
+            logger.info("Xia2DIALS Skipped.")
 
         if doFastSADPhasing:
             fastSADPhasingTask.join()
