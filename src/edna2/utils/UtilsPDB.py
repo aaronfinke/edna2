@@ -66,6 +66,8 @@ def pdbQuery(query):
     queryURL = UtilsConfig.get("PDB","pdbQuery", None)
     if isinstance(query,dict):
         query_string = json.dumps(query)
+    else:
+        query_string = query
 
     #make sure it is valid json
     try:
@@ -86,7 +88,7 @@ def pdbQuery(query):
         return []
     return result_json["result_set"]
     
-def generatePdbSearchQuery(self, unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
+def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
     """
     generate a search query JSON string 
     for the PDB API
@@ -94,10 +96,8 @@ def generatePdbSearchQuery(self, unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
     """
     edgeDev = dev[0]
     angleDev = dev[1]
-    if isinstance(unitCell,str):
-        unitCell = UtilsCCTBX.parseUnitCell(unitCell)
-
-    unitCell_str = UtilsCCTBX.parseUnitCell_str(unitCell)
+    unitCell_str = UtilsCCTBX.parseUnitCell_str(unitCell=unitCell)
+    unitCell = UtilsCCTBX.parseUnitCell(unitCell=unitCell)
     
     cell_a = unitCell["cell_a"]
     cell_a_lims = (cell_a - (cell_a*edgeDev),cell_a+(cell_a+edgeDev))
@@ -108,14 +108,14 @@ def generatePdbSearchQuery(self, unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
     cell_alpha = unitCell["cell_alpha"]
     cell_beta = unitCell["cell_beta"]
     cell_gamma = unitCell["cell_gamma"]
-    
-    symm = symmetry(unit_cell=unitCell_str,space_group_info=spaceGroup)
+    spaceGroupInfo = sgtbx.space_group_info(spaceGroup)
+    symm = symmetry(unit_cell=unitCell_str,space_group_info=spaceGroupInfo)
     
     cell_a_node = cellEdgeRange('a',cell_a_lims)
     cell_b_node = cellEdgeRange('b',cell_b_lims)
     cell_c_node = cellEdgeRange('c',cell_c_lims)
 
-    crystalSystem = spaceGroup.group().crystal_system()
+    crystalSystem = spaceGroupInfo.group().crystal_system()
     if crystalSystem == 'Cubic':
         cell_alpha_node = cellAngleEquals('alpha',90)
         cell_beta_node = cellAngleEquals('beta',90)
@@ -177,20 +177,20 @@ def generatePdbSearchQuery(self, unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
     return json.dumps(query)
 
 def cellAngleEquals(angle,deg):
-    assert angle.lower in ["alpha","beta","gamma"]
+    assert angle.lower() in ["alpha","beta","gamma"]
     assert isinstance(deg,int)
     return {
             "type": "terminal",
             "service": "text",
             "parameters": {
-            "attribute": f"cell.angle_{angle.lower}",
+            "attribute": f"cell.angle_{angle}",
             "operator": "equals",
             "negation": False,
             "value": deg
             }
             }
 def cellAngleRange(angle,aRange):
-    assert angle.lower in ["alpha","beta","gamma"]
+    assert angle.lower() in ["alpha","beta","gamma"]
     return {
             "type": "terminal",
             "service": "text",
@@ -208,7 +208,7 @@ def cellAngleRange(angle,aRange):
         }
 
 def cellEdgeRange(edge,arange):
-    assert edge.lower in ["a","b","c"]
+    assert edge.lower() in ["a","b","c"]
     return {
         "type": "terminal",
         "service": "text",

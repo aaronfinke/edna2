@@ -42,7 +42,7 @@ def parseSpaceGroup(spaceGroup):
         spaceGroupInfo = space_group_info(spaceGroup).symbol_and_number()
         spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
         spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-        logger.info("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
+        logger.debug("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
     except:
         logger.debug("Could not parse space group")
         spaceGroupNumber = 0
