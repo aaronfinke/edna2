@@ -24,103 +24,76 @@ __license__ = "MIT"
 __date__ = "02/05/2024"
 
 from edna2.tasks.AbstractTask import AbstractTask
-from edna2.utils.UtilsPDB import pdbQuery
+from edna2.tasks.CCP4Tasks import DimpleTask
+from edna2.utils.UtilsPDB import pdbQuery, generatePdbSearchQuery, fetchPdbFileFromAccessionCode
 from edna2.utils import UtilsCCTBX
+from edna2.utils import UtilsLogging
+
 from cctbx.crystal import symmetry
 from cctbx import sgtbx
 
-class PDBAPIUnitCellQueryTask(AbstractTask):
-    def run(self,inData):
+import json
+
+logger = UtilsLogging.getLogger()
+
+
+class CellToMRTask(AbstractTask):
+    """
+    given a unit cell and space group,
+    this will search the PDB for best matches
+    and use them as MR search models for a given
+    list of reflections.
+    """
+
+    def run(self, inData):
+        self.inputMtz = inData["inputMtz"]
         self.unitCell = inData["unitCell"]
-        self.spaceGroup = inData['spaceGroup']
-        self.deviation = inData.get('deviation',(0.01,0.03))
+        self.spaceGroup = inData["spaceGroup"]
+        self.tolerance = inData.get("tolerance",(0.01,0.03))
+        self.numResults = inData.get("numResults",5)
 
-        pass
+        self.pdbQuery = generatePdbSearchQuery(unitCell=self.unitCell, spaceGroup=self.spaceGroup, dev=self.tolerance)
+        if self.pdbQuery is None:
+            logger.error("Error in generating search query")
+            return
+        
+        with open(self.getWorkingDirectory() / "pdbQuery.json",'w') as fp:
+            json.dump(json.loads(self.pdbQuery), fp, indent=2)
+        
+        self.queryResults = pdbQuery(self.pdbQuery)
+        if not self.queryResults:
+            logger.error("no results found. Stopping.")
+            return
+        
+        with open(self.getWorkingDirectory() / "pdbQueryResults.json",'w') as fp:
+            json.dump(self.queryResults, fp, indent=2)
 
-    def cellAngleEquals(self,angle,deg):
-        assert angle.lower in ["alpha","beta","gamma"]
-        assert isinstance(deg,int)
-        return {
-                "type": "terminal",
-                "service": "text",
-                "parameters": {
-                "attribute": f"cell.angle_{angle.lower}",
-                "operator": "equals",
-                "negation": False,
-                "value": deg
-                }
-                }
-    def cellAngleRange(self,angle,aRange):
-        assert angle.lower in ["alpha","beta","gamma"]
-        return {
-                "type": "terminal",
-                "service": "text",
-                "parameters": {
-                "attribute": f"cell.angle_{angle}",
-                "operator": "range",
-                "negation": False,
-                "value": {
-                    "from": aRange[0],
-                    "to": aRange[1],
-                    "include_lower": True,
-                    "include_upper": True
-                }
-                }
+        self.searchModels = [ x['identifier'] for x in self.queryResults if x['score'] == 1.0 ]
+        if len(self.searchModels) > self.numResults:
+            self.searchModels = self.searchModels[0:self.numResults]
+        
+        dimpleRuns = []
+        for pdbCode in self.searchModels:
+            inDataDimple = {
+                "inputMtz": self.inputMtz,
+                "inputPdb": pdbCode,
+                "doSubmit": True
             }
+            dimpleRun = DimpleTask(inData=inDataDimple, workingDirectorySuffix=pdbCode)
+            dimpleRuns.append(dimpleRun)
+            dimpleRun.start()
+        index = 0
 
+        #XXX: Probably shouldn't use an infinite while loop here, maybe timeout?
+        while True:
+            for run in dimpleRuns:
+                if not run._process.is_alive():
+                    run.join()
+            if all(not t._process.is_alive() for t in dimpleRuns):
+                break
 
-    def generatePdbSearchQuery(self):
-        unitCell = self.unitCell
-        spaceGroup = sgtbx.space_group_info(self.spaceGroup)
-        dev = self.deviation
-        edgeDev = dev[0]
-        angleDev = dev[1]
-        if isinstance(unitCell,str):
-            unitCell = UtilsCCTBX.parseUnitCell(unitCell)
-
-        unitCell_str = UtilsCCTBX.parseUnitCell_str(unitCell)
-        
-        cell_a = unitCell["cell_a"]
-        cell_a_lims = (cell_a - (cell_a*edgeDev),cell_a+(cell_a+edgeDev))
-        cell_b = unitCell["cell_b"]
-        cell_b_lims = (cell_b - (cell_b*edgeDev),cell_b+(cell_b+edgeDev))
-        cell_c = unitCell["cell_c"]
-        cell_a_lims = (cell_c - (cell_c*edgeDev),cell_c+(cell_c+edgeDev))
-        cell_alpha = unitCell["cell_alpha"]
-        cell_beta = unitCell["cell_beta"]
-        cell_gamma = unitCell["cell_gamma"]
-        
-        symm = symmetry(unit_cell=unitCell_str,space_group_info=spaceGroup)
-        
-        crystalSystem = spaceGroup.group().crystal_system()
-        if crystalSystem == 'Cubic':
-            cell_alpha_node = self.cellAngleEquals('alpha',90)
-            cell_beta_node = self.cellAngleEquals('beta',90)
-            cell_gamma_node = self.cellAngleEquals('gamma',90)
-        elif crystalSystem == 'Hexagonal':
-            cell_alpha_node = self.cellAngleEquals('alpha',90)
-            cell_beta_node = self.cellAngleEquals('beta',90)
-            cell_gamma_node = self.cellAngleEquals('gamma',120)
-        elif crystalSystem == 'Tetragonal' or crystalSystem == 'Orthorhombic':
-            cell_alpha_node = self.cellAngleEquals('alpha',90)
-            cell_beta_node = self.cellAngleEquals('beta',90)
-            cell_gamma_node = self.cellAngleEquals('gamma',90)
-        elif crystalSystem == 'Monoclinic':
-            cell_alpha_lims = (cell_alpha - (cell_alpha*angleDev),cell_alpha+(cell_alpha+angleDev))
-            cell_alpha_node = self.cellAngleRange('alpha',cell_alpha_lims)
-            cell_beta_node = self.cellAngleEquals('beta',90)
-            cell_gamma_lims = (cell_gamma - (cell_gamma*angleDev),cell_gamma+(cell_gamma+angleDev))
-            cell_gamma_node = self.cellAngleRange('gamma',cell_gamma_lims)
-        elif crystalSystem == 'Triclinic':
-            cell_alpha_lims = (cell_alpha - (cell_alpha*angleDev),cell_alpha+(cell_alpha+angleDev))
-            cell_alpha_node = self.cellAngleRange('alpha',cell_alpha_lims)
-            cell_beta_lims = (cell_beta - (cell_beta*angleDev),cell_beta+(cell_beta+angleDev))
-            cell_beta_node = self.cellAngleRange('beta',cell_alpha_lims)
-            cell_gamma_lims = (cell_gamma - (cell_gamma*angleDev),cell_gamma+(cell_gamma+angleDev))
-            cell_gamma_node = self.cellAngleRange('gamma',cell_gamma_lims)
-
-
-
+        outData = self.queryResults
+        return outData
 
             
 

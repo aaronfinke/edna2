@@ -50,10 +50,13 @@ def parseSpaceGroup(spaceGroup):
     return spaceGroupNumber, spaceGroupString
 
 def parseUnitCell(unitCell: str):
-    """parse unit cell and return as a dict
-    assumes a string with constants separated by commas"""
-    try:
+    """parse unit cell string and return as a dict
+    """
+    if ',' in unitCell:
         unitCellList = [float(x) for x in unitCell.split(',')]
+    else:
+        unitCellList = [float(x) for x in unitCell.split(' ')]
+    try:
         #if there are zeroes parsed in, need to deal with it
         if 0.0 in unitCellList:
             raise Exception

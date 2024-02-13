@@ -36,6 +36,7 @@ from edna2.tasks.AbstractTask import AbstractTask
 
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
+from edna2.utils import UtilsPDB
 import traceback
 import subprocess
 
@@ -365,7 +366,11 @@ class UniqueifyTask(AbstractTask):
         return outData
 
 class DimpleTask(AbstractTask):
+        """run Dimple with a supplied MTZ reflection file
+        and either a pdb model OR a pdb id.
+        """
         def run(self, inData):
+            self.setLogFileName('dimple.log')
             self.doSubmit = inData.get("doSubmit", False)
             ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
             logger.debug(f'CCP4 Setup: {ccp4setup}')
@@ -377,11 +382,15 @@ class DimpleTask(AbstractTask):
 
             self.inputMtz = inData.get('inputMtz')
             self.inputPdb = inData.get('inputPdb')
-            if self.inputPdb is None or self.inputMtz is None:
+            self.pdbId = inData.get('pdbId')
+            if self.inputPdb is None and self.pdbId is not None:
+                self.inputPdb = UtilsPDB.fetchPdbFileFromAccessionCode(self.pdbId)
+
+            if self.inputPdb is None and self.pdbId is None:
                 logger.error("Model PDB and MTZ are required:")
                 logger.error(f"PDB: {self.inputPdb}, MTZ: {self.inputMtz}")
                 self.setFailure()
-            self.setLogFileName('dimple.log')
+                return
 
             commandLine += 'dimple '
             commandLine += f'{self.inputMtz} {self.inputPdb} {self.getWorkingDirectory()}'
@@ -389,7 +398,7 @@ class DimpleTask(AbstractTask):
             logger.info("Running ccp4/dimple...")
 
             if self.doSubmit:
-                self.submitCommandLine(commandLine)
+                self.submitCommandLine(commandLine,ignoreErrors=False)
             else:
                 self.runCommandLine(commandLine)
             # outData["uniqueifyOutputMtz"] = self.outputFile

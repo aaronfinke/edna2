@@ -19,7 +19,7 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-__authors__ = ["O. Svensson"]
+__authors__ = ["A. Finke"]
 __license__ = "MIT"
 __date__ = "23/01/2023"
 

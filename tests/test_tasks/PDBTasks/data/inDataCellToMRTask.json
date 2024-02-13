@@ -1,0 +1,5 @@
+{
+    "inputMtz": "/home/aarfin/data_staff/edna2/tests/test_tasks/PDBTasks/data/data_merged.mtz",
+    "unitCell": "79.971,79.971,38.215,90,90,90",
+    "spaceGroup": "P 43 21 2"
+}

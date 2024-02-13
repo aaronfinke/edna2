@@ -32,30 +32,48 @@ import shutil
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 from edna2.utils import UtilsCCTBX
-
+from edna2.utils import UtilsPath
 from cctbx import sgtbx
 from cctbx.crystal import symmetry
-
+import tempfile
 import requests,json
+from pathlib import Path
 
 logger = UtilsLogging.getLogger()
 
-def fetchPdbFileFromAccessionCode(pdbCode):
+def fetchPdbFileFromAccessionCode(pdbCode, targetDirectory=Path.cwd()):
     """
     downloads the PDB file of the code, and returns the 
-    path of the downloaded file.
+    path of the downloaded file. Saves the file to a temp
+    directory first, then copies it to target directory.
+    Returns final path to file. Uses get_pdb from iotbx.
     """
-    from iotbx.pdb.fetch import fetch, get_pdb
+    from iotbx.pdb.fetch import get_pdb
+
+    cwd = Path.cwd()
+
     mirror = UtilsConfig.get("PDB","pdbMirror", None)
     if mirror is None:
         logger.warning("No PDB mirror indicated- using RCSB as default")
         mirror = "rcsb"
+
+    tempdir = tempfile.TemporaryDirectory()
+    os.chdir(tempdir.name)
     try:
-        pdbFile = get_pdb(pdbCode, data_type="pdb",mirror=mirror, log=logger, format="pdb")
-        return pdbFile
-    except:
-        logger.error("Could not download pdb file!")
-    return None
+        logger.info(f"Downloading PDB File {pdbCode}.pdb from mirror {mirror}...")
+        pdbFile = get_pdb(pdbCode, data_type="pdb",mirror=mirror, log=open(os.devnull,'w'), format="pdb")
+        pdbPath = Path(pdbFile)
+        UtilsPath.systemCopyFile(pdbPath,targetDirectory / pdbPath.name)
+    except Exception as e:
+        logger.error(f"Could not download and copy pdb file: {e}")
+        os.chdir(cwd)
+        tempdir.cleanup()
+        return None
+    
+    os.chdir(cwd)
+    tempdir.cleanup()
+    return targetDirectory / pdbPath.name
+
 
 def pdbQuery(query):
     """
@@ -88,7 +106,7 @@ def pdbQuery(query):
         return []
     return result_json["result_set"]
     
-def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
+def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.01,0.03)) -> str:
     """
     generate a search query JSON string 
     for the PDB API
@@ -100,17 +118,26 @@ def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
     unitCell = UtilsCCTBX.parseUnitCell(unitCell=unitCell)
     
     cell_a = unitCell["cell_a"]
-    cell_a_lims = (cell_a - (cell_a*edgeDev),cell_a+(cell_a+edgeDev))
+    cell_a_lims = (cell_a - (cell_a*edgeDev),cell_a+(cell_a*edgeDev))
     cell_b = unitCell["cell_b"]
-    cell_b_lims = (cell_b - (cell_b*edgeDev),cell_b+(cell_b+edgeDev))
+    cell_b_lims = (cell_b - (cell_b*edgeDev),cell_b+(cell_b*edgeDev))
     cell_c = unitCell["cell_c"]
-    cell_c_lims = (cell_c - (cell_c*edgeDev),cell_c+(cell_c+edgeDev))
+    cell_c_lims = (cell_c - (cell_c*edgeDev),cell_c+(cell_c*edgeDev))
     cell_alpha = unitCell["cell_alpha"]
     cell_beta = unitCell["cell_beta"]
     cell_gamma = unitCell["cell_gamma"]
-    spaceGroupInfo = sgtbx.space_group_info(spaceGroup)
-    symm = symmetry(unit_cell=unitCell_str,space_group_info=spaceGroupInfo)
+    logger.debug(f"cell_a = {cell_a_lims}, cell_b={cell_b_lims},cell_c={cell_c_lims}")
+    spaceGroupInfo = sgtbx.space_group_info(spaceGroup)    
+    #make sure unit cell/SG are sensible
+    try:
+        symm = symmetry(unit_cell=unitCell_str,space_group_info=spaceGroupInfo)
+    except Exception as e:
+        logger.error(f"unit cell and SG not accepted: {e}")
+        return
     
+    spaceGroupString = spaceGroupInfo.type().lookup_symbol()
+    spaceGroupMatch = spaceGroupMatches(spaceGroupString)
+
     cell_a_node = cellEdgeRange('a',cell_a_lims)
     cell_b_node = cellEdgeRange('b',cell_b_lims)
     cell_c_node = cellEdgeRange('c',cell_c_lims)
@@ -129,11 +156,10 @@ def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
         cell_beta_node = cellAngleEquals('beta',90)
         cell_gamma_node = cellAngleEquals('gamma',90)
     elif crystalSystem == 'Monoclinic':
-        cell_alpha_lims = (cell_alpha - (cell_alpha*angleDev),cell_alpha+(cell_alpha+angleDev))
-        cell_alpha_node = cellAngleRange('alpha',cell_alpha_lims)
-        cell_beta_node = cellAngleEquals('beta',90)
-        cell_gamma_lims = (cell_gamma - (cell_gamma*angleDev),cell_gamma+(cell_gamma+angleDev))
-        cell_gamma_node = cellAngleRange('gamma',cell_gamma_lims)
+        cell_alpha_node = cellAngleEquals('alpha',90)
+        cell_beta_lims = (cell_beta - (cell_beta*angleDev),cell_beta+(cell_beta+angleDev))
+        cell_beta_node = cellAngleRange('beta',cell_beta_lims)
+        cell_gamma_node = cellAngleEquals('gamma',90)
     elif crystalSystem == 'Triclinic':
         cell_alpha_lims = (cell_alpha - (cell_alpha*angleDev),cell_alpha+(cell_alpha+angleDev))
         cell_alpha_node = cellAngleRange('alpha',cell_alpha_lims)
@@ -152,7 +178,8 @@ def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.1,0.3)) -> str:
             cell_c_node,
             cell_alpha_node,
             cell_beta_node,
-            cell_gamma_node
+            cell_gamma_node,
+            spaceGroupMatch
             ],
             "label": "text"
         },
@@ -225,3 +252,14 @@ def cellEdgeRange(edge,arange):
         }
       }
 
+def spaceGroupMatches(spaceGroup):
+    return {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "symmetry.space_group_name_H_M",
+          "operator": "exact_match",
+          "negation": False,
+          "value": spaceGroup
+        }
+      }
