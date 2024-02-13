@@ -41,7 +41,7 @@ from pathlib import Path
 
 logger = UtilsLogging.getLogger()
 
-def fetchPdbFileFromAccessionCode(pdbCode, targetDirectory=Path.cwd()):
+def fetchPdbFileFromAccessionCode(pdbCode, targetDirectory=Path.cwd()) -> Path:
     """
     downloads the PDB file of the code, and returns the 
     path of the downloaded file. Saves the file to a temp
@@ -75,7 +75,7 @@ def fetchPdbFileFromAccessionCode(pdbCode, targetDirectory=Path.cwd()):
     return targetDirectory / pdbPath.name
 
 
-def pdbQuery(query):
+def pdbQuery(query) -> list:
     """
     send a query to pdb API
     query should be a dict or JSON string
@@ -106,14 +106,24 @@ def pdbQuery(query):
         return []
     return result_json["result_set"]
     
-def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.01,0.03)) -> str:
+def generatePdbSearchQuery(unitCell, spaceGroup, tolerance=(0.01,0.03), numReturns=25) -> str:
     """
     generate a search query JSON string 
     for the PDB API
     requires unit cell and SG
+
+    "tolerance" here refers to the percent error
+    for the PDB search parameters, default 0.01 (1%) for
+    cell edges and 0.03 (3%) for cell angles.
+
+    Unit cell angles will be determined by the space group. If
+    the SG dictates the angle should be exactly 90° (or 120°),
+    the query will do an exact search for that cell angle, without
+    tolerances. Otherwise it will use a tolerance.
+
     """
-    edgeDev = dev[0]
-    angleDev = dev[1]
+    edgeDev = tolerance[0]
+    angleDev = tolerance[1]
     unitCell_str = UtilsCCTBX.parseUnitCell_str(unitCell=unitCell)
     unitCell = UtilsCCTBX.parseUnitCell(unitCell=unitCell)
     
@@ -187,7 +197,7 @@ def generatePdbSearchQuery(unitCell, spaceGroup, dev=(0.01,0.03)) -> str:
         "request_options": {
             "paginate": {
             "start": 0,
-            "rows": 25
+            "rows": numReturns
             },
             "results_content_type": [
             "experimental"
