@@ -43,12 +43,17 @@ class CellToMRTask(AbstractTask):
     this will search the PDB for best matches
     and use them as MR search models for a given
     list of reflections.
+    "tolerance" here refers to the percent error
+    for the PDB search parameters, default 0.01 (1%) for
+    cell edges and 0.03 (3%) for cell angles.
     """
 
     def run(self, inData):
         self.inputMtz = inData["inputMtz"]
         self.unitCell = inData["unitCell"]
         self.spaceGroup = inData["spaceGroup"]
+
+
         self.tolerance = inData.get("tolerance",(0.01,0.03))
         self.numResults = inData.get("numResults",5)
 
