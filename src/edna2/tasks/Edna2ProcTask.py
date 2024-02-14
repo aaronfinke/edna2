@@ -832,6 +832,8 @@ class Edna2ProcTask(AbstractTask):
         UtilsPath.systemCopyFile(Path(self.uniqueify.outData["uniqueifyOutputMtz"]), uniqueMtz)
         UtilsPath.systemCopyFile(Path(self.phenixXTriageTask.outData["logFile"]), phenixXTriageTaskLog)
 
+        self.resultFilePaths.extend([truncateLog,uniqueMtz,phenixXTriageTaskLog])
+
         self.endDateTime = datetime.now().isoformat(timespec="seconds")
 
         headers = ["File Type", "File name"]
