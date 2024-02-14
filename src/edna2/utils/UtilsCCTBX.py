@@ -42,7 +42,7 @@ def parseSpaceGroup(spaceGroup):
         spaceGroupInfo = space_group_info(spaceGroup).symbol_and_number()
         spaceGroupString = spaceGroupInfo.split("No. ")[0][:-2]
         spaceGroupNumber = int(spaceGroupInfo.split("No. ")[1][:-1])
-        logger.info("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
+        logger.debug("Supplied space group is {}, number {}".format(spaceGroupString, spaceGroupNumber))
     except:
         logger.debug("Could not parse space group")
         spaceGroupNumber = 0
@@ -50,10 +50,13 @@ def parseSpaceGroup(spaceGroup):
     return spaceGroupNumber, spaceGroupString
 
 def parseUnitCell(unitCell: str):
-    """parse unit cell and return as a dict
-    assumes a string with constants separated by commas"""
-    try:
+    """parse unit cell string and return as a dict
+    """
+    if ',' in unitCell:
         unitCellList = [float(x) for x in unitCell.split(',')]
+    else:
+        unitCellList = [float(x) for x in unitCell.split(' ')]
+    try:
         #if there are zeroes parsed in, need to deal with it
         if 0.0 in unitCellList:
             raise Exception

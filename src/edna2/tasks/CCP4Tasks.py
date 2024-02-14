@@ -36,6 +36,7 @@ from edna2.tasks.AbstractTask import AbstractTask
 
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
+from edna2.utils import UtilsPDB
 import traceback
 import subprocess
 import xmltodict
@@ -496,15 +497,45 @@ class UniqueifyTask(AbstractTask):
 
 
 class DimpleTask(AbstractTask):
-    def run(self, inData):
-        self.doSubmit = inData.get("doSubmit", False)
-        ccp4setup = UtilsConfig.get("CCP4", "ccp4setup")
-        logger.debug(f"CCP4 Setup: {ccp4setup}")
-        if ccp4setup is None:
-            logger.warning("CCP4 setup not found!")
-            commandLine = ""
-        else:
-            commandLine = ". " + ccp4setup + "\n"
+        """run Dimple with a supplied MTZ reflection file
+        and either a pdb model OR a pdb id.
+        """
+        def run(self, inData):
+            self.setLogFileName('dimple.log')
+            self.doSubmit = inData.get("doSubmit", False)
+            ccp4setup = UtilsConfig.get('CCP4', 'ccp4setup')
+            logger.debug(f'CCP4 Setup: {ccp4setup}')
+            if ccp4setup is None:
+                logger.warning('CCP4 setup not found!')
+                commandLine = ""
+            else:
+                commandLine = ". " + ccp4setup + '\n'
+
+            self.inputMtz = inData.get('inputMtz')
+            self.inputPdb = inData.get('inputPdb')
+            self.pdbId = inData.get('pdbId')
+            if self.inputPdb is None and self.pdbId is not None:
+                self.inputPdb = UtilsPDB.fetchPdbFileFromAccessionCode(self.pdbId)
+
+            if self.inputPdb is None and self.pdbId is None:
+                logger.error("Model PDB and MTZ are required:")
+                logger.error(f"PDB: {self.inputPdb}, MTZ: {self.inputMtz}")
+                self.setFailure()
+                return
+
+            commandLine += 'dimple '
+            commandLine += f'{self.inputMtz} {self.inputPdb} {self.getWorkingDirectory()}'
+
+            logger.info("Running ccp4/dimple...")
+
+            if self.doSubmit:
+                self.submitCommandLine(commandLine,ignoreErrors=False)
+            else:
+                self.runCommandLine(commandLine)
+            # outData["uniqueifyOutputMtz"] = self.outputFile
+            # self.isSuccess = Path(self.outputFile).exists()
+
+            return 
 
         self.inputMtz = inData.get("inputMtz")
         self.inputPdb = inData.get("inputPdb")

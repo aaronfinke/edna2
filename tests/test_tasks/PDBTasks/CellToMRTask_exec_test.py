@@ -21,7 +21,7 @@
 
 __authors__ = ["A. Finke"]
 __license__ = "MIT"
-__date__ = "23/01/2023"
+__date__ = "13/02/2024"
 
 import os, sys
 import unittest
@@ -30,7 +30,8 @@ from edna2.utils import UtilsTest
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
 
-from edna2.tasks.MAXIVAutoProcessingTask import MAXIVAutoProcessingTask
+
+from edna2.tasks.PDBTasks import CellToMRTask
 
 logger = UtilsLogging.getLogger()
 
@@ -40,11 +41,11 @@ class MAXIVAutoProcessingTaskTest(unittest.TestCase):
         self.dataPath = UtilsTest.prepareTestDataPath(__file__)
 
     def test_execute_MAXIVAutoProcessingTask(self):
-        referenceDataPath = self.dataPath / 'inDataMaxIVAutoProcessing_unitcell.json'
+        referenceDataPath = self.dataPath / 'inDataCellToMRTask.json'
         inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
-        maxivAutoProcessing = MAXIVAutoProcessingTask(inData=inData)
-        maxivAutoProcessing.execute()
-        self.assertTrue(maxivAutoProcessing.isSuccess())
+        cellToMR = CellToMRTask(inData=inData)
+        cellToMR.execute()
+        self.assertTrue(cellToMR.isSuccess())
 
 if __name__ == '__main__':
     unittest.main()
