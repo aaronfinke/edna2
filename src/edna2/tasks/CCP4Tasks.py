@@ -69,7 +69,7 @@ class AimlessTask(AbstractTask):
         logger.info("Command line: {0}".format(commandLine))
         start_image = inData["start_image"]
         end_image = inData["end_image"]
-        projectName = inData.get("dataCollectionID", "EDNA_proc")
+        projectName = "EDNA2Proc"
         resolution = inData.get("res", 0.0)
         anom = inData["anomalous"]
         listCommand = [
