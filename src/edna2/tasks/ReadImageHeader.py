@@ -269,20 +269,22 @@ class ReadImageHeader(AbstractTask):
 
     @classmethod
     def createHdf5HeaderData(
-        cls, imagePath, skipNumberOfImages=False, hasOverlap=False, isFastMesh=True
+        cls, imagePath, skipNumberOfImages=False, hasOverlap=False, isFastMesh=True,
+        waitForFiles=False
     ):
         h5MasterFilePath, h5DataFilePath, h5FileNumber = UtilsImage.getH5FilePath(
             pathlib.Path(imagePath), isFastMesh=isFastMesh, hasOverlap=hasOverlap
         )
         # Waiting for file
-        timedOut, finalSize = UtilsPath.waitForFile(
-            h5MasterFilePath, expectedSize=2000000, timeOut=DEFAULT_TIME_OUT
-        )
-        if timedOut:
-            errorMessage = "Timeout when waiting for image %s" % imagePath
-            logger.error(errorMessage)
-            raise BaseException(errorMessage)
-        logger.info("Final size for {0}: {1}".format(h5MasterFilePath, finalSize))
+        if waitForFiles:
+            timedOut, finalSize = UtilsPath.waitForFile(
+                h5MasterFilePath, expectedSize=2000000, timeOut=DEFAULT_TIME_OUT
+            )
+            if timedOut:
+                errorMessage = "Timeout when waiting for image %s" % imagePath
+                logger.error(errorMessage)
+                raise BaseException(errorMessage)
+            logger.info("Final size for {0}: {1}".format(h5MasterFilePath, finalSize))
         noTrialsLeft = 5
         dictHeader = None
         while noTrialsLeft > 0:
@@ -330,13 +332,14 @@ class ReadImageHeader(AbstractTask):
         if not skipNumberOfImages:
             for data in dictHeader["data"]:
                 dataFilePath = prefix + data + ".h5"
-                timedOut, finalSize = UtilsPath.waitForFile(
-                    dataFilePath, expectedSize=100000, timeOut=DEFAULT_TIME_OUT
-                )
-                if timedOut:
-                    raise RuntimeError(
-                        "Timeout waiting for file {0}".format(dataFilePath)
+                if waitForFiles:
+                    timedOut, finalSize = UtilsPath.waitForFile(
+                        dataFilePath, expectedSize=100000, timeOut=DEFAULT_TIME_OUT
                     )
+                    if timedOut:
+                        raise RuntimeError(
+                            "Timeout waiting for file {0}".format(dataFilePath)
+                        )
                 # listDataImage.append({
                 #     'path': dataFilePath
                 # })

@@ -115,8 +115,7 @@ class ExecDozor(AbstractTask):  # pylint: disable=too-many-instance-attributes
                 "wedgeNumber": {"type": "integer"},
                 "radiationDamage": {"type": "boolean"},
                 "overlap": {"type": "number"},
-                "doDozorM": {"type": "boolean"},
-                "doSubmit": {"type": "boolean"}
+                "doDozorM": {"type": "boolean"}
             },
         }
 
@@ -145,7 +144,12 @@ class ExecDozor(AbstractTask):  # pylint: disable=too-many-instance-attributes
             f.write(commands)
         # Create dozor command line
         if doSubmit:
-            executable = UtilsConfig.get(self, "slurm_executable", "dozor")
+            path = UtilsConfig.get(self, "slurm_path", "dozor")
+            executable = "export PATH={0}:$PATH".format(path)
+            executable += ";export LD_LIBRARY_PATH={0}:$LD_LIBRARY_PATH".format(path)
+            executable += ";{0}/".format(path) + UtilsConfig.get(
+                self, "slurm_executable", "dozor"
+            )
             partition = UtilsConfig.get(self, "slurm_partition", None)
         else:
             executable = UtilsConfig.get(self, "executable", "dozor")

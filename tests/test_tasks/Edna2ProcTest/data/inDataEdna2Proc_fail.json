@@ -1,0 +1,10 @@
+{
+    "dataCollectionId": 97882,
+    "anomalous": false,
+    "spaceGroup": "F432",
+    "unitCell":"105.2,105.2,150.20,90,90,90",
+    "test": true,
+    "onlineAutoProcessing":false,
+    "waitForFiles":false,
+    "doUploadIspyb":true
+}

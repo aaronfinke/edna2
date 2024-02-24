@@ -28,10 +28,13 @@ __date__ = "21/04/2019"
 # mxv1/src/EDHandlerESRFPyarchv1_0.py
 
 import os
-import subprocess
 import time
 import pathlib
 import tempfile
+import shutil
+import hashlib
+import string
+import random
 
 from edna2.utils import UtilsConfig
 from edna2.utils import UtilsLogging
@@ -39,6 +42,8 @@ from edna2.utils import UtilsLogging
 logger = UtilsLogging.getLogger()
 
 DEFAULT_TIMEOUT = 120  # s
+STRING_CHARACTERS = string.ascii_lowercase + string.digits + "_"
+STRING_LENGTH = 8
 
 
 def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
@@ -48,49 +53,72 @@ def getWorkingDirectory(task, inData, workingDirectorySuffix=None):
     parentDirectory = pathlib.Path(parentDirectory)
     if workingDirectorySuffix is None:
         # Create unique directory
-        workingDirectory = tempfile.mkdtemp(
-            prefix=task.__class__.__name__ + "_", dir=parentDirectory
-        )
-        os.chmod(workingDirectory, 0o755)
-        workingDirectory = pathlib.Path(workingDirectory)
+        # workingDirectory = tempfile.mkdtemp(
+        #     prefix=task.__class__.__name__ + "_", dir=parentDirectory
+        # )
+
+        # os.chmod(workingDirectory, 0o755)
+        # workingDirectory = pathlib.Path(workingDirectory)
+        workingDirectory = makeRandomDirectoryPath(prefix=task.__class__.__name__, dir=parentDirectory)
+        workingDirectory.mkdir(mode=0o775, parents=True, exist_ok=False)
     else:
         # Here we assume that the user knows what he is doing and there's no
         # race condition for creating the working directory!
-        workingDirectoryName = (
-            task.__class__.__name__ + "_" + str(workingDirectorySuffix)
-        )
+        workingDirectoryName = task.__class__.__name__ + "_" + str(workingDirectorySuffix)
         workingDirectory = parentDirectory / workingDirectoryName
         index = 1
         while workingDirectory.exists():
             workingDirectoryName = (
-                task.__class__.__name__
-                + "_"
-                + str(workingDirectorySuffix)
-                + "_{0:02d}".format(index)
+                task.__class__.__name__ + "_" + str(workingDirectorySuffix) + "_{0:d}".format(index)
             )
             workingDirectory = parentDirectory / workingDirectoryName
             index += 1
         workingDirectory.mkdir(mode=0o775, parents=True, exist_ok=False)
+
     workingDirectory = stripDataDirectoryPrefix(workingDirectory)
     return workingDirectory
 
 
-def createPyarchFilePath(file_path):
+def makeRandomDirectoryPath(prefix, dir):
+    "returns a random directory path that does not exist yet"
+    randomString = "".join(random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH))
+    dirPath = prefix + "_" + randomString
+    returnPath = pathlib.Path(dir) / dirPath
+    while returnPath.exists():
+        randomString = "".join(random.choice(STRING_CHARACTERS) for _ in range(STRING_LENGTH))
+        dirPath = prefix + "_" + randomString
+        returnPath = pathlib.Path(dir) / dirPath
+    return returnPath
+
+
+def createPyarchFilePath(filePath):
     """
     This method translates from an ESRF "visitor" path to a "pyarch" path:
     /data/visitor/mx415/id14eh1/20100209 -> /data/pyarch/2010/id14eh1/mx415/20100209
     """
-    pyarch_file_path = None
-    if isinstance(file_path, str):
-        file_path = pathlib.Path(file_path)
-    list_of_directories = list(file_path.parts)
-    if UtilsConfig.isEMBL():
-        if "p13" in list_of_directories[0:3] or "P13" in list_of_directories[0:3]:
-            pyarch_file_path = os.path.join("/data/ispyb/p13", *list_of_directories[4:])
+    pyarchFilePath = None
+    if isinstance(filePath, str):
+        filePath = pathlib.Path(filePath)
+    listOfDirectories = list(filePath.parts)
+    if UtilsConfig.isMAXIV():
+        # NOTE: Temporary fix that should already be in the branch. This is just a temporary
+        # patch to avoid checking out the branch in the current state.
+        if "visitors" in filePath.parts:
+            index = filePath.parts.index("visitors")
+        elif "proprietary" in filePath.parts:
+            index = filePath.parts.index("proprietary")
         else:
-            pyarch_file_path = os.path.join("/data/ispyb/p14", *list_of_directories[4:])
-        return pyarch_file_path
-    list_beamlines = [
+            logger.error("The /data/ directory should contain either visitors/ or proprietary/\n")
+            assert False, "Unexpected filesystem dirs"  # Don't continue if filesystem is not setup right.
+        return pathlib.Path("/data/staff/ispybstorage").joinpath(*filePath.parts[index:])
+
+    if UtilsConfig.isEMBL():
+        if "p13" in listOfDirectories[0:3] or "P13" in listOfDirectories[0:3]:
+            pyarchFilePath = os.path.join("/data/ispyb/p13", *listOfDirectories[4:])
+        else:
+            pyarchFilePath = os.path.join("/data/ispyb/p14", *listOfDirectories[4:])
+        return pyarchFilePath
+    listBeamlines = [
         "bm07",
         "id23eh1",
         "id23eh2",
@@ -101,56 +129,49 @@ def createPyarchFilePath(file_path):
         "id30b",
     ]
 
-    if (
-        "data" in list_of_directories
-        and len(list_of_directories) > 5
-        and list_of_directories[1] != "data"
-    ):
-        while list_of_directories[1] != "data" and len(list_of_directories) > 5:
-            del list_of_directories[1]
+    if "data" in listOfDirectories and len(listOfDirectories) > 5 and listOfDirectories[1] != "data":
+        while listOfDirectories[1] != "data" and len(listOfDirectories) > 5:
+            del listOfDirectories[1]
 
     # Check that we have at least four levels of directories:
-    if len(list_of_directories) > 5:
-        data_directory = list_of_directories[1]
-        second_directory = list_of_directories[2]
-        third_directory = list_of_directories[3]
-        fourth_directory = list_of_directories[4]
-        fifth_directory = list_of_directories[5]
-        year = fifth_directory[0:4]
+    if len(listOfDirectories) > 5:
+        dataDirectory = listOfDirectories[1]
+        secondDirectory = listOfDirectories[2]
+        thirdDirectory = listOfDirectories[3]
+        fourthDirectory = listOfDirectories[4]
+        fifthDirectory = listOfDirectories[5]
+        year = fifthDirectory[0:4]
         proposal = None
         beamline = None
-        if data_directory == "data" and second_directory == "gz":
-            if third_directory == "visitor":
-                proposal = fourth_directory
-                beamline = fifth_directory
-            elif fourth_directory == "inhouse":
-                proposal = fifth_directory
-                beamline = third_directory
+        listOfRemainingDirectories = listOfDirectories
+        if dataDirectory == "data" and secondDirectory == "gz":
+            if thirdDirectory == "visitor":
+                proposal = fourthDirectory
+                beamline = fifthDirectory
+            elif fourthDirectory == "inhouse":
+                proposal = fifthDirectory
+                beamline = thirdDirectory
             else:
-                raise RuntimeError(
-                    "Illegal path for UtilsPath.createPyarchFilePath: "
-                    + "{0}".format(file_path)
-                )
-            list_of_remaining_directories = list_of_directories[6:]
-        elif data_directory == "data" and second_directory == "visitor":
-            proposal = list_of_directories[3]
-            beamline = list_of_directories[4]
-            list_of_remaining_directories = list_of_directories[5:]
-        elif data_directory == "data" and second_directory in list_beamlines:
-            beamline = second_directory
-            proposal = list_of_directories[4]
-            list_of_remaining_directories = list_of_directories[5:]
+                raise RuntimeError("Illegal path for UtilsPath.createPyarchFilePath: " + "{0}".format(filePath))
+            listOfRemainingDirectories = listOfDirectories[6:]
+        elif dataDirectory == "data" and secondDirectory == "visitor":
+            proposal = listOfDirectories[3]
+            beamline = listOfDirectories[4]
+            listOfRemainingDirectories = listOfDirectories[5:]
+        elif dataDirectory == "data" and secondDirectory in listBeamlines:
+            beamline = secondDirectory
+            proposal = listOfDirectories[4]
+            listOfRemainingDirectories = listOfDirectories[5:]
         if proposal is not None and beamline is not None:
-            pyarch_file_path = pathlib.Path("/data/pyarch") / year / beamline
-            pyarch_file_path = pyarch_file_path / proposal
-            for directory in list_of_remaining_directories:
-                pyarch_file_path = pyarch_file_path / directory
-    if pyarch_file_path is None:
-        logger.warning(
-            "UtilsPath.createPyarchFilePath: path not converted for"
-            + " pyarch: %s " % file_path
-        )
-    return pyarch_file_path
+            pyarchFilePath = pathlib.Path("/data/pyarch") / year / beamline
+            pyarchFilePath = pyarchFilePath / proposal
+            for directory in listOfRemainingDirectories:
+                pyarchFilePath = pyarchFilePath / directory
+    if pyarchFilePath is None:
+        logger.warning("UtilsPath.createPyarchFilePath: path not converted for" + " pyarch: %s " % filePath)
+    else:
+        pyarchFilePath = pyarchFilePath.as_posix()
+    return pyarchFilePath
 
 
 def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
@@ -158,6 +179,8 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
     final_size = None
     has_timed_out = False
     should_continue = True
+    old_md5_hash = "abc"
+    new_md5_hash = "def"
     file_dir = file_path.parent
     if os.name != "nt" and file_dir.exists():
         # Patch provided by Sebastien 2018/02/09 for forcing NFS cache:
@@ -168,10 +191,23 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
         # logger.debug("Results of os.fstat: {0}".format(statResult))
     # Check if file is there
     if file_path.exists():
+        old_md5_hash = get_md5Hash(file_path)
         file_size = file_path.stat().st_size
         if expectedSize is not None:
             # Check size
             if file_size > expectedSize:
+                time.sleep(1)
+                new_md5_hash = get_md5Hash(file_path)
+                logger.info(f"old md5: {old_md5_hash}")
+                logger.info(f"new md5: {new_md5_hash}")
+                if old_md5_hash == new_md5_hash:
+                    should_continue = False
+        else:
+            time.sleep(1)
+            new_md5_hash = get_md5Hash(file_path)
+            logger.info(f"old md5: {old_md5_hash}")
+            logger.info(f"new md5: {new_md5_hash}")
+            if old_md5_hash == new_md5_hash:
                 should_continue = False
         final_size = file_size
     if should_continue:
@@ -195,22 +231,43 @@ def waitForFile(file, expectedSize=None, timeOut=DEFAULT_TIMEOUT):
             else:
                 # Check if file is there
                 if file_path.exists():
+                    new_md5_hash = get_md5Hash(file_path)
                     file_size = file_path.stat().st_size
+                    logger.info(f"old md5: {old_md5_hash}")
+                    logger.info(f"new md5: {new_md5_hash}")
                     if expectedSize is not None:
                         # Check that it has right size
                         if file_size > expectedSize:
-                            should_continue = False
+                            if old_md5_hash == new_md5_hash:
+                                should_continue = False
                     else:
-                        should_continue = False
+                        if old_md5_hash == new_md5_hash:
+                            should_continue = False
                     final_size = file_size
             if should_continue:
                 # Sleep 1 s
                 time.sleep(1)
+                old_md5_hash = new_md5_hash
+    logger.info("File found %s" % file_path)
     return has_timed_out, final_size
 
 
+def get_md5Hash(file):
+    file_path = pathlib.Path(file)
+    if not file_path.exists():
+        return None
+    with open(file_path, "rb") as fp:
+        md5Hash = hashlib.md5()
+        chunk = fp.read(65536)
+        while len(chunk) > 0:
+            md5Hash.update(chunk)
+            chunk = fp.read(65536)
+    hexHash = md5Hash.hexdigest()
+    return hexHash
+
+
 def stripDataDirectoryPrefix(data_directory):
-    """ Removes any paths before /data/..., e.g. /gpfs/easy/data/..."""
+    """Removes any paths before /data/..., e.g. /gpfs/easy/data/..."""
     list_paths = str(data_directory).split(os.sep)
     if "data" in list_paths:
         while list_paths[1] != "data":
@@ -220,25 +277,13 @@ def stripDataDirectoryPrefix(data_directory):
         new_data_directory = data_directory
     return pathlib.Path(new_data_directory)
 
-def systemCopyFile(from_path, to_path):
-    p = subprocess.Popen(["cp", from_path, to_path])
-    p.wait()
 
-def systemRmTree(treePath, ignore_errors=False):
+def systemCopyFile(fp_in, fp_out):
+    """Uses shutil.copy2 to copy files."""
     try:
-        if ignore_errors:
-            subprocess.check_call(f"rm -rf {treePath}", shell=True)
-        else:
-            subprocess.check_call(f"rm -r {treePath} 2>&1 > /dev/null", shell=True)
-    except subprocess.CalledProcessError:
-        if not ignore_errors:
-            raise
-
-def systemCopyTree(from_path, to_path, dirs_exists_ok=False):
-    if os.path.exists(to_path):
-        if dirs_exists_ok:
-            systemRmTree(to_path)
-        else:
-            raise FileExistsError(to_path)
-    p = subprocess.Popen(["cp", "-r", from_path, to_path])
-    p.wait()
+        logger.debug(f"Copying {fp_in} to {fp_out}...")
+        fout = shutil.copy2(fp_in, fp_out)
+    except Exception as e:
+        logger.error(f"Copying {fp_in} to {fp_out} failed: {e}.")
+        fout = None
+    return fout

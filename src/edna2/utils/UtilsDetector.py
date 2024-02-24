@@ -84,8 +84,8 @@ DETECTOR_PARAMS = {
         "xdsUntrustedRectangle": [],
     },
     "eiger16m": {
-        "nx": 4148,
-        "ny": 4362,
+        "nx": 4150,
+        "ny": 4371,
         "pixel": 0.075,
         "sensorThickness": 0.75,
         "xdsUntrustedRectangle": [],

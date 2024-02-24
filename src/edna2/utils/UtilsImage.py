@@ -31,6 +31,11 @@ import os
 import re
 import fabio
 import pathlib
+import h5py
+from edna2.utils import UtilsConfig
+from edna2.utils import UtilsLogging
+
+logger = UtilsLogging.getLogger()
 
 
 def __compileAndMatchRegexpTemplate(pathToImage):
@@ -120,6 +125,10 @@ def getH5FilePath(filePath, batchSize=100, hasOverlap=False, isFastMesh=False):
     ):
         h5ImageNumber = int((imageNumber - 1) / 100) + 1
         h5FileNumber = 1
+    elif UtilsConfig.isMAXIV():
+        h5FileNumber = prefix.split('_')[-1]
+        prefix = '_'.join(prefix.split('_')[:-1])
+        h5ImageNumber = int((imageNumber - 1) / batchSize) * batchSize + 1
     else:
         h5ImageNumber = 1
         h5FileNumber = int((imageNumber - 1) / batchSize) * batchSize + 1
@@ -131,6 +140,7 @@ def getH5FilePath(filePath, batchSize=100, hasOverlap=False, isFastMesh=False):
         prefix=prefix, h5FileNumber=h5FileNumber, h5ImageNumber=h5ImageNumber
     )
     h5DataFilePath = filePath.parent / h5DataFileName
+        
     return h5MasterFilePath, h5DataFilePath, h5FileNumber
 
 
@@ -201,3 +211,102 @@ def mergeCbfInDirectory(cbfDirectory, prefix=None, newPrefix=None):
         )
         mergeCbf(list_image, new_cbf_path)
         image_number += 1
+
+def getNumberOfImages(masterFilePath):
+    """Given an h5 master file, generate an image list for SubWedgeAssembly."""
+    numImages = None
+    masterFilePath = pathlib.Path(masterFilePath)
+    with h5py.File(masterFilePath,'r') as fp:
+        depends_on = fp['/entry/sample/depends_on'][()].decode()
+        numImages = len(fp[depends_on][()])
+    return numImages
+
+
+def generateDataFileListFromH5Master(masterFilePath):
+        """Given an h5 master file, generate an image list for SubWedgeAssembly."""
+        masterFilePath = pathlib.Path(masterFilePath)
+        m = re.search(r"\S+_\d{1,2}(?=_master.h5)",masterFilePath.name)
+        image_list_stem = m.group(0)
+
+        image_list = []
+        with h5py.File(masterFilePath,'r') as master_file:
+            image_list = list(master_file['/entry/data'].keys())
+        image_list = sorted(image_list)
+        dataFileList = [masterFilePath.parent / f"{image_list_stem}_{x}.h5" for x in image_list]
+        if False in [file.exists() for file in dataFileList]:
+            logger.warning(f"generateDataFileListFromH5Master: One or more files may not exist: {dataFileList[[file.exists() for file in dataFileList].index(False)]}")
+        return sorted(dataFileList)
+
+
+def generateImageListFromH5Master_fast(masterFilePath):
+    """Given an h5 master file, generate an image list for SubWedgeAssembly."""
+    masterFilePath = pathlib.Path(masterFilePath)
+    m = re.search(r"\S+_\d{1,2}(?=_master.h5)",masterFilePath.name)
+    image_list_stem = m.group(0)
+
+    image_list = []
+    with h5py.File(masterFilePath,'r') as master_file:
+        data_file_low = list(master_file['/entry/data'].keys())[0]
+        data_file_high = list(master_file['/entry/data'].keys())[-1]        
+        image_nr_high = int(master_file['/entry/data'][data_file_high].attrs['image_nr_high'])
+        image_nr_low = int(master_file['/entry/data'][data_file_low].attrs['image_nr_low'])
+        image_list.append(f"{str(masterFilePath.parent)}/{image_list_stem}_{image_nr_low:06}.h5")
+    return image_nr_low, image_nr_high, {"imagePath": image_list}
+
+def eiger_template_to_master(fmt):
+    if UtilsConfig.isMAXIV():
+        fmt_string = fmt.replace("%06d", "master")
+    else:
+        fmt_string = fmt.replace("####", "1_master")
+    return fmt_string
+
+def eiger_template_to_image(fmt, num):
+    import math
+    fileNumber = int(math.ceil(num / 100.0))
+    if UtilsConfig.isMAXIV():
+        fmt_string = fmt.replace("%06d", "data_%06d" % fileNumber)
+    else:
+        fmt_string = fmt.replace("####", "1_data_%06d" % fileNumber)
+    return fmt_string.format(num)
+
+def getImageMetadataFromH5MasterFile(masterFilePath):
+    dictHeader = {}
+    try:
+        with h5py.File(masterFilePath,'r') as f:
+            dictHeader = {
+                "wavelength": f["entry"]["instrument"]["beam"]["incident_wavelength"][()],
+                "beam_center_x": f["entry"]["instrument"]["detector"]["beam_center_x"][()],
+                "beam_center_y": f["entry"]["instrument"]["detector"]["beam_center_y"][()],
+                "count_time": f["entry"]["instrument"]["detector"]["count_time"][()],
+                "detector_distance": f["entry"]["instrument"]["detector"]["detector_distance"][()],
+                "translation": list(
+                    f["entry"]["instrument"]["detector"]["geometry"]["translation"][
+                        "distances"
+                    ]
+                ),
+                "saturation_value": f["entry"]["instrument"]["detector"]["saturation_value"][()],
+                "nx": f["entry"]["instrument"]["detector"]["module"]["data_size"][()][0],
+                "ny": f["entry"]["instrument"]["detector"]["module"]["data_size"][()][1],
+                "x_pixel_size": f["entry"]["instrument"]["detector"]["x_pixel_size"][()],
+                "y_pixel_size": f["entry"]["instrument"]["detector"]["y_pixel_size"][()],
+                "omega_range_average": f["entry"]["sample"]["goniometer"][
+                    "omega_range_average"
+                ][()],
+                "starting_angle": f["entry"]["sample"]["goniometer"]["omega"][()][0],
+                "detector_number": f["entry"]["instrument"]["detector"]["detector_number"][
+                    ()
+                ].decode("utf-8"),
+                "description": f["entry"]["instrument"]["detector"]["description"][
+                    ()
+                ].decode("utf-8"),
+                "data_collection_date": f["entry"]["instrument"]["detector"][
+                    "detectorSpecific"
+                ]["data_collection_date"][()].decode("utf-8"),
+                "data": list(f["entry"]["data"]),
+                "omega" : f['/entry/sample/goniometer/omega'][()],
+                "num_images": len(f['/entry/sample/goniometer/omega'][()])
+            }
+    except Exception as e:
+        logger.error(f"Failed reading hdf5 metadata: {e}")
+    return dictHeader
+ 

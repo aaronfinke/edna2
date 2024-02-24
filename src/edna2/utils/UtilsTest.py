@@ -61,8 +61,8 @@ def __timeoutDuringDownload():
 
 def getTestdataPath():
     pathFile = pathlib.Path(__file__)
-    pathProjectBase = pathFile.parents[3]
-    testdataPath = pathProjectBase / "tests" / "testdata"
+    pathProjectBase = pathFile.parents[2]
+    testdataPath = pathProjectBase / "testdata"
     return testdataPath
 
 
@@ -201,6 +201,6 @@ def createTestTmpDirectory(testName):
 
 
 def prepareTestDataPath(modulePath):
-    dataPath = pathlib.Path(modulePath).parent / "data"
+    dataPath = pathlib.Path(modulePath).parent.resolve() / "data"
     os.chdir(str(getTestRunPath()))
     return dataPath

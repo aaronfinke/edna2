@@ -24,6 +24,9 @@ __license__ = "MIT"
 __date__ = "21/04/2019"
 
 import unittest
+import tempfile
+import subprocess
+import pathlib
 
 from edna2.utils import UtilsTest
 from edna2.utils import UtilsLogging
@@ -45,4 +48,27 @@ class MXWaitFileExecTest(unittest.TestCase):
         outData = waitFile.outData
         logger.info(outData)
         self.assertFalse(outData["timedOut"])
-        self.assertEqual(outData["finalSize"], 8389120)
+        self.assertEqual(outData["finalSize"], 2974985859)
+
+    def test_WaitFileSizeTooBig(self):
+        referenceDataPath = self.dataPath / "WaitFile_reference_sizetoobig.json"
+        inData = UtilsTest.loadAndSubstitueTestData(referenceDataPath)
+        waitFile = WaitFileTask(inData=inData)
+        waitFile.execute()
+        outData = waitFile.outData
+        logger.info(outData)
+        self.assertTrue(outData["timedOut"])
+
+    def test_WaitFilesDownloading(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        cmd = f"rsync -a /data/visitors/biomax/20170251/20231031/raw/Tau/Tau-natA3/Tau-natA3_1_*.h5 {tmpdir.name}/."
+        proc = subprocess.Popen(cmd, shell=True)
+        lastFile = pathlib.Path(tmpdir.name) / "Tau-natA3_1_data_000009.h5"
+        inData = {"file": lastFile, "size": 400000000}
+        waitFile = WaitFileTask(inData=inData)
+        waitFile.execute()
+        outData = waitFile.outData
+        logger.info(outData)
+        tmpdir.cleanup()
+        self.assertFalse(outData["timedOut"])
+        self.assertEqual(outData["finalSize"], 487765579)

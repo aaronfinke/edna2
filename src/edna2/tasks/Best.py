@@ -104,7 +104,7 @@ class Best(AbstractTask):
         experimentalCondition = firstSubWedge["experimentalCondition"]
         detector = experimentalCondition["detector"]
         beam = experimentalCondition["beam"]
-        commandLine = "best"
+        commandLine = "best__v4.1.1_test_20201220"
         commandLine += Best.addOption(detector, "type", "-f")
         commandLine += Best.addOption(beam, "exposureTime", "-t")
         commandLine += Best.addOption(inData, "crystalAbsorbedDoseRate", "-GpS")

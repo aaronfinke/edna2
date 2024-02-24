@@ -24,15 +24,19 @@ __license__ = "MIT"
 __date__ = "21/04/2019"
 
 import os
+import signal
+import psutil
 import json
 import pathlib
 import billiard
 import traceback
 import jsonschema
 import subprocess
+import socket
 
 from edna2.utils import UtilsPath
 from edna2.utils import UtilsLogging
+from edna2.utils import UtilsConfig
 
 logger = UtilsLogging.getLogger()
 
@@ -54,6 +58,9 @@ class EDNA2Process(billiard.Process):
         except BaseException as e:
             tb = traceback.format_exc()
             self._cconn.send((e, tb))
+    
+    def timeOut(self):
+        raise billiard.TimeoutError
 
     @property
     def exception(self):
@@ -72,14 +79,21 @@ class AbstractTask():  # noqa R0904
         self._dictInOut["inData"] = json.dumps(inData, default=str)
         self._dictInOut["outData"] = json.dumps({})
         self._dictInOut["isFailure"] = False
+        self._dictInOut["timeOut"] = self.setTimeOut()
+        self._dictInOut["timeoutExit"] = False
         self._process = EDNA2Process(target=self.executeRun, args=())
         self._workingDirectorySuffix = workingDirectorySuffix
         self._workingDirectory = None
         self._logFileName = None
         self._errorLogFileName = None
+        self._slurmLogFileName = None
+        self._slurmErrorLogFileName = None
         self._schemaPath = pathlib.Path(__file__).parents[1] / "schema"
         self._persistInOutData = True
         self._oldDir = os.getcwd()
+        self._slurmId = None
+        self._slurmHostname = None
+        self._jobName = type(self).__name__
 
     def getSchemaUrl(self, schemaName):
         return "file://" + str(self._schemaPath / schemaName)
@@ -155,12 +169,42 @@ class AbstractTask():  # noqa R0904
             jsonName = "outData" + self.__class__.__name__ + ".json"
             with open(str(self._workingDirectory / jsonName), "w") as f:
                 f.write(json.dumps(outData, default=str, indent=4))
+    
+    def setTimeOut(self,timeOut=None):
+        inData = self.getInData()
+        if timeOut is not None:
+            timeOut = float(timeOut)
+            logger.debug(f'timeOut set to {timeOut}')
+        elif inData.get('timeOut'):
+            timeOut = float(inData.get('timeOut'))
+            logger.debug(f'timeOut set to {timeOut} from json')
+        elif UtilsConfig.get(self,'timeOut'):
+            timeout = UtilsConfig.get(self,'timeOut')
+            logger.debug(f'timeOut set to {timeOut} from config')
+        return timeOut
+
+    def getTimeOut(self):
+        return self._dictInOut.get("timeOut")
+    
+    timeOut = property(getTimeOut,setTimeOut)
 
     def getLogPath(self):
         if self._logFileName is None:
             self._logFileName = self.__class__.__name__ + ".log.txt"
         logPath = self._workingDirectory / self._logFileName
         return logPath
+    
+    def getSlurmLogPath(self):
+        if self._slurmLogFileName is None:
+            return None
+        slurmLogPath = self._workingDirectory / self._slurmLogFileName
+        return slurmLogPath
+    
+    def getSlurmErrorLogPath(self):
+        if self._slurmErrorLogFileName is None:
+            return None
+        slurmErrorLogPath = self._workingDirectory / self._slurmErrorLogFileName
+        return slurmErrorLogPath
 
     def setLogFileName(self, logFileName):
         self._logFileName = logFileName
@@ -173,13 +217,25 @@ class AbstractTask():  # noqa R0904
             self._errorLogFileName = self.__class__.__name__ + ".error.txt"
         errorLogPath = self._workingDirectory / self._errorLogFileName
         return errorLogPath
+    
+    def getSlurmLogFileName(self):
+        return self._slurmLogFileName
+    
+    def getSlurmErrorLogFileName(self):
+        return self._slurmErrorLogFileName
+    
+    def setSlurmLogFileName(self, slurmLogFileName):
+        self._slurmLogFileName = slurmLogFileName
+
+    def setSlurmErrorLogFileName(self, slurmErrorLogFileName):
+        self._slurmErrorLogFileName = slurmErrorLogFileName
 
     def setErrorLogFileName(self, errorLogFileName):
         self._errorLogFileName = errorLogFileName
 
     def getErrorLogFileName(self):
         return self._errorLogFileName
-
+        
     def getLog(self):
         with open(str(self.getLogPath())) as f:
             log = f.read()
@@ -190,30 +246,52 @@ class AbstractTask():  # noqa R0904
             errorLog = f.read()
         return errorLog
 
-    def submitCommandLine(self, commandLine, jobName, partition, ignoreErrors):
+    def getSlurmLog(self):
+        if self._slurmLogFileName is None:
+            return None
+        with open(self.getSlurmLogPath()) as f:
+            slurmLog = f.read()
+        return slurmLog
+    
+    def getSlurmErrorLog(self):
+        if self._slurmErrorLogFileName is None:
+            return None
+        with open(self.getSlurmErrorLogPath()) as f:
+            slurmLog = f.read()
+        return slurmLog
+    
+    def getSlurmId(self):
+        return self._slurmId
+    
+    def getSlurmHostname(self):
+        return self._slurmHostname
+    
+    def setSlurmHostname(self,hostname):
+        self._slurmHostname = hostname
+
+
+    def submitCommandLine(self, commandLine, ignoreErrors, timeout=UtilsConfig.get("Slurm","time","01:00:00"), partition=None, jobName="EDNA2"):
+        jobName = "EDNA2_" + self._jobName
+        exclusive = UtilsConfig.get("Slurm","is_exclusive",False)
+        nodes = UtilsConfig.get("Slurm","nodes",1)
+        core = UtilsConfig.get("Slurm","cores",10)
+        mem = UtilsConfig.get("Slurm","mem",4000)
         workingDir = str(self._workingDirectory)
         if workingDir.startswith("/mntdirect/_users"):
             workingDir = workingDir.replace("/mntdirect/_users", "/home/esrf")
-        nodes = 1
-        core = 10
-        time = "1:00:00"
-        mem = 16000  # 16 Gb memory by default
         script = "#!/bin/bash\n"
         script += '#SBATCH --job-name="{0}"\n'.format(jobName)
-        if partition is None:
-            partition = "mx"
-        else:
-            partition = "mx,{0}".format(partition)
-        script += "#SBATCH --partition={0}\n".format(partition)
-        script += "#SBATCH --exclusive\n"
-        script += "#SBATCH --mem={0}\n".format(mem)
+        script += "#SBATCH --partition={0}\n".format(partition) if partition else ""
+        script += "#SBATCH --exclusive\n" if exclusive else ""
+        script += "#SBATCH --mem="
+        script += "0\n" if exclusive else "{0}\n".format(mem) 
         script += "#SBATCH --nodes={0}\n".format(nodes)
-        script += "#SBATCH --nodes=1\n"  # Necessary for not splitting jobs! See ATF-57
-        script += "#SBATCH --cpus-per-task={0}\n".format(core)
-        script += "#SBATCH --time={0}\n".format(time)
+        # script += "#SBATCH --nodes=1\n"  # Necessary for not splitting jobs! See ATF-57
+        script += "#SBATCH --cpus-per-task={0}\n".format(core) if not exclusive else ""
+        script += "#SBATCH --time={0}\n".format(timeout) if timeout else "0"
         script += "#SBATCH --chdir={0}\n".format(workingDir)
-        script += "#SBATCH --output=stdout.txt\n"
-        script += "#SBATCH --error=stderr.txt\n"
+        script += f"#SBATCH --output={jobName}_%j.out\n"
+        script += f"#SBATCH --error={jobName}_%j.err\n"
         script += commandLine + "\n"
         shellFile = self._workingDirectory / (jobName + "_slurm.sh")
         with open(str(shellFile), "w") as f:
@@ -227,11 +305,38 @@ class AbstractTask():  # noqa R0904
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             close_fds=True,
+            start_new_session=True,
             cwd=str(self._workingDirectory),
         )
+        while True:
+            line = pipes.stdout.readline()
+            if line:
+                break
+        line = line.decode('utf-8')
+        if "Submitted batch job" in line:
+            self._slurmJobId = int(line.split()[-1])
+        if self._slurmJobId:
+            self.setSlurmLogFileName(f"{jobName}_{self._slurmJobId}.out")
+            self.setSlurmErrorLogFileName(f"{jobName}_{self._slurmJobId}.err")
+            slurm_hostname = ""
+            try:
+                squeue = subprocess.run(["squeue","-j",str(self._slurmJobId)], capture_output=True)
+                slurm_hostname = squeue.stdout.decode('utf-8').strip('\n').split()[-1]
+                while slurm_hostname == "(None)":
+                    squeue = subprocess.run(["squeue","-j",str(self._slurmJobId)], capture_output=True)
+                    slurm_hostname = squeue.stdout.decode('utf-8').strip('\n').split()[-1]
+            except Exception as e:
+                logger.error(f"Failed to get slurm host: {e}")
+            if slurm_hostname:
+                self.setSlurmHostname(slurm_hostname)
+            logger.debug(f"Job {jobName} submitted to slurm on host {self._slurmHostname} with slurmJobId {self._slurmJobId}")
+
+
         stdout, stderr = pipes.communicate()
-        slurmLogPath = self._workingDirectory / (jobName + "_slurm.log")
-        slurmErrorLogPath = self._workingDirectory / (jobName + "_slurm.error.log")
+        # slurmLogPath = self._workingDirectory / (jobName + "_slurm.log")
+        # slurmErrorLogPath = self._workingDirectory / (jobName + "_slurm.error.log")
+        slurmLogPath = self.getLogPath()
+        slurmErrorLogPath = self.getErrorLogPath()
         if len(stdout) > 0:
             log = str(stdout, "utf-8")
             with open(str(slurmLogPath), "w") as f:
@@ -248,6 +353,7 @@ class AbstractTask():  # noqa R0904
             warningMessage = "{0}, code {1}".format(stderr, pipes.returncode)
             logger.warning(warningMessage)
             # raise RuntimeError(errorMessage)
+        return pipes.returncode
 
     def runCommandLine(
         self,
@@ -260,12 +366,12 @@ class AbstractTask():  # noqa R0904
     ):
         if logPath is None:
             logPath = self.getLogPath()
-        jobName = self.__class__.__name__
+        jobName = type(self).__name__
         logFileName = os.path.basename(logPath)
         errorLogPath = self.getErrorLogPath()
         errorLogFileName = os.path.basename(errorLogPath)
         commandLine += " 1>{0} 2>{1}".format(logFileName, errorLogFileName)
-        if listCommand is not None:
+        if listCommand:
             commandLine += " << EOF-EDNA2\n"
             for command in listCommand:
                 commandLine += command + "\n"
@@ -275,7 +381,7 @@ class AbstractTask():  # noqa R0904
         with open(str(commandLinePath), "w") as f:
             f.write(commandLine)
         if doSubmit:
-            self.submitCommandLine(commandLine, jobName, partition, ignoreErrors)
+            self.submitCommandLine(commandLine, partition, ignoreErrors)
         else:
             pipes = subprocess.Popen(
                 commandLine,
@@ -283,8 +389,10 @@ class AbstractTask():  # noqa R0904
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 close_fds=True,
+                start_new_session=True,
                 cwd=str(self._workingDirectory),
             )
+            logger.debug(f"pid = {pipes.pid}")
             stdout, stderr = pipes.communicate()
             if len(stdout) > 0:
                 log = str(stdout, "utf-8")
@@ -312,17 +420,42 @@ class AbstractTask():  # noqa R0904
         self._process.start()
 
     def join(self):
-        self._process.join()
+        timeOut = self.getTimeOut()
+        if timeOut is not None:
+            logger.debug(f"timeout for {self.__class__.__name__}: {timeOut}")
+        self._process.join(timeout=timeOut)
+        # deal with timeouts
+        if self._process.exitcode is None:
+            # to ensure all subprocesses generated by process terminate cleanly
+            # logger.debug(f"exitcode for {self} = {self._process.exitcode}")
+            # logger.debug(f"pid for {self}: {self._process.pid}")
+            current_process = psutil.Process(self._process.pid)
+            children = current_process.children(recursive=True)
+            for child in children:
+                # logger.debug('Child pid for child {} is {}'.format(child,child.pid))
+                try:
+                    child.send_signal(signal.SIGTERM)
+                except:
+                    pass
+            self._process.timeOut()
         if self._process.exception:
             error, trace = self._process.exception
             logger.error(error)
             logger.error(trace)
             self._dictInOut["isFailure"] = True
+            if "TimeoutError" in trace.split()[-1]:
+                self._dictInOut["timeoutExit"] = True
             self.onError()
 
     def execute(self):
         self.start()
         self.join()
+    
+    def setTimeoutExit(self):
+        self._dictInOut["timeoutExit"] = True
+    
+    def isTimeoutExit(self):
+        return self._dictInOut["timeoutExit"]
 
     def setFailure(self):
         self._dictInOut["isFailure"] = True

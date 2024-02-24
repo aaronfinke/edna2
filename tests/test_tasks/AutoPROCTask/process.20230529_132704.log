@@ -1,0 +1,67 @@
+[1m
+ ##############################################################################
+ ##   Processing of diffraction images
+ ##############################################################################
+
+      Copyright (C) 2004-2021 by Global Phasing Limited
+ 
+                All rights reserved.
+ 
+                This software is proprietary to and embodies the confidential
+                technology of Global Phasing Limited (GPhL). Possession, use,
+                duplication or dissemination of the software is authorised
+                only pursuant to a valid written licence from GPhL.
+
+      Version:  1.0.5  <2023-02-22 01:31:04>
+
+ ------------------------------------------------------------------------------
+
+   Developers:  (2004-2005) G. Bricogne, C. Flensburg, W. Paciorek, O. Smart, C. Vonrhein
+                (2006-2008) G. Bricogne, C. Flensburg, P. Keller, W. Paciorek, O. Smart, T. Womack, C. Vonrhein
+                (2009-2012) G. Bricogne, C. Flensburg, P. Keller, W. Paciorek, A. Sharff, O. Smart, T. Womack, C. Vonrhein
+                (2013-2015) G. Bricogne, C. Flensburg, P. Keller, W. Paciorek, A. Sharff, O. Smart, C. Vonrhein
+                (2016-2017) G. Bricogne, C. Flensburg, R. Fogh, P. Keller, W. Paciorek, A. Sharff, I. Tickle, C. Vonrhein
+                (2018-2021) G. Bricogne, C. Flensburg, R. Fogh, P. Keller, W. Paciorek, A. Sharff, I. Tickle, C. Vonrhein, M. Wojdyr
+
+
+      Authors:  (2004-2007) G. Bricogne, C. Vonrhein
+                (2008-2010) G. Bricogne, C. Flensburg, C. Vonrhein, T. Womack
+                (2011-2012) G. Bricogne, C. Flensburg, A. Sharff, C. Vonrhein, T. Womack
+                (2013-2015) G. Bricogne, C. Flensburg, P. Keller, W. Paciorek, A. Sharff, C. Vonrhein
+                (2016-2018) G. Bricogne, C. Flensburg, P. Keller, W. Paciorek, A. Sharff, I. Tickle, C. Vonrhein
+                (2019-2022) G. Bricogne, C. Flensburg, R. Fogh, P. Keller, W. Paciorek, A. Sharff, I. Tickle, C. Vonrhein, M. Wojdyr
+[m
+      External: (1990-2012) [MOSFLM] A. Leslie, H. Powell
+                (1988-2022) [XDS] W. Kabsch, K. Diederichs
+                (1997-2021) [SCALA/POINTLESS/AIMLESS] P. Evans
+ 
+      Partial support by EU project: BIOXHIT (LSHG-CT-2003-503420)
+ 
+      Contact:  proc-develop@GlobalPhasing.com
+ 
+  Please cite:  Vonrhein, C., Flensburg, C., Keller, P., Sharff, A., Smart, O.,
+                Paciorek, W., Womack, T. & Bricogne, G. (2011). Data processing
+                and analysis with the autoPROC toolbox. Acta Cryst. D67, 293-302.
+ 
+                see: http://journals.iucr.org/d/issues/2011/04/00/ba5166/ba5166bdy.html
+ 
+  Further details (also about correct acknowledgment during PDB deposition) can
+  be found at: https://www.globalphasing.com/autoproc/wiki/index.cgi?CitingAutoPROC
+ 
+ ==============================================================================
+ 
+ 
+ [1mNOTE[m : switching off generation of prediction pictures via
+        GPX2 (since we don't seem to have access to an
+        X-server or the "gpx2" binary
+        "/mxn/groups/sw/mxsw/autoPROC_20230222/autoPROC/bin/linux64/gpx2"
+        doesn't work)
+ 
+ 
+ [1mWARNING[m : no macro named "lsit" found in
+           $autoPROC_MacroDirs="" or
+           $autoPROC_home/autoPROC/macros
+ 
+ 
+ [1mERROR[m : [process-0008] reading macro "lsit"
+ 

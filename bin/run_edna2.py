@@ -29,6 +29,8 @@ import sys
 import json
 import pathlib
 import argparse
+import importlib
+from datetime import datetime
 
 # Set up PYTHONPATH
 
@@ -40,7 +42,6 @@ else:
     projectHome = filePath.parents[2]
 edna2TopLevelDir = projectHome / "src" / "edna2"
 sys.path.insert(0, str(edna2TopLevelDir))
-
 from edna2.utils import UtilsLogging
 
 # Parse command line
@@ -89,7 +90,7 @@ if taskName is None:
 elif inData is None and inDataFile is not None:
     with open(inDataFile) as fd:
         inData = fd.read()
-else:
+elif inData is None and inDataFile is None:
     print("Error - no indata provided!")
     parser.print_help()
     sys.exit(1)
@@ -106,12 +107,15 @@ else:
     logger = UtilsLogging.getLogger("INFO")
 
 # Load and run EDNA2 task
-edna2 = __import__("edna2.tasks.{0}".format(taskName))
-tasks = getattr(edna2, "tasks")
-tasksModule = getattr(tasks, taskName)
-TaskClass = getattr(tasksModule, taskName)
+timeStr = datetime.now().strftime('%y%m%d%H%M%S')
 
-task = TaskClass(inData=json.loads(inData))
+# edna2 = __import__("edna2.tasks.{0}".format(taskName))
+edna2 = importlib.import_module("edna2.tasks.{0}".format(taskName))
+# tasks = getattr(edna2, "tasks")
+# tasksModule = getattr(edna2, taskName)
+TaskClass = getattr(edna2, taskName)
+
+task = TaskClass(inData=json.loads(inData),workingDirectorySuffix="0")
 task.execute()
 if task.isFailure():
     logger.error("Error when executing {0}!".format(taskName))

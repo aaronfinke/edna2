@@ -1,0 +1,7 @@
+{
+    "dataCollectionId": 97882,
+    "test": true,
+    "doUploadIspyb":true,
+    "waitForFiles":true,
+    "onlineAutoProcessing":true
+}
